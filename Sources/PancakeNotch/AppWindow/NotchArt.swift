@@ -43,11 +43,11 @@ struct NotchStage: View {
     private var hint: some View {
         HStack(spacing: 6) {
             Image(systemName: isActive ? "cursorarrow.rays" : "power")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.app(size: 12, weight: .semibold))
             Text(isActive
                 ? String(localized: "Hover the notch to try it. Click it to shrink it.")
                 : String(localized: "Turn the notch on to try it here."))
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.app(size: 12.5, weight: .medium))
         }
         .foregroundStyle(AppPalette.secondaryText)
         .accessibilityHidden(true)
@@ -116,7 +116,7 @@ private struct MenuBarSketch: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "circle.fill")
-                .font(.system(size: 9))
+                .font(.app(size: 9))
             ForEach(Array([34, 26, 30, 24].enumerated()), id: \.offset) { _, width in
                 Capsule().frame(width: CGFloat(width), height: 5)
             }

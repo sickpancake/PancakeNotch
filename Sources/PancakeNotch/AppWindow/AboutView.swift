@@ -15,16 +15,16 @@ struct AboutView: View {
                     }
                     .accessibilityHidden(true)
                 Text("PancakeNotch")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.app(size: 30, weight: .bold))
                     .kerning(-0.4)
                     .padding(.top, 18)
                     .accessibilityAddTraits(.isHeader)
                 Text(AppInfo.version)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.app(size: 13, weight: .medium))
                     .foregroundStyle(AppPalette.secondaryText)
                     .padding(.top, 4)
                 Text("A free, open-source app that puts your MacBook's notch to work.")
-                    .font(.system(size: 14))
+                    .font(.app(size: 14))
                     .foregroundStyle(AppPalette.secondaryText)
                     .multilineTextAlignment(.center)
                     .padding(.top, 14)
@@ -48,7 +48,7 @@ struct AboutView: View {
                     subtitle: String(localized: "The numbers on Home are counted on this Mac and never sent anywhere.")
                 ) {
                     Image(systemName: "lock")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.app(size: 14, weight: .semibold))
                         .foregroundStyle(AppPalette.secondaryText)
                         .accessibilityHidden(true)
                 }

@@ -92,7 +92,7 @@ private struct AppSidebar: View {
             HStack(spacing: 10) {
                 NotchGlyph()
                 Text("PancakeNotch")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.app(size: 15, weight: .bold))
                     .kerning(-0.2)
             }
             .padding(.horizontal, 10)
@@ -122,7 +122,7 @@ private struct AppSidebar: View {
                 QuitRow()
             }
             Text(AppInfo.version)
-                .font(.system(size: 11))
+                .font(.app(size: 11))
                 .foregroundStyle(AppPalette.tertiaryText)
                 .padding(.horizontal, 10)
                 .padding(.top, 12)
@@ -152,11 +152,11 @@ private struct SidebarRow: View {
         Button(action: action) {
             HStack(spacing: 11) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.app(size: 13, weight: .medium))
                     .frame(width: 18)
                     .accessibilityHidden(true)
                 Text(title)
-                    .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
+                    .font(.app(size: 13.5, weight: isSelected ? .semibold : .medium))
                 Spacer(minLength: 0)
             }
             .foregroundStyle(isSelected || isHovered ? AppPalette.primaryText : AppPalette.secondaryText)

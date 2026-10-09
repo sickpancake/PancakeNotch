@@ -28,12 +28,12 @@ private struct HomeHeader: View {
         let now = Date()
         VStack(alignment: .leading, spacing: 6) {
             Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.app(size: 11, weight: .semibold))
                 .kerning(0.8)
                 .textCase(.uppercase)
                 .foregroundStyle(AppPalette.secondaryText)
             Text(Self.greeting(at: now))
-                .font(.system(size: 34, weight: .bold))
+                .font(.app(size: 34, weight: .bold))
                 .kerning(-0.6)
                 .accessibilityAddTraits(.isHeader)
         }
@@ -65,16 +65,16 @@ private struct NotchHero: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 10) {
-                        StatusDot(isOn: isOn)
+                        StatusBadge(isOn: isOn)
                         Text(isOn ? String(localized: "Notch is on") : String(localized: "Notch is off"))
-                            .font(.system(size: 21, weight: .bold))
+                            .font(.app(size: 21, weight: .bold))
                             .kerning(-0.3)
                             .contentTransition(.opacity)
                     }
                     Text(isOn
                         ? String(localized: "Move the pointer to the top of your screen and the notch opens.")
                         : String(localized: "The notch is hidden, but PancakeNotch keeps running. Turn it back on any time."))
-                        .font(.system(size: 13))
+                        .font(.app(size: 13))
                         .foregroundStyle(AppPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -112,16 +112,18 @@ private struct NotchHero: View {
     }
 }
 
-/// A small light: glowing white when the notch is on, a grey ring when it's off.
-private struct StatusDot: View {
+/// A power badge: solid white when the notch is on, an outline when it's off.
+private struct StatusBadge: View {
     let isOn: Bool
 
     var body: some View {
-        Circle()
-            .fill(isOn ? Color.white : .clear)
-            .overlay(Circle().strokeBorder(isOn ? .clear : AppPalette.secondaryText, lineWidth: 1.5))
-            .frame(width: 9, height: 9)
-            .shadow(color: .white.opacity(isOn ? 0.9 : 0), radius: 5)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        Image(systemName: "power")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(isOn ? Color.black : AppPalette.secondaryText)
+            .frame(width: 28, height: 28)
+            .background(shape.fill(isOn ? Color.white : Color.white.opacity(0.06)))
+            .overlay(shape.strokeBorder(isOn ? .clear : AppPalette.hairlineStrong, lineWidth: 1))
             .accessibilityHidden(true)
     }
 }
@@ -183,7 +185,7 @@ private struct StatTile: View {
         VStack(alignment: .leading, spacing: 0) {
             TileLabel(label: label, symbol: symbol)
             Text(value)
-                .font(.system(size: 34, weight: .bold))
+                .font(.app(size: 34, weight: .bold))
                 .kerning(-0.8)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -191,7 +193,7 @@ private struct StatTile: View {
                 .contentTransition(.numericText())
                 .padding(.top, 14)
             Text(caption)
-                .font(.system(size: 12))
+                .font(.app(size: 12))
                 .foregroundStyle(AppPalette.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -212,9 +214,9 @@ private struct ComingStatTile: View {
             TileLabel(label: String(localized: "Shelf"), symbol: "tray")
             Spacer(minLength: 14)
             Text("Coming soon")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.app(size: 13, weight: .semibold))
             Text("Files kept handy")
-                .font(.system(size: 12))
+                .font(.app(size: 12))
                 .foregroundStyle(AppPalette.secondaryText)
                 .padding(.top, 2)
         }
@@ -238,10 +240,10 @@ private struct TileLabel: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.app(size: 11, weight: .semibold))
                 .accessibilityHidden(true)
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.app(size: 12, weight: .semibold))
         }
         .foregroundStyle(AppPalette.secondaryText)
     }
@@ -284,7 +286,7 @@ private struct TipsCard: View {
                     .accessibilityLabel(Text(hotKey.displayString))
                     .padding(.top, 16)
                 Text("Opens and closes the notch from any app.")
-                    .font(.system(size: 12.5))
+                    .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 12)
@@ -292,10 +294,10 @@ private struct TipsCard: View {
                 Button(String(localized: "Change…"), action: openKeyboardSettings)
             } else {
                 Text("No shortcut yet")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.app(size: 17, weight: .bold))
                     .padding(.top, 14)
                 Text("Pick a key combination to open and close the notch from any app.")
-                    .font(.system(size: 12.5))
+                    .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
@@ -329,7 +331,7 @@ private struct TipRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.app(size: 13, weight: .semibold))
                 .frame(width: 30, height: 30)
                 .background(AppPalette.selection, in: .rect(cornerRadius: 8, style: .continuous))
                 .overlay {
@@ -338,9 +340,9 @@ private struct TipRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.app(size: 13.5, weight: .semibold))
                 Text(detail)
-                    .font(.system(size: 12.5))
+                    .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }

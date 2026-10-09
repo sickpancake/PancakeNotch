@@ -81,7 +81,7 @@ struct SectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 11, weight: .semibold))
+            .font(.app(size: 11, weight: .semibold))
             .kerning(0.8)
             .foregroundStyle(AppPalette.secondaryText)
             .accessibilityAddTraits(.isHeader)
@@ -98,12 +98,12 @@ struct AppPage<Content: View>: View {
         PageScroll {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.app(size: 30, weight: .bold))
                     .kerning(-0.4)
                     .foregroundStyle(AppPalette.primaryText)
                     .accessibilityAddTraits(.isHeader)
                 Text(subtitle)
-                    .font(.system(size: 14))
+                    .font(.app(size: 14))
                     .foregroundStyle(AppPalette.secondaryText)
             }
             .padding(.bottom, 28)
@@ -163,7 +163,7 @@ struct SettingsCard<Content: View>: View {
             .glassPanel()
             if let footer {
                 Text(footer)
-                    .font(.system(size: 12.5))
+                    .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
@@ -196,11 +196,11 @@ struct SettingsRowLabel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 13.5, weight: .medium))
+                .font(.app(size: 13.5, weight: .medium))
                 .foregroundStyle(AppPalette.primaryText)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 12.5))
+                    .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
             }
         }
@@ -355,7 +355,7 @@ private struct PillButton: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.app(size: 13, weight: .semibold))
             .foregroundStyle(isProminent ? Color.black : AppPalette.primaryText)
             .padding(.horizontal, 14)
             .frame(minHeight: 30)
@@ -385,7 +385,7 @@ struct TrailingIconLabelStyle: LabelStyle {
         HStack(spacing: 5) {
             configuration.title
             configuration.icon
-                .font(.system(size: 10, weight: .bold))
+                .font(.app(size: 10, weight: .bold))
                 .foregroundStyle(AppPalette.secondaryText)
         }
     }

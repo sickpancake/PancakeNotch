@@ -118,7 +118,7 @@ private struct DelayRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 24) {
                 SettingsRowLabel(title: title, subtitle: subtitle)
                 Text(label)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.app(size: 13, weight: .semibold))
                     .monospacedDigit()
                     .padding(.horizontal, 10)
                     .frame(height: 26)
@@ -205,7 +205,7 @@ struct Keycap: View {
     var body: some View {
         let radius: CGFloat = large ? 9 : 6
         Text(label)
-            .font(.system(size: large ? 20 : 12.5, weight: .semibold))
+            .font(.app(size: large ? 20 : 12.5, weight: .semibold))
             .foregroundStyle(AppPalette.primaryText)
             .padding(.horizontal, large ? 12 : 7)
             .frame(minWidth: large ? 44 : 24, minHeight: large ? 44 : 24)

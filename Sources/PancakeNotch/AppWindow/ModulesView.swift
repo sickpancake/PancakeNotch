@@ -63,18 +63,18 @@ private struct ModuleCard<Art: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Image(systemName: symbol)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app(size: 13, weight: .semibold))
                         .frame(width: 30, height: 30)
                         .background(AppPalette.selection, in: .rect(cornerRadius: 8, style: .continuous))
                         .accessibilityHidden(true)
                     Text(title)
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.app(size: 18, weight: .bold))
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     ComingSoonBadge()
                 }
                 Text(summary)
-                    .font(.system(size: 13.5))
+                    .font(.app(size: 13.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 14)
@@ -86,7 +86,7 @@ private struct ModuleCard<Art: View>: View {
                                 .frame(width: 4, height: 4)
                                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 3 }
                             Text(point)
-                                .font(.system(size: 12.5, weight: .medium))
+                                .font(.app(size: 12.5, weight: .medium))
                         }
                     }
                 }
@@ -105,7 +105,7 @@ private struct ModuleCard<Art: View>: View {
 struct ComingSoonBadge: View {
     var body: some View {
         Text("Coming soon")
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.app(size: 10.5, weight: .semibold))
             .kerning(0.4)
             .textCase(.uppercase)
             .foregroundStyle(AppPalette.secondaryText)
@@ -127,7 +127,7 @@ private struct NowPlayingArt: View {
                         .frame(width: 46, height: 46)
                         .overlay {
                             Image(systemName: "music.note")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.app(size: 18, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.9))
                         }
                     VStack(alignment: .leading, spacing: 7) {
@@ -136,7 +136,7 @@ private struct NowPlayingArt: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "waveform")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.app(size: 16, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 HStack(spacing: 10) {
@@ -148,10 +148,10 @@ private struct NowPlayingArt: View {
                         }
                     HStack(spacing: 14) {
                         Image(systemName: "backward.fill")
-                        Image(systemName: "pause.fill").font(.system(size: 15))
+                        Image(systemName: "pause.fill").font(.app(size: 15))
                         Image(systemName: "forward.fill")
                     }
-                    .font(.system(size: 11))
+                    .font(.app(size: 11))
                     .foregroundStyle(.white)
                 }
             }
@@ -176,7 +176,7 @@ private struct ShelfArt: View {
                     .frame(width: 40, height: 50)
                     .overlay {
                         Image(systemName: "plus")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.app(size: 13, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.6))
                     }
                     .padding(.bottom, 13)
@@ -193,7 +193,7 @@ private struct ShelfArt: View {
                 .frame(width: 40, height: 50)
                 .overlay {
                     Image(systemName: symbol)
-                        .font(.system(size: 17))
+                        .font(.app(size: 17))
                         .foregroundStyle(.white.opacity(0.9))
                 }
             Capsule().fill(.white.opacity(0.4)).frame(width: width, height: 5)

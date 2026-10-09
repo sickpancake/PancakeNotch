@@ -26,7 +26,7 @@ struct ShortcutRecorder: View {
                     controller.set(nil)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.body)
+                        .font(.app(size: 13))
                         .foregroundStyle(AppPalette.secondaryText)
                         .contentShape(.circle)
                 }
@@ -43,7 +43,7 @@ struct ShortcutRecorder: View {
             if controller.isRecording {
                 RecordingDot()
                 Text("Type shortcut…")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.app(size: 13, weight: .medium))
                     .foregroundStyle(AppPalette.secondaryText)
             } else if let shortcut = controller.shortcut {
                 ForEach(Array(shortcut.keyCaps.enumerated()), id: \.offset) { _, key in
@@ -51,7 +51,7 @@ struct ShortcutRecorder: View {
                 }
             } else {
                 Text("Record Shortcut")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.app(size: 13, weight: .semibold))
             }
         }
         .padding(.horizontal, 8)
