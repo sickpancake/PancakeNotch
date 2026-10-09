@@ -30,10 +30,16 @@ pkill -x PancakeNotch               # stop it
 log stream --predicate 'subsystem == "io.github.sickpancake.PancakeNotch"'   # app logs
 ```
 
-`PANCAKENOTCH_SIMULATE_NOTCH=1` fakes a notch on screens without one (CI VMs, external displays).
+Environment switches:
+- `PANCAKENOTCH_SIMULATE_NOTCH=1` fakes a notch on screens without one (CI VMs, external displays).
+- `PANCAKENOTCH_DEBUG_STATE=compact|expanded` starts pinned in that state (ignores hover).
+- `PANCAKENOTCH_SNAPSHOT=/path/out.png` renders every notch state off-screen to a PNG and quits.
 
-To see UI changes, build and launch the app, then capture the notch area with
-`screencapture -x -R<x>,<y>,<w>,<h> file.png` and inspect the image.
+To see UI changes, prefer the off-screen snapshot (no window appears, no permissions needed):
+`swift build && PANCAKENOTCH_SNAPSHOT=out.png .build/debug/PancakeNotch`, then inspect the image.
+**Don't launch the app on the maintainer's screen while they're working** unless they agree; the
+real-window run and memory gate happen in CI. (`screencapture` also needs Screen Recording
+permission for the terminal, which isn't granted.)
 
 ## Layout
 
@@ -76,4 +82,4 @@ Amend an existing ADR instead when refining it, noting the amendment date.
 
 ## Milestones
 
-See ADR-0024. Current: **M0 done → M1** (notch window + Closed/Compact/Expanded states).
+See ADR-0024. Current: **M1** (notch window + Closed/Compact/Expanded states) in progress on `m1-notch-window`.
