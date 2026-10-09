@@ -15,9 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private let preferences = Preferences()
+    private let stats = UsageStats()
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
     private lazy var settingsWindow = SettingsWindowController(preferences: preferences, shortcuts: shortcuts)
-    private lazy var menuBar = MenuBarController { [weak self] in self?.showSettings() }
+    private lazy var menuBar = MenuBarController(
+        preferences: preferences,
+        openApp: { [weak self] in self?.showSettings() }
+    )
 
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
@@ -34,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showSettings))
+        notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
@@ -76,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Applies preferences now and again whenever one changes (no polling).
     private func observePreferences() {
         withObservationTracking {
+            notchController.isEnabled = preferences.notchEnabled
             notchController.behavior = preferences.notchBehavior
             menuBar.isVisible = preferences.showMenuBarIcon
         } onChange: { [weak self] in

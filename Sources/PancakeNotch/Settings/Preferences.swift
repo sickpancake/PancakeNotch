@@ -8,6 +8,11 @@ import Observation
 final class Preferences {
     private let defaults: UserDefaults
 
+    /// The notch's on/off switch. Off hides the notch; the app keeps running.
+    var notchEnabled: Bool {
+        didSet { defaults.set(notchEnabled, forKey: Keys.notchEnabled) }
+    }
+
     var showMenuBarIcon: Bool {
         didSet { defaults.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon) }
     }
@@ -37,11 +42,13 @@ final class Preferences {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.register(defaults: [
+            Keys.notchEnabled: true,
             Keys.showMenuBarIcon: true,
             Keys.openDelay: 150.0,
             Keys.closeDelay: 300.0,
             Keys.hapticOnOpen: false,
         ])
+        notchEnabled = defaults.bool(forKey: Keys.notchEnabled)
         showMenuBarIcon = defaults.bool(forKey: Keys.showMenuBarIcon)
         openDelayMilliseconds = defaults.double(forKey: Keys.openDelay)
         closeDelayMilliseconds = defaults.double(forKey: Keys.closeDelay)
@@ -49,6 +56,7 @@ final class Preferences {
     }
 
     private enum Keys {
+        static let notchEnabled = "notchEnabled"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let openDelay = "openDelayMilliseconds"
         static let closeDelay = "closeDelayMilliseconds"

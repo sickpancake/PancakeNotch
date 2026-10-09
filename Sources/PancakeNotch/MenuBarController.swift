@@ -1,13 +1,18 @@
 import AppKit
 
-/// The menu bar icon (hideable in Settings) with Settings… and Quit.
+/// The menu bar icon (hideable in Settings): open the app, turn the notch on or off, quit.
 @MainActor
-final class MenuBarController: NSObject {
+final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
-    private let openSettings: () -> Void
+    private let preferences: Preferences
+    private let openApp: () -> Void
+    private let notchItem = NSMenuItem(title: "", action: #selector(toggleNotch), keyEquivalent: "")
 
-    init(openSettings: @escaping () -> Void) {
-        self.openSettings = openSettings
+    init(preferences: Preferences, openApp: @escaping () -> Void) {
+        self.preferences = preferences
+        self.openApp = openApp
+        super.init()
+        notchItem.target = self
     }
 
     var isVisible: Bool = false {
@@ -26,9 +31,11 @@ final class MenuBarController: NSObject {
             ) ?? NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: String(localized: "PancakeNotch"))
         }
         let menu = NSMenu()
-        let settings = NSMenuItem(title: String(localized: "Settings…"), action: #selector(settingsChosen), keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
+        menu.delegate = self
+        let open = NSMenuItem(title: String(localized: "Open PancakeNotch…"), action: #selector(openChosen), keyEquivalent: ",")
+        open.target = self
+        menu.addItem(open)
+        menu.addItem(notchItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: String(localized: "Quit PancakeNotch"),
@@ -44,7 +51,17 @@ final class MenuBarController: NSObject {
         statusItem = nil
     }
 
-    @objc private func settingsChosen() {
-        openSettings()
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        notchItem.title = preferences.notchEnabled
+            ? String(localized: "Turn Notch Off")
+            : String(localized: "Turn Notch On")
+    }
+
+    @objc private func openChosen() {
+        openApp()
+    }
+
+    @objc private func toggleNotch() {
+        preferences.notchEnabled.toggle()
     }
 }

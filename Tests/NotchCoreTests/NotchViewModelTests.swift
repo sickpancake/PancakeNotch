@@ -42,6 +42,17 @@ struct NotchViewModelTests {
         #expect(model.state == .expanded)
     }
 
+    @Test func reportsEachOpenOnce() {
+        let model = makeModel()
+        var opens = 0
+        model.onOpen = { opens += 1 }
+        model.open()
+        model.open()
+        model.close()
+        model.toggle()
+        #expect(opens == 2)
+    }
+
     @Test func clickOpensImmediately() {
         let model = makeModel()
         model.open()

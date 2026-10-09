@@ -23,6 +23,19 @@ public final class NotchWindowController {
         }
     }
 
+    /// The user's on/off switch: off hides the notch until it's turned back on.
+    public var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue else { return }
+            updateVisibility()
+        }
+    }
+
+    /// Called each time the notch opens (usage stats).
+    public var onOpen: (() -> Void)? {
+        didSet { model?.onOpen = onOpen }
+    }
+
     /// Hover delays and haptics from Settings.
     public var behavior = NotchBehavior() {
         didSet { model?.behavior = behavior }
@@ -30,7 +43,7 @@ public final class NotchWindowController {
 
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
-        guard hasGeometry, !isSuppressed else { return }
+        guard hasGeometry, !isSuppressed, isEnabled else { return }
         model?.toggle()
     }
 
@@ -54,7 +67,7 @@ public final class NotchWindowController {
     }
 
     private func updateVisibility() {
-        if hasGeometry && !isSuppressed {
+        if hasGeometry && !isSuppressed && isEnabled {
             panel?.orderFrontRegardless()
         } else {
             model?.reset()
@@ -65,6 +78,7 @@ public final class NotchWindowController {
     private func createPanel(layout: NotchLayout) {
         let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior)
         model.isPinned = initialState != nil
+        model.onOpen = onOpen
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []

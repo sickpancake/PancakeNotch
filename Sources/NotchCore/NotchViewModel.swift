@@ -21,6 +21,9 @@ public final class NotchViewModel {
     /// and with the final state once it settles.
     @ObservationIgnored public var fitWindow: ((NotchState) -> Void)?
 
+    /// Called each time the notch opens.
+    @ObservationIgnored public var onOpen: (() -> Void)?
+
     /// Hover delays and haptics from Settings.
     @ObservationIgnored public var behavior: NotchBehavior
     /// How long the compact notch stays after a click shrinks it, if the pointer isn't on it.
@@ -120,6 +123,7 @@ public final class NotchViewModel {
             guard let self, self.transitionID == id else { return }
             self.fitWindow?(self.state)
         }
+        if opening { onOpen?() }
     }
 
     /// Returns to the resting state without animating (e.g. the display went away).
