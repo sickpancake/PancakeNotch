@@ -15,7 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private let preferences = Preferences()
-    private lazy var settingsWindow = SettingsWindowController(preferences: preferences)
+    private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
+    private lazy var settingsWindow = SettingsWindowController(preferences: preferences, shortcuts: shortcuts)
     private lazy var menuBar = MenuBarController { [weak self] in self?.showSettings() }
 
     private var screenObserver: NSObjectProtocol?
@@ -28,12 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT_SETTINGS"] {
-            try? SettingsWindowController.writeSnapshots(preferences: preferences, to: URL(fileURLWithPath: path))
+            try? SettingsWindowController.writeSnapshots(preferences: preferences, shortcuts: shortcuts, to: URL(fileURLWithPath: path))
             NSApp.terminate(nil)
             return
         }
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showSettings))
         observePreferences()
+        _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,

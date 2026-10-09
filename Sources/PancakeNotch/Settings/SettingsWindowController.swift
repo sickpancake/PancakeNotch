@@ -6,10 +6,12 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let preferences: Preferences
+    private let shortcuts: ShortcutController
     private var window: NSWindow?
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences, shortcuts: ShortcutController) {
         self.preferences = preferences
+        self.shortcuts = shortcuts
     }
 
     func show() {
@@ -29,7 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         )
         window.title = String(localized: "PancakeNotch Settings")
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences))
+        window.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, shortcuts: shortcuts))
         window.delegate = self
         window.center()
         window.setFrameAutosaveName("SettingsWindow")
@@ -49,9 +51,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 extension SettingsWindowController {
     /// Renders each settings section off-screen to `<directory>/settings-<section>.png` without
     /// showing a window (design checks; `PANCAKENOTCH_SNAPSHOT_SETTINGS=<directory>`).
-    static func writeSnapshots(preferences: Preferences, to directory: URL) throws {
+    static func writeSnapshots(preferences: Preferences, shortcuts: ShortcutController, to directory: URL) throws {
         for section in SettingsSection.allCases {
-            let view = NSHostingView(rootView: SettingsView(preferences: preferences, section: section)
+            let view = NSHostingView(rootView: SettingsView(preferences: preferences, shortcuts: shortcuts, section: section)
                 .background(Color(nsColor: .windowBackgroundColor)))
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 680, height: 460),

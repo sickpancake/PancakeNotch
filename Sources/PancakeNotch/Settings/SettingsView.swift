@@ -27,10 +27,12 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 /// The companion app window: a sidebar of sections and their settings (ADR-0017).
 struct SettingsView: View {
     @Bindable var preferences: Preferences
+    let shortcuts: ShortcutController
     @State private var section: SettingsSection
 
-    init(preferences: Preferences, section: SettingsSection = .general) {
+    init(preferences: Preferences, shortcuts: ShortcutController, section: SettingsSection = .general) {
         self.preferences = preferences
+        self.shortcuts = shortcuts
         _section = State(initialValue: section)
     }
 
@@ -55,7 +57,7 @@ struct SettingsView: View {
                 switch section {
                 case .general: GeneralSettingsView(preferences: preferences)
                 case .notch: NotchSettingsView(preferences: preferences)
-                case .keyboard: KeyboardSettingsView()
+                case .keyboard: KeyboardSettingsView(shortcuts: shortcuts)
                 case .about: AboutView()
                 }
             }
@@ -176,10 +178,16 @@ private struct DelaySlider: View {
 }
 
 private struct KeyboardSettingsView: View {
+    let shortcuts: ShortcutController
+
     var body: some View {
         Form {
             Section {
-                Text("Keyboard shortcut coming next.")
+                LabeledContent("Open and close the notch") {
+                    ShortcutRecorder(controller: shortcuts)
+                }
+            } footer: {
+                Text("Works from any app. Click the box, then press the keys you want.")
                     .foregroundStyle(.secondary)
             }
         }
