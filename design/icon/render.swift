@@ -1,6 +1,6 @@
 // PancakeNotch app-icon concepts — pure monochrome, drawn with CoreGraphics.
-// The app uses concept 2, "Syrup Drip". To regenerate Resources/AppIcon.icns:
-//   swift design/icon/render.swift --iconset 2 --out /tmp/icon && cp /tmp/icon/concept2.icns Resources/AppIcon.icns
+// The app uses concept 1, "Short Stack". To regenerate Resources/AppIcon.icns:
+//   swift design/icon/render.swift --iconset 1 --out /tmp/icon && cp /tmp/icon/concept1.icns Resources/AppIcon.icns
 //
 // Usage:
 //   swift render.swift                      # render every concept: 1024 PNG + small-size sheet + comparison
