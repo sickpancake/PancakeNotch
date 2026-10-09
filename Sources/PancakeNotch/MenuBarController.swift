@@ -24,12 +24,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func install() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = item.button {
-            button.image = NSImage(
-                systemSymbolName: "capsule.portrait.tophalf.filled",
-                accessibilityDescription: String(localized: "PancakeNotch")
-            ) ?? NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: String(localized: "PancakeNotch"))
-        }
+        item.button?.image = LogoGlyph.templateImage()
         let menu = NSMenu()
         menu.delegate = self
         let open = NSMenuItem(title: String(localized: "Open PancakeNotch…"), action: #selector(openChosen), keyEquivalent: ",")

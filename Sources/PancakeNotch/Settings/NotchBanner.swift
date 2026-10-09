@@ -60,18 +60,12 @@ private struct MenuBarSketch: View {
     }
 }
 
-/// A tiny screen with a notch, shown beside the app's name in the sidebar.
+/// The app's logo mark, shown beside its name in the sidebar.
 struct NotchGlyph: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .strokeBorder(.primary, lineWidth: 1.5)
-            .overlay(alignment: .top) {
-                NotchShape(topRadius: 1.5, bottomRadius: 2.5)
-                    .fill(.primary)
-                    .frame(width: 10, height: 4.5)
-                    .padding(.top, 1)
-            }
-            .frame(width: 22, height: 16)
+        LogoGlyph()
+            .fill(.primary)
+            .frame(width: 22, height: 22)
             .accessibilityHidden(true)
     }
 }
