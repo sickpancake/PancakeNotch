@@ -17,10 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = Preferences()
     private let stats = UsageStats()
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
-    private lazy var settingsWindow = SettingsWindowController(preferences: preferences, shortcuts: shortcuts)
+    private lazy var appWindow = AppWindowController(preferences: preferences, shortcuts: shortcuts, stats: stats)
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
-        openApp: { [weak self] in self?.showSettings() }
+        openApp: { [weak self] in self?.showAppWindow() }
     )
 
     private var screenObserver: NSObjectProtocol?
@@ -33,11 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT_SETTINGS"] {
-            try? SettingsWindowController.writeSnapshots(preferences: preferences, shortcuts: shortcuts, to: URL(fileURLWithPath: path))
+            try? AppWindowController.writeSnapshots(to: URL(fileURLWithPath: path))
             NSApp.terminate(nil)
             return
         }
-        NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showSettings))
+        NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
         notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
         _ = shortcuts // registers the saved shortcut
@@ -67,15 +67,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateGeometry()
     }
 
-    /// Opening the app again (Finder, Spotlight, Launchpad) shows Settings — the way back when the
-    /// menu bar icon is hidden.
+    /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
+    /// when the menu bar icon is hidden.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        showSettings()
+        showAppWindow()
         return false
     }
 
-    @objc private func showSettings() {
-        settingsWindow.show()
+    @objc private func showAppWindow() {
+        appWindow.show()
     }
 
     /// Applies preferences now and again whenever one changes (no polling).

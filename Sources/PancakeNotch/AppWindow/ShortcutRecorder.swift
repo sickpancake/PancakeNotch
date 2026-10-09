@@ -27,7 +27,7 @@ struct ShortcutRecorder: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.body)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(AppPalette.secondaryText)
                         .contentShape(.circle)
                 }
                 .buttonStyle(.plain)
@@ -43,41 +43,32 @@ struct ShortcutRecorder: View {
             if controller.isRecording {
                 RecordingDot()
                 Text("Type shortcut…")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppPalette.secondaryText)
             } else if let shortcut = controller.shortcut {
-                ForEach(Array(keys(of: shortcut).enumerated()), id: \.offset) { _, key in
+                ForEach(Array(shortcut.keyCaps.enumerated()), id: \.offset) { _, key in
                     Keycap(label: key)
                 }
             } else {
                 Text("Record Shortcut")
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 13, weight: .semibold))
             }
         }
         .padding(.horizontal, 8)
-        .frame(minWidth: 140, minHeight: 32)
-        .background(isHovered && !controller.isRecording ? SettingsPalette.hover : SettingsPalette.windowBackground, in: .rect(cornerRadius: 9))
+        .frame(minWidth: 150, minHeight: 36)
+        .background(isHovered && !controller.isRecording ? AppPalette.selection : AppPalette.hover,
+                    in: .rect(cornerRadius: 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 9)
-                .strokeBorder(controller.isRecording ? SettingsPalette.ink : SettingsPalette.hairline,
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(controller.isRecording ? AppPalette.ink : AppPalette.hairlineStrong,
                               lineWidth: controller.isRecording ? 1.5 : 1)
         }
-        .contentShape(.rect(cornerRadius: 9))
+        .contentShape(.rect(cornerRadius: 10))
     }
 
     private var accessibilityValue: String {
         if controller.isRecording { return String(localized: "Recording") }
         return controller.shortcut?.displayString ?? String(localized: "Not set")
-    }
-
-    /// "⌥⌘N" as separate keys: ["⌥", "⌘", "N"].
-    private func keys(of shortcut: HotKey) -> [String] {
-        let flags = shortcut.modifierFlags
-        var keys: [String] = []
-        if flags.contains(.control) { keys.append("⌃") }
-        if flags.contains(.option) { keys.append("⌥") }
-        if flags.contains(.shift) { keys.append("⇧") }
-        if flags.contains(.command) { keys.append("⌘") }
-        return keys + [shortcut.keyLabel]
     }
 
     private func toggleRecording() {
@@ -121,24 +112,6 @@ struct ShortcutRecorder: View {
     }
 }
 
-/// One key of a shortcut, drawn as a small key cap.
-private struct Keycap: View {
-    let label: String
-
-    var body: some View {
-        Text(label)
-            .font(.callout.weight(.semibold))
-            .padding(.horizontal, 6)
-            .frame(minWidth: 22, minHeight: 22)
-            .background(SettingsPalette.cardBackground, in: .rect(cornerRadius: 5))
-            .overlay {
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(SettingsPalette.hairline)
-            }
-            .shadow(color: .black.opacity(0.08), radius: 0, y: 1)
-    }
-}
-
 /// A dot that gently pulses while recording; it stays still with Reduce Motion.
 private struct RecordingDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -146,7 +119,7 @@ private struct RecordingDot: View {
 
     var body: some View {
         Circle()
-            .fill(SettingsPalette.ink)
+            .fill(AppPalette.ink)
             .frame(width: 7, height: 7)
             .opacity(isDimmed ? 0.25 : 1)
             .padding(.trailing, 2)
@@ -157,5 +130,18 @@ private struct RecordingDot: View {
                 }
             }
             .accessibilityHidden(true)
+    }
+}
+
+extension HotKey {
+    /// "⌥⌘N" as separate keys: ["⌥", "⌘", "N"].
+    var keyCaps: [String] {
+        let flags = modifierFlags
+        var keys: [String] = []
+        if flags.contains(.control) { keys.append("⌃") }
+        if flags.contains(.option) { keys.append("⌥") }
+        if flags.contains(.shift) { keys.append("⇧") }
+        if flags.contains(.command) { keys.append("⌘") }
+        return keys + [keyLabel]
     }
 }
