@@ -46,7 +46,7 @@ No analytics, no accounts, no telemetry. Everything stays on your Mac. The only 
 
 ## Design decisions
 
-The project's decisions are recorded in [`CONTEXT.md`](CONTEXT.md) and [`docs/adr/`](docs/adr/).
+The project's decisions are recorded in [`docs/adr/`](docs/adr/).
 
 ## Thanks
 

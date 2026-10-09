@@ -19,7 +19,7 @@ struct NotchView: View {
             }
         }
         .onHover { model.hoverChanged($0) }
-        .onTapGesture { model.open() }
+        .onTapGesture { model.tap() }
         .accessibilityElement(children: state == .expanded ? .contain : .ignore)
         .accessibilityLabel(Text("PancakeNotch"))
         .accessibilityAddTraits(state == .expanded ? [] : .isButton)
@@ -49,12 +49,13 @@ struct NotchView: View {
     @ViewBuilder
     private func content(layout: NotchLayout, state: NotchState) -> some View {
         switch state {
-        case .closed:
-            EmptyView()
-        case .compact:
+        case .compact where model.isPinned:
             CompactPlaceholderView(layout: layout)
                 .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
                 .transition(.opacity)
+        case .closed, .compact:
+            // Compact ears stay empty until a module supplies live info (Now Playing, M3).
+            EmptyView()
         case .expanded:
             ExpandedPlaceholderView(layout: layout)
                 .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
@@ -100,7 +101,7 @@ private struct ExpandedPlaceholderView: View {
     }
 }
 
-/// Compact ears shown only via `PANCAKENOTCH_DEBUG_STATE=compact` until a module supplies real ones.
+/// Sample compact ears, shown only via `PANCAKENOTCH_DEBUG_STATE=compact` until a module supplies real ones.
 private struct CompactPlaceholderView: View {
     let layout: NotchLayout
 

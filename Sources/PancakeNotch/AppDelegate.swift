@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
+    private var appObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
@@ -37,15 +38,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateFullScreen() }
         }
+        // Switching apps can bring a listed app to the front within the same Space.
+        appObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateFullScreen() }
+        }
         updateGeometry()
     }
 
+    /// Full-screen apps keep the notch working, except apps on the user's hide list (ADR-0030).
     private func updateFullScreen() {
-        let isFullScreen = NSScreen.builtIn.map { FullScreenDetector.isFullScreen(displayID: $0.displayID) } ?? false
-        if isFullScreen != notchController.isFullScreen {
-            logger.info("Full-screen app \(isFullScreen ? "active" : "inactive", privacy: .public)")
+        let hiddenApps = NotchSettings.appsHiddenInFullScreen
+        var suppress = false
+        if !hiddenApps.isEmpty,
+           let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+           hiddenApps.contains(frontmost),
+           let screen = NSScreen.builtIn {
+            suppress = FullScreenDetector.isFullScreen(displayID: screen.displayID)
         }
-        notchController.isFullScreen = isFullScreen
+        if suppress != notchController.isSuppressed {
+            logger.info("Notch \(suppress ? "hidden for full-screen app" : "shown", privacy: .public)")
+        }
+        notchController.isSuppressed = suppress
     }
 
     private func updateGeometry() {

@@ -1,7 +1,32 @@
+# macOS
 .DS_Store
+
+# SwiftPM / build output
 /.build/
 /build/
 /.swiftpm/
+*.dSYM/
+
+# Xcode (not used, ADR-0014) — keep it out if someone opens the package there
 *.xcodeproj/
+*.xcworkspace/
 xcuserdata/
 DerivedData/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# AI agent notes and settings: kept locally, not published
+AGENTS.md
+CLAUDE.md
+CONTEXT.md
+.claude/
+
+# Secrets: signing certificates and Sparkle keys must never be committed (ADR-0005)
+*.p12
+*.pem
+*.cer
+*.key
+.env

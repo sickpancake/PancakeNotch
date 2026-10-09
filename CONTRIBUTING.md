@@ -4,7 +4,7 @@ Thanks for helping! A few ground rules keep the app small and fast.
 
 ## Before you start
 
-- Read [`CONTEXT.md`](CONTEXT.md) and the relevant [ADRs](docs/adr/). Changes that go against an ADR need a new ADR first — open an issue to discuss.
+- Read the relevant [ADRs](docs/adr/) (architecture decision records). Changes that go against an ADR need a new ADR first — open an issue to discuss.
 - For anything bigger than a bug fix, open an issue before writing code.
 
 ## Setup

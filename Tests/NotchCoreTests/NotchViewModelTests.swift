@@ -74,25 +74,50 @@ struct NotchWindowFittingTests {
 }
 
 @MainActor
-struct NotchFullScreenTests {
+struct NotchClickTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 
-    @Test func fullScreenHidesCompactAndRestoresIt() {
-        let model = NotchViewModel(layout: layout)
-        model.restingState = .compact
+    /// A pointer well below the notch, as when clicking the panel body.
+    func makeModel(state: NotchState, pointer: CGPoint = CGPoint(x: 756, y: 850)) -> NotchViewModel {
+        NotchViewModel(
+            layout: layout,
+            state: state,
+            openDelay: .milliseconds(10),
+            closeDelay: .milliseconds(10),
+            collapseLinger: .milliseconds(10),
+            pointerLocation: { pointer }
+        )
+    }
+
+    @Test func clickOpensClosedNotch() {
+        let model = makeModel(state: .closed)
+        model.tap()
+        #expect(model.state == .expanded)
+    }
+
+    @Test func clickShrinksOpenPanelToCompactThenRests() async throws {
+        let model = makeModel(state: .expanded)
+        model.tap()
         #expect(model.state == .compact)
-        model.isFullScreen = true
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .closed)
-        model.isFullScreen = false
+    }
+
+    @Test func compactStaysWhileItIsTheRestingState() async throws {
+        let model = makeModel(state: .expanded)
+        model.restingState = .compact
+        model.tap()
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .compact)
     }
 
-    @Test func hoverStillOpensInFullScreen() {
-        let model = NotchViewModel(layout: layout)
-        model.isFullScreen = true
-        model.open()
+    @Test func hoveringCompactAfterClickDoesNotReopen() async throws {
+        let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 975))
+        model.tap()
+        model.hoverChanged(true)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.state == .compact)
+        model.tap()
         #expect(model.state == .expanded)
-        model.close()
-        #expect(model.state == .closed)
     }
 }

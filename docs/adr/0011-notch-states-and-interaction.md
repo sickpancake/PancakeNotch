@@ -12,9 +12,10 @@ Transient events may temporarily take over Compact, then restore the previous co
 
 ## Interaction
 - Hover ~150 ms → expand; mouse leaves → collapse after ~300 ms.
-- Click → expand.
+- Click → expand. Clicking the open panel shrinks it to Compact; it then returns to its resting
+  state once the pointer is away (amended 2026-10-09).
 - Two-finger horizontal swipe while expanded → switch module.
 - Dragging a file toward the notch → open directly to Shelf.
-- Full-screen apps → hidden unless hovered.
+- Full-screen apps → work normally, except apps on the user's hide list (ADR-0030, amended 2026-10-09).
 - Optional trackpad haptic on expand.
 - Delays and haptics configurable.
