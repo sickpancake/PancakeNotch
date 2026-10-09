@@ -34,7 +34,7 @@ final class NotchContainerView: NSView {
     }
 
     /// Centered horizontally, flush with the top edge (AppKit's y axis points up).
-    static func contentFrame(in bounds: CGRect, contentSize: CGSize) -> CGRect {
+    nonisolated static func contentFrame(in bounds: CGRect, contentSize: CGSize) -> CGRect {
         CGRect(
             x: bounds.midX - contentSize.width / 2,
             y: bounds.maxY - contentSize.height,
