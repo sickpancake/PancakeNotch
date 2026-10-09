@@ -62,15 +62,13 @@ private struct NotchHero: View {
         VStack(spacing: 0) {
             NotchStage(behavior: preferences.notchBehavior, isActive: isOn)
 
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 10) {
-                        StatusBadge(isOn: isOn)
-                        Text(isOn ? String(localized: "Notch is on") : String(localized: "Notch is off"))
-                            .font(.app(size: 21, weight: .bold))
-                            .kerning(-0.3)
-                            .contentTransition(.opacity)
-                    }
+            HStack(spacing: 14) {
+                StatusBadge(isOn: isOn)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isOn ? String(localized: "Notch is on") : String(localized: "Notch is off"))
+                        .font(.app(size: 21, weight: .bold))
+                        .kerning(-0.3)
+                        .contentTransition(.opacity)
                     Text(isOn
                         ? String(localized: "Move the pointer to the top of your screen and the notch opens.")
                         : String(localized: "The notch is hidden, but PancakeNotch keeps running. Turn it back on any time."))
@@ -87,8 +85,8 @@ private struct NotchHero: View {
                     .labelsHidden()
                     .accessibilityHint(Text("Shows or hides the notch without quitting PancakeNotch."))
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 20)
+            .padding(.horizontal, AppMetrics.cardInset)
+            .padding(.vertical, 18)
             .background(Color.white.opacity(0.035))
             .overlay(alignment: .top) {
                 AppPalette.hairline.frame(height: 1)
@@ -117,11 +115,11 @@ private struct StatusBadge: View {
     let isOn: Bool
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         Image(systemName: "power")
-            .font(.system(size: 13, weight: .bold))
+            .font(.system(size: 17, weight: .bold))
             .foregroundStyle(isOn ? Color.black : AppPalette.secondaryText)
-            .frame(width: 28, height: 28)
+            .frame(width: 42, height: 42)
             .background(shape.fill(isOn ? Color.white : Color.white.opacity(0.06)))
             .overlay(shape.strokeBorder(isOn ? .clear : AppPalette.hairlineStrong, lineWidth: 1))
             .accessibilityHidden(true)
@@ -199,8 +197,8 @@ private struct StatTile: View {
                 .minimumScaleFactor(0.85)
                 .padding(.top, 1)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, AppMetrics.cardInset)
+        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .glassPanel()
         .accessibilityElement(children: .ignore)
@@ -222,8 +220,8 @@ private struct ComingStatTile: View {
         }
         .lineLimit(1)
         .minimumScaleFactor(0.85)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, AppMetrics.cardInset)
+        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -258,7 +256,7 @@ private struct TipsCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             shortcut
-                .padding(22)
+                .padding(AppMetrics.cardInset)
                 .frame(width: 250, alignment: .topLeading)
                 .frame(maxHeight: .infinity, alignment: .topLeading)
 
@@ -270,7 +268,7 @@ private struct TipsCard: View {
                     TipRow(symbol: tip.symbol, title: tip.title, detail: tip.detail)
                 }
             }
-            .padding(22)
+            .padding(AppMetrics.cardInset)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .fixedSize(horizontal: false, vertical: true)

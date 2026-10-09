@@ -49,6 +49,13 @@ enum AppPalette {
     }
 }
 
+/// Shared measurements, so edges line up from card to card and page to page.
+enum AppMetrics {
+    /// The gap between a card's edge and its content. Section headers and footnotes outside a
+    /// card use it too, so they start on the same line as the text inside.
+    static let cardInset: CGFloat = 20
+}
+
 extension View {
     /// A soft grey "glass" panel: faint white fill, a highlight fading down from the top edge and
     /// a hairline border that is brighter at the top, as if lit from above.
@@ -146,7 +153,7 @@ struct SettingsCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             if let header {
                 SectionLabel(title: header)
-                    .padding(.leading, 4)
+                    .padding(.horizontal, AppMetrics.cardInset)
             }
             VStack(spacing: 0) {
                 Group(subviews: content) { rows in
@@ -154,7 +161,7 @@ struct SettingsCard<Content: View>: View {
                         if row.id != rows.first?.id {
                             AppPalette.hairline
                                 .frame(height: 1)
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, AppMetrics.cardInset)
                         }
                         row
                     }
@@ -166,7 +173,7 @@ struct SettingsCard<Content: View>: View {
                     .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, AppMetrics.cardInset)
             }
         }
     }
@@ -212,7 +219,7 @@ struct SettingsRowLabel: View {
 extension View {
     /// The insets every row in a `SettingsCard` uses, so rows line up.
     func settingsRowPadding() -> some View {
-        padding(.horizontal, 20)
+        padding(.horizontal, AppMetrics.cardInset)
             .padding(.vertical, 14)
             .frame(minHeight: 62)
             .accessibilityElement(children: .contain)

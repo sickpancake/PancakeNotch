@@ -89,8 +89,11 @@ private struct AppSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                NotchGlyph()
+            // Same columns as the rows below: the logo centred over their icons, the name
+            // starting where their titles start.
+            HStack(spacing: SidebarRow.iconSpacing) {
+                NotchGlyph(size: 22)
+                    .frame(width: SidebarRow.iconWidth)
                 Text("PancakeNotch")
                     .font(.app(size: 15, weight: .bold))
                     .kerning(-0.2)
@@ -148,12 +151,15 @@ private struct SidebarRow: View {
     let action: () -> Void
     @State private var isHovered = false
 
+    static let iconWidth: CGFloat = 18
+    static let iconSpacing: CGFloat = 11
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: Self.iconSpacing) {
                 Image(systemName: symbol)
                     .font(.app(size: 13, weight: .medium))
-                    .frame(width: 18)
+                    .frame(width: Self.iconWidth)
                     .accessibilityHidden(true)
                 Text(title)
                     .font(.app(size: 13.5, weight: isSelected ? .semibold : .medium))

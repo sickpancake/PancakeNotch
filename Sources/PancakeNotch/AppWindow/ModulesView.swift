@@ -92,7 +92,7 @@ private struct ModuleCard<Art: View>: View {
                 }
                 .padding(.top, 16)
             }
-            .padding(22)
+            .padding(AppMetrics.cardInset)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(minHeight: 196)
@@ -131,8 +131,8 @@ private struct NowPlayingArt: View {
                                 .foregroundStyle(.white.opacity(0.9))
                         }
                     VStack(alignment: .leading, spacing: 7) {
-                        Capsule().fill(.white.opacity(0.85)).frame(width: 92, height: 7)
-                        Capsule().fill(.white.opacity(0.35)).frame(width: 62, height: 6)
+                        Capsule().fill(.white.opacity(0.85)).frame(width: 72, height: 7)
+                        Capsule().fill(.white.opacity(0.35)).frame(width: 50, height: 6)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "waveform")
