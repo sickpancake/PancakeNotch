@@ -14,6 +14,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         initialState: ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_STATE"].flatMap(NotchState.init(rawValue:))
     )
 
+    private let preferences = Preferences()
+    private let stats = UsageStats()
+    private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
+    private lazy var appWindow = AppWindowController(preferences: preferences, shortcuts: shortcuts, stats: stats)
+    private lazy var menuBar = MenuBarController(
+        preferences: preferences,
+        openApp: { [weak self] in self?.showAppWindow() }
+    )
+
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var appObserver: NSObjectProtocol?
@@ -23,6 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             writeSnapshot(to: path)
             return
         }
+        if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT_SETTINGS"] {
+            try? AppWindowController.writeSnapshots(to: URL(fileURLWithPath: path))
+            NSApp.terminate(nil)
+            return
+        }
+        NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
+        notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
+        observePreferences()
+        _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -47,6 +65,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updateFullScreen() }
         }
         updateGeometry()
+    }
+
+    /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
+    /// when the menu bar icon is hidden.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        showAppWindow()
+        return false
+    }
+
+    @objc private func showAppWindow() {
+        appWindow.show()
+    }
+
+    /// Applies preferences now and again whenever one changes (no polling).
+    private func observePreferences() {
+        withObservationTracking {
+            notchController.isEnabled = preferences.notchEnabled
+            notchController.behavior = preferences.notchBehavior
+            menuBar.isVisible = preferences.showMenuBarIcon
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observePreferences() }
+        }
     }
 
     /// Full-screen apps keep the notch working, except apps on the user's hide list (ADR-0030).

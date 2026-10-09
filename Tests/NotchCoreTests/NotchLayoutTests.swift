@@ -44,4 +44,19 @@ struct NotchLayoutTests {
         let layout = NotchLayout(geometry: narrow)
         #expect(layout.windowFrame(for: .expanded).width <= 500)
     }
+
+    @Test(arguments: NotchState.allCases)
+    func notchViewKeepsItsPlaceWhenTheWindowResizes(state: NotchState) {
+        // The notch view is laid out once at the largest size; each smaller window must show the
+        // same top-center slice of it, so the outline grows from the center, not the left edge.
+        let layout = NotchLayout(geometry: geometry)
+        let window = layout.windowFrame(for: state)
+        let bounds = CGRect(origin: .zero, size: window.size)
+        let content = NotchContainerView.contentFrame(in: bounds, contentSize: layout.largestWindowSize)
+        let onScreen = content.offsetBy(dx: window.minX, dy: window.minY)
+        let largest = layout.windowFrame(for: .expanded)
+        #expect(onScreen.midX == largest.midX)
+        #expect(onScreen.maxY == largest.maxY)
+        #expect(content.width >= window.width && content.height >= window.height)
+    }
 }

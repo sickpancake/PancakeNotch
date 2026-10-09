@@ -7,7 +7,7 @@ struct NotchViewModelTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 
     func makeModel(state: NotchState = .closed) -> NotchViewModel {
-        NotchViewModel(layout: layout, state: state, openDelay: .milliseconds(10), closeDelay: .milliseconds(10))
+        NotchViewModel(layout: layout, state: state, behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)))
     }
 
     @Test func hoverOpensAfterDelay() async throws {
@@ -40,6 +40,17 @@ struct NotchViewModelTests {
         model.hoverChanged(true)
         try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .expanded)
+    }
+
+    @Test func reportsEachOpenOnce() {
+        let model = makeModel()
+        var opens = 0
+        model.onOpen = { opens += 1 }
+        model.open()
+        model.open()
+        model.close()
+        model.toggle()
+        #expect(opens == 2)
     }
 
     @Test func clickOpensImmediately() {
@@ -82,8 +93,7 @@ struct NotchClickTests {
         NotchViewModel(
             layout: layout,
             state: state,
-            openDelay: .milliseconds(10),
-            closeDelay: .milliseconds(10),
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
             collapseLinger: .milliseconds(10),
             pointerLocation: { pointer }
         )
@@ -119,5 +129,16 @@ struct NotchClickTests {
         #expect(model.state == .compact)
         model.tap()
         #expect(model.state == .expanded)
+    }
+}
+
+@MainActor
+struct NotchToggleTests {
+    @Test func toggleOpensAndCloses() {
+        let model = NotchViewModel(layout: NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982))))
+        model.toggle()
+        #expect(model.state == .expanded)
+        model.toggle()
+        #expect(model.state == .closed)
     }
 }

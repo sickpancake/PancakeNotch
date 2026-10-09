@@ -7,12 +7,17 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "PancakeNotch",
-            dependencies: ["NotchCore"]
+            dependencies: ["NotchCore", "HotKey"]
         ),
         .target(name: "NotchCore"),
+        .target(name: "HotKey"),
         .testTarget(
             name: "NotchCoreTests",
             dependencies: ["NotchCore"]
+        ),
+        .testTarget(
+            name: "HotKeyTests",
+            dependencies: ["HotKey"]
         ),
     ]
 )

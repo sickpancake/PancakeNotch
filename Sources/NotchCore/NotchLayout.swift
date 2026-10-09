@@ -58,6 +58,13 @@ public struct NotchLayout: Equatable, Sendable {
         return CGSize(width: body.width + 2 * radii(for: state).top, height: body.height)
     }
 
+    /// The biggest window any state needs; the notch view is laid out at this size once.
+    public var largestWindowSize: CGSize {
+        NotchState.allCases.map { windowFrame(for: $0).size }.reduce(.zero) {
+            CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height))
+        }
+    }
+
     /// Window frame for a state: just the outline (plus shadow room when expanded), centered on the
     /// notch and touching the top of the screen, so the window never covers more than it shows.
     public func windowFrame(for state: NotchState) -> CGRect {

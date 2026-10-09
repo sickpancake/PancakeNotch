@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>PancakeNotch</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.sickpancake.PancakeNotch</string>
 	<key>CFBundleInfoDictionaryVersion</key>
