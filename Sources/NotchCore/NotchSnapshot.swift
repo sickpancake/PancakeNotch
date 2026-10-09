@@ -7,7 +7,7 @@ import SwiftUI
 public enum NotchSnapshot {
     public static func write(geometry: NotchGeometry, to url: URL) throws {
         let layout = NotchLayout(geometry: geometry)
-        let window = layout.windowFrame.size
+        let window = layout.windowFrame(for: .expanded).size
         let view = VStack(spacing: 12) {
             ForEach(NotchState.allCases, id: \.self) { state in
                 ZStack(alignment: .top) {

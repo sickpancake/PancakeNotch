@@ -11,11 +11,10 @@ struct NotchLayoutTests {
         auxiliaryTopRightWidth: 662
     )!
 
-    @Test func closedBodyMatchesHardwareNotch() {
+    @Test func closedNotchStaysInsideHardwareCutout() {
         let layout = NotchLayout(geometry: geometry)
-        #expect(layout.bodySize(for: .closed) == geometry.notchRect.size)
-        let top = layout.radii(for: .closed).top
-        #expect(layout.shapeSize(for: .closed).width == geometry.notchRect.width + 2 * top)
+        #expect(layout.shapeSize(for: .closed) == geometry.notchRect.size)
+        #expect(layout.windowFrame(for: .closed) == geometry.notchRect)
     }
 
     @Test func statesGrowInOrder() {
@@ -29,21 +28,20 @@ struct NotchLayoutTests {
         #expect(expanded.height > compact.height)
     }
 
-    @Test func windowIsCenteredOnNotchAndTouchesScreenTop() {
+    @Test(arguments: NotchState.allCases)
+    func windowFitsStateCenteredAtScreenTop(state: NotchState) {
         let layout = NotchLayout(geometry: geometry)
-        let frame = layout.windowFrame
+        let frame = layout.windowFrame(for: state)
+        let shape = layout.shapeSize(for: state)
         #expect(frame.midX == geometry.notchRect.midX)
         #expect(frame.maxY == geometry.screenFrame.maxY)
-        for state in NotchState.allCases {
-            let shape = layout.shapeSize(for: state)
-            #expect(shape.width <= frame.width)
-            #expect(shape.height <= frame.height)
-        }
+        #expect(shape.width <= frame.width)
+        #expect(shape.height <= frame.height)
     }
 
     @Test func expandedPanelFitsNarrowScreens() {
         let narrow = NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: 500, height: 400))
         let layout = NotchLayout(geometry: narrow)
-        #expect(layout.windowFrame.width <= 500)
+        #expect(layout.windowFrame(for: .expanded).width <= 500)
     }
 }

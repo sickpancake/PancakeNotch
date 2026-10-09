@@ -27,7 +27,9 @@ public struct NotchLayout: Equatable, Sendable {
 
     public func radii(for state: NotchState) -> NotchRadii {
         switch state {
-        case .closed, .compact: NotchRadii(top: 6, bottom: 14)
+        // No top ears when closed: everything drawn stays inside the hardware cutout, where black is invisible.
+        case .closed: NotchRadii(top: 0, bottom: 14)
+        case .compact: NotchRadii(top: 6, bottom: 14)
         case .expanded: NotchRadii(top: 18, bottom: 26)
         }
     }
@@ -56,12 +58,13 @@ public struct NotchLayout: Equatable, Sendable {
         return CGSize(width: body.width + 2 * radii(for: state).top, height: body.height)
     }
 
-    /// The fixed window frame: big enough for the expanded panel and its shadow, centered on the
-    /// notch and touching the top of the screen. Transparent parts of the window let clicks through.
-    public var windowFrame: CGRect {
-        let expanded = shapeSize(for: .expanded)
-        let width = expanded.width + 2 * Self.shadowPadding
-        let height = expanded.height + Self.shadowPadding
+    /// Window frame for a state: just the outline (plus shadow room when expanded), centered on the
+    /// notch and touching the top of the screen, so the window never covers more than it shows.
+    public func windowFrame(for state: NotchState) -> CGRect {
+        let shape = shapeSize(for: state)
+        let padding = state == .expanded ? Self.shadowPadding : 0
+        let width = shape.width + 2 * padding
+        let height = shape.height + padding
         return CGRect(
             x: geometry.notchRect.midX - width / 2,
             y: geometry.screenFrame.maxY - height,

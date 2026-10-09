@@ -7,12 +7,34 @@ struct NotchView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let layout = model.layout
         let state = model.state
+        ZStack(alignment: .top) {
+            if reduceMotion {
+                // Reduce Motion: cross-fade between states instead of morphing the outline.
+                notch(state: state)
+                    .id(state)
+                    .transition(.opacity)
+            } else {
+                notch(state: state)
+            }
+        }
+        .onHover { model.hoverChanged($0) }
+        .onTapGesture { model.open() }
+        .accessibilityElement(children: state == .expanded ? .contain : .ignore)
+        .accessibilityLabel(Text("PancakeNotch"))
+        .accessibilityAddTraits(state == .expanded ? [] : .isButton)
+        .accessibilityAction { model.open() }
+        .accessibilityAction(named: Text("Close")) { model.close() }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The window sits over the notch, which AppKit reports as unsafe area; draw into it anyway.
+        .ignoresSafeArea()
+    }
+
+    private func notch(state: NotchState) -> some View {
+        let layout = model.layout
         let shape = NotchShape(layout.radii(for: state))
         let size = layout.shapeSize(for: state)
-
-        ZStack(alignment: .top) {
+        return ZStack(alignment: .top) {
             Color.black
             content(layout: layout, state: state)
         }
@@ -20,14 +42,6 @@ struct NotchView: View {
         .clipShape(shape)
         .contentShape(shape)
         .shadow(color: .black.opacity(state == .expanded ? 0.5 : 0), radius: 14, y: 6)
-        .onHover { model.hoverChanged($0) }
-        .onTapGesture { model.open() }
-        .accessibilityElement(children: state == .expanded ? .contain : .ignore)
-        .accessibilityLabel(Text("PancakeNotch"))
-        .accessibilityHint(state == .expanded ? Text("") : Text("Opens the notch"))
-        .accessibilityAddTraits(state == .expanded ? [] : .isButton)
-        .accessibilityAction { model.open() }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     /// Content is laid out at its final size and revealed by the morphing outline,

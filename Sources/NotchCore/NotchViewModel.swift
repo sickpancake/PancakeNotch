@@ -17,9 +17,14 @@ public final class NotchViewModel {
     /// Keeps the current state regardless of hover (used by `PANCAKENOTCH_DEBUG_STATE`).
     public var isPinned = false
 
+    /// Asks the window to fit a state. Called with the larger state before an animation starts,
+    /// and with the final state once it settles.
+    @ObservationIgnored public var fitWindow: ((NotchState) -> Void)?
+
     @ObservationIgnored private let openDelay: Duration
     @ObservationIgnored private let closeDelay: Duration
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    @ObservationIgnored private var transitionID = 0
 
     public init(
         layout: NotchLayout,
@@ -68,9 +73,24 @@ public final class NotchViewModel {
     public func transition(to newState: NotchState) {
         guard newState != state else { return }
         let opening = newState == .expanded
+        transitionID += 1
+        let id = transitionID
+        fitWindow?(max(state, newState))
         withAnimation(Self.animation(opening: opening)) {
             state = newState
+        } completion: { [weak self] in
+            // Shrink only after the latest animation, so an earlier one can't clip a newer one.
+            guard let self, self.transitionID == id else { return }
+            self.fitWindow?(self.state)
         }
+    }
+
+    /// Returns to the resting state without animating (e.g. the display went away).
+    public func reset() {
+        hoverTask?.cancel()
+        transitionID += 1
+        state = restingState
+        fitWindow?(state)
     }
 
     static func animation(opening: Bool) -> Animation {

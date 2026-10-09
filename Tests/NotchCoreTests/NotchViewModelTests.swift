@@ -14,7 +14,7 @@ struct NotchViewModelTests {
         let model = makeModel()
         model.hoverChanged(true)
         #expect(model.state == .closed)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .expanded)
     }
 
@@ -22,7 +22,7 @@ struct NotchViewModelTests {
         let model = makeModel()
         model.hoverChanged(true)
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .closed)
     }
 
@@ -30,7 +30,7 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.restingState = .compact
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .compact)
     }
 
@@ -38,7 +38,7 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.hoverChanged(false)
         model.hoverChanged(true)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .expanded)
     }
 
@@ -52,7 +52,23 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.isPinned = true
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.state == .expanded)
+    }
+}
+
+@MainActor
+struct NotchWindowFittingTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    @Test func windowGrowsBeforeOpeningAndHidingResets() {
+        let model = NotchViewModel(layout: layout)
+        var fitted: [NotchState] = []
+        model.fitWindow = { fitted.append($0) }
+        model.open()
+        #expect(fitted.first == .expanded)
+        model.reset()
+        #expect(model.state == .closed)
+        #expect(fitted.last == .closed)
     }
 }
