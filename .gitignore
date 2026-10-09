@@ -22,6 +22,7 @@ DerivedData/
 AGENTS.md
 CLAUDE.md
 CONTEXT.md
+docs/adr/
 .claude/
 
 # Secrets: signing certificates and Sparkle keys must never be committed (ADR-0005)

@@ -4,7 +4,7 @@ Thanks for helping! A few ground rules keep the app small and fast.
 
 ## Before you start
 
-- Read the relevant [ADRs](docs/adr/) (architecture decision records). Changes that go against an ADR need a new ADR first — open an issue to discuss.
+- For bigger changes or new features, open an issue first to discuss the direction.
 - For anything bigger than a bug fix, open an issue before writing code.
 
 ## Setup
@@ -19,11 +19,11 @@ swift test
 
 ## Rules
 
-- **Memory budget:** < 50 MB idle, < 100 MB peak (ADR-0006). CI fails if idle memory goes over.
+- **Memory budget:** < 50 MB idle, < 100 MB peak. CI fails if idle memory goes over.
 - **No polling.** Use notifications, callbacks, or async streams. Idle CPU should be ~0%.
-- **No new dependencies** without an ADR explaining why Apple frameworks aren't enough.
+- **No new dependencies** without discussing it in an issue first (why Apple frameworks aren't enough).
 - **Swift 6 strict concurrency**, macOS 15+ APIs (gate newer ones with `#available`).
-- **Monochrome UI** (ADR-0029), VoiceOver labels on every control, respect Reduce Motion.
+- **Monochrome UI**, VoiceOver labels on every control, respect Reduce Motion.
 - User-facing strings use `String(localized:)`.
 
 ## Pull requests

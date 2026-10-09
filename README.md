@@ -12,7 +12,7 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 - **Module menu** — your favorite modules in a small grid, everything else in a scrolling list.
 - **Companion app** — settings, favorites, and stats (listening, usage, and the app's own memory use).
 
-Later: battery, calendar, timers, AirPods/Bluetooth, and more. See [`docs/adr/0009-v1-scope.md`](docs/adr/0009-v1-scope.md).
+Later: battery, calendar, timers, AirPods/Bluetooth, and more.
 
 ## Requirements
 
@@ -43,10 +43,6 @@ open build/PancakeNotch.app
 ## Privacy
 
 No analytics, no accounts, no telemetry. Everything stays on your Mac. The only network request is the update check, which you can turn off.
-
-## Design decisions
-
-The project's decisions are recorded in [`docs/adr/`](docs/adr/).
 
 ## Thanks
 
