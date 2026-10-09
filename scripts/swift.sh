@@ -16,4 +16,11 @@ if [[ -z "${SDKROOT:-}" && "$(xcode-select -p 2>/dev/null)" == "$CLT" ]]; then
     fi
 fi
 
+# Swift Build (6.4) sometimes fails to resolve Swift Testing's macro plugin on the first test
+# build ("plugin for module 'TestingMacros' not found"); loading it explicitly avoids that.
+TESTING_MACROS="$CLT/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib"
+if [[ "${1:-}" == "test" && "$(xcode-select -p 2>/dev/null)" == "$CLT" && -f "$TESTING_MACROS" ]]; then
+    exec swift "$@" -Xswiftc -load-plugin-library -Xswiftc "$TESTING_MACROS"
+fi
+
 exec swift "$@"
