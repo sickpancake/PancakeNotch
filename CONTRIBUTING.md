@@ -12,7 +12,7 @@ Thanks for helping! A few ground rules keep the app small and fast.
 Only the Command Line Tools are required (`xcode-select --install`). Xcode works too but is not needed, and please don't commit an `.xcodeproj`.
 
 ```sh
-swift test
+./scripts/swift.sh test
 ./scripts/build-app.sh debug
 ./scripts/check-memory.sh
 ```

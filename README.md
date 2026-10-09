@@ -34,7 +34,7 @@ Only Apple's Command Line Tools are needed — no Xcode.
 
 ```sh
 xcode-select --install          # if you don't have the Command Line Tools yet
-swift test                      # run the tests
+./scripts/swift.sh test         # run the tests
 ./scripts/build-app.sh          # builds build/PancakeNotch.app
 open build/PancakeNotch.app
 ./scripts/check-memory.sh       # checks idle memory against the budget

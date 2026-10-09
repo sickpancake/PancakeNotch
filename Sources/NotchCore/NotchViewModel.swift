@@ -21,8 +21,8 @@ public final class NotchViewModel {
     /// and with the final state once it settles.
     @ObservationIgnored public var fitWindow: ((NotchState) -> Void)?
 
-    @ObservationIgnored private let openDelay: Duration
-    @ObservationIgnored private let closeDelay: Duration
+    /// Hover delays and haptics from Settings.
+    @ObservationIgnored public var behavior: NotchBehavior
     /// How long the compact notch stays after a click shrinks it, if the pointer isn't on it.
     @ObservationIgnored private let collapseLinger: Duration
     /// Current pointer position in screen coordinates; injectable for tests.
@@ -35,15 +35,13 @@ public final class NotchViewModel {
     public init(
         layout: NotchLayout,
         state: NotchState = .closed,
-        openDelay: Duration = .milliseconds(150),
-        closeDelay: Duration = .milliseconds(300),
+        behavior: NotchBehavior = NotchBehavior(),
         collapseLinger: Duration = .seconds(1),
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation }
     ) {
         self.layout = layout
         self.state = state
-        self.openDelay = openDelay
-        self.closeDelay = closeDelay
+        self.behavior = behavior
         self.collapseLinger = collapseLinger
         self.pointerLocation = pointerLocation
     }
@@ -54,11 +52,16 @@ public final class NotchViewModel {
         guard !isPinned else { return }
         if isHovering {
             guard state != .expanded, !collapsedByClick else { return }
-            schedule(after: openDelay) { $0.open() }
+            schedule(after: behavior.openDelay) { model in
+                model.open()
+                if model.behavior.hapticOnOpen {
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                }
+            }
         } else {
             collapsedByClick = false
             guard state > restingState else { return }
-            schedule(after: closeDelay) { $0.close() }
+            schedule(after: behavior.closeDelay) { $0.close() }
         }
     }
 
@@ -75,6 +78,11 @@ public final class NotchViewModel {
         if !layout.windowFrame(for: .compact).contains(pointerLocation()) {
             schedule(after: collapseLinger) { $0.close() }
         }
+    }
+
+    /// Opens or closes the notch, e.g. from the keyboard shortcut.
+    public func toggle() {
+        state == .expanded ? close() : open()
     }
 
     public func open() {

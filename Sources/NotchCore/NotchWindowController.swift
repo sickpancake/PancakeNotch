@@ -22,6 +22,17 @@ public final class NotchWindowController {
         }
     }
 
+    /// Hover delays and haptics from Settings.
+    public var behavior = NotchBehavior() {
+        didSet { model?.behavior = behavior }
+    }
+
+    /// Opens or closes the notch (keyboard shortcut).
+    public func toggle() {
+        guard hasGeometry, !isSuppressed else { return }
+        model?.toggle()
+    }
+
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
     public func update(geometry: NotchGeometry?) {
         hasGeometry = geometry != nil
@@ -50,7 +61,7 @@ public final class NotchWindowController {
     }
 
     private func createPanel(layout: NotchLayout) {
-        let model = NotchViewModel(layout: layout, state: initialState ?? .closed)
+        let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior)
         model.isPinned = initialState != nil
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
         let hostingView = NSHostingView(rootView: NotchView(model: model))

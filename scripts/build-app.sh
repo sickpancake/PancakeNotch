@@ -8,8 +8,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/PancakeNotch.app"
 
 cd "$ROOT"
-swift build -c "$CONFIG" --arch arm64
-BIN_DIR="$(swift build -c "$CONFIG" --arch arm64 --show-bin-path)"
+"$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64
+BIN_DIR="$("$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64 --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
