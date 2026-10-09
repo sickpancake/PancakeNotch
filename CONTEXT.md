@@ -59,6 +59,7 @@ Started from scratch (not a fork of boring.notch) so the project owns its archit
 | [0027](docs/adr/0027-help.md) | Help: basic in-app, full on GitHub, domain-ready |
 | [0028](docs/adr/0028-keyboard-shortcut.md) | Configurable global shortcut (KeyboardShortcuts) |
 | [0029](docs/adr/0029-visual-identity.md) | Pure monochrome visual identity |
+| [0030](docs/adr/0030-full-screen-detection.md) | Hide in full screen via private Spaces API, event-driven, fail-safe |
 
 ## Open questions
 

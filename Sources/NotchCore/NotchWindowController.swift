@@ -13,6 +13,11 @@ public final class NotchWindowController {
         self.initialState = initialState
     }
 
+    /// Whether a full-screen app owns the notch's display; keeps the notch closed while true.
+    public var isFullScreen = false {
+        didSet { model?.isFullScreen = isFullScreen }
+    }
+
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
     public func update(geometry: NotchGeometry?) {
         guard let geometry else {
@@ -31,6 +36,7 @@ public final class NotchWindowController {
 
         let model = NotchViewModel(layout: layout, state: initialState ?? .closed)
         model.isPinned = initialState != nil
+        model.isFullScreen = isFullScreen
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []

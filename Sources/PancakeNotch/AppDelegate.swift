@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private var screenObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
@@ -28,7 +29,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateGeometry() }
         }
+        // Entering or leaving a full-screen app switches Spaces.
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateFullScreen() }
+        }
         updateGeometry()
+    }
+
+    private func updateFullScreen() {
+        let isFullScreen = NSScreen.builtIn.map { FullScreenDetector.isFullScreen(displayID: $0.displayID) } ?? false
+        if isFullScreen != notchController.isFullScreen {
+            logger.info("Full-screen app \(isFullScreen ? "active" : "inactive", privacy: .public)")
+        }
+        notchController.isFullScreen = isFullScreen
     }
 
     private func updateGeometry() {
@@ -39,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.info("No notch available; idling")
         }
         notchController.update(geometry: geometry)
+        updateFullScreen()
     }
 
     /// Renders all notch states to a PNG and quits. See `NotchSnapshot`.

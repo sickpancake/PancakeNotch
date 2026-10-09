@@ -11,8 +11,15 @@ public final class NotchViewModel {
 
     /// Where the notch rests when not expanded: `.compact` while a module has live info (M3+).
     public var restingState: NotchState = .closed {
-        didSet { if state != .expanded { transition(to: restingState) } }
+        didSet { settle() }
     }
+
+    /// While a full-screen app is in front the notch stays closed (invisible) unless hovered (ADR-0011).
+    public var isFullScreen = false {
+        didSet { settle() }
+    }
+
+    private var effectiveRestingState: NotchState { isFullScreen ? .closed : restingState }
 
     /// Keeps the current state regardless of hover (used by `PANCAKENOTCH_DEBUG_STATE`).
     public var isPinned = false
@@ -66,7 +73,11 @@ public final class NotchViewModel {
 
     public func close() {
         hoverTask?.cancel()
-        transition(to: restingState)
+        transition(to: effectiveRestingState)
+    }
+
+    private func settle() {
+        if state != .expanded { transition(to: effectiveRestingState) }
     }
 
     /// Moves to `newState` with the matching animation. Opening springs slightly; closing doesn't.
@@ -89,7 +100,7 @@ public final class NotchViewModel {
     public func reset() {
         hoverTask?.cancel()
         transitionID += 1
-        state = restingState
+        state = effectiveRestingState
         fitWindow?(state)
     }
 

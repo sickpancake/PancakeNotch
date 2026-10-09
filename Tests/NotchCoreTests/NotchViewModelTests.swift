@@ -72,3 +72,27 @@ struct NotchWindowFittingTests {
         #expect(fitted.last == .closed)
     }
 }
+
+@MainActor
+struct NotchFullScreenTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    @Test func fullScreenHidesCompactAndRestoresIt() {
+        let model = NotchViewModel(layout: layout)
+        model.restingState = .compact
+        #expect(model.state == .compact)
+        model.isFullScreen = true
+        #expect(model.state == .closed)
+        model.isFullScreen = false
+        #expect(model.state == .compact)
+    }
+
+    @Test func hoverStillOpensInFullScreen() {
+        let model = NotchViewModel(layout: layout)
+        model.isFullScreen = true
+        model.open()
+        #expect(model.state == .expanded)
+        model.close()
+        #expect(model.state == .closed)
+    }
+}
