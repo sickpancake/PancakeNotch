@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 public final class NotchWindowController {
     private var panel: NotchPanel?
+    private var container: NotchContainerView?
     public private(set) var model: NotchViewModel?
     private let initialState: NotchState?
     private var hasGeometry = false
@@ -44,6 +45,7 @@ public final class NotchWindowController {
 
         if let panel, let model {
             model.layout = layout
+            container?.contentSize = layout.largestWindowSize
             panel.setFrame(layout.windowFrame(for: model.state), display: true)
         } else {
             createPanel(layout: layout)
@@ -66,12 +68,14 @@ public final class NotchWindowController {
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
-        panel.contentView = hostingView
+        let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
+        panel.contentView = container
         model.fitWindow = { [weak panel, weak model] state in
             guard let panel, let model else { return }
             panel.setFrame(model.layout.windowFrame(for: state), display: true)
         }
         self.model = model
         self.panel = panel
+        self.container = container
     }
 }
