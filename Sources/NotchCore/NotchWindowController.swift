@@ -56,8 +56,10 @@ public final class NotchWindowController {
 
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
-        guard hasGeometry, !isSuppressed, isEnabled else { return }
-        model?.toggle()
+        guard hasGeometry, !isSuppressed, isEnabled, let model else { return }
+        model.toggle()
+        // Opened from the keyboard: keep using the keyboard inside it.
+        if model.state == .expanded, model.module != nil { takeKeyFocus() }
     }
 
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
@@ -129,7 +131,7 @@ public final class NotchWindowController {
         if wasKey { panel.resignKey() }
         if let app = appToRestore {
             appToRestore = nil
-            app.activate()
+            app.activate(options: [])
         }
         logger.info("Notch released key focus (wasKey=\(wasKey))")
     }

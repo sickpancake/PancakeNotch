@@ -127,3 +127,53 @@ struct ShelfModuleTests {
         #expect(module.dragOperations(outside: true).contains(.move))
     }
 }
+
+@MainActor
+struct ShelfModuleReviewTests {
+    func makeModule(_ fixture: ShelfFixture) -> (ShelfModule, NotchViewModel) {
+        let settings = ShelfSettings(defaults: UserDefaults(suiteName: "ShelfModuleReviewTests-\(UUID().uuidString)")!)
+        let module = ShelfModule(store: fixture.makeStore(), settings: settings)
+        let notch = NotchViewModel(layout: NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982))))
+        notch.module = module
+        return (module, notch)
+    }
+
+    @Test func duplicatesDroppedWhileFullAreNotQueued() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        let inputs = try fixture.files(21)
+        module.offer(inputs)
+        module.offer([inputs[0], inputs[20]])
+        #expect(module.prompt == .full(pending: [inputs[20]]))
+    }
+
+    @Test func switchingTheShelfOffDiscardsWaitingItems() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(21))
+        notch.module = nil
+        #expect(module.prompt == nil)
+        #expect(notch.restingState == .closed)
+    }
+
+    @Test func shiftArrowGrowsAndShrinksFromTheAnchor() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a"), .text("b"), .text("c")])
+        let ids = module.store.items.map(\.id)
+        module.click(ids[0], modifiers: [])
+        module.moveSelection(by: 1, extending: true)
+        module.moveSelection(by: 1, extending: true)
+        #expect(module.selection == Set(ids))
+        module.moveSelection(by: -1, extending: true)
+        #expect(module.selection == Set(ids[0...1]))
+    }
+
+    @Test func aCardRaisedWhileClosedOpensTheNotch() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer([.text("a")])
+        module.offer([.text("a")])
+        #expect(notch.state == .expanded)
+    }
+}

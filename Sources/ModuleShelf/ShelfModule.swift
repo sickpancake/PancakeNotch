@@ -38,10 +38,23 @@ public final class ShelfModule: NotchModule {
 
     var selection: Set<UUID> = []
     @ObservationIgnored private var selectionAnchor: UUID?
+    /// The far end of a keyboard-extended selection.
+    @ObservationIgnored private var selectionCursor: UUID?
     var dropZone: DropZone?
     /// The drag over the notch can be AirDropped (shows the AirDrop zone).
     var dragCanAirDrop = false
-    var prompt: Prompt? { didSet { holdChanged(from: oldValue != nil || otherHolds) } }
+    var prompt: Prompt? {
+        didSet {
+            holdChanged(from: oldValue != nil || otherHolds)
+            // A late promised file can raise a card after the notch closed: show it.
+            if oldValue == nil, prompt != nil, let notch, notch.state != .expanded { notch.open() }
+        }
+    }
+
+    var isChoosing: Bool {
+        if case .choosing = prompt { return true }
+        return false
+    }
     var confirmingClear = false
     /// The text/link item just copied, for a brief "Copied" flash.
     var copiedID: UUID?
@@ -62,12 +75,21 @@ public final class ShelfModule: NotchModule {
         quickLook.onEnd = { [weak self] in self?.setHold { $0.isQuickLooking = false } }
     }
 
+    /// Clears temporary drop files left from an earlier run. Call at launch.
+    public static func removeTemporaryFiles() {
+        ShelfSharing.removeTemporaryFiles()
+    }
+
     // MARK: NotchModule
 
     public func attach(to notch: NotchViewModel?) {
         if notch == nil {
+            // Switched off: answer any open card (waiting files are discarded) and let go of the notch.
+            if prompt != nil { dismissPrompt() }
+            self.notch?.releaseKeyFocus?()
             self.notch?.restingState = .closed
             store.onChange = nil
+            quickLook.closeIfShowing()
         }
         self.notch = notch
         guard notch != nil else { return }
@@ -84,6 +106,10 @@ public final class ShelfModule: NotchModule {
     }
 
     public var holdsOpen: Bool { prompt != nil || otherHolds }
+
+    public var accessibilityStatus: String? {
+        store.isFull ? String(localized: "Shelf is full") : nil
+    }
 
     public func notchDidOpen() {
         thumbnails.load(store.items, scale: 2)
@@ -124,7 +150,7 @@ public final class ShelfModule: NotchModule {
             let drop = ShelfDropReader.read(pasteboard) { try ShelfSharing.makeTemporaryFolder() }
             guard !drop.isEmpty else { return false }
             setHold { $0.isSharing = true }
-            receiveForAirDrop(drop)
+            receiveForAirDrop(drop, folders: drop.inputs.compactMap(\.temporaryFolder))
             return true
         }
 
@@ -150,7 +176,12 @@ public final class ShelfModule: NotchModule {
             remove(Array(selection))
             return true
         case 36, 76: // Return, Enter
+            guard prompt == nil else { return false }
             for id in orderedSelection { activate(id) }
+            return true
+        case 123, 124: // ← →: move the selection along the row
+            guard prompt == nil || isChoosing else { return false }
+            moveSelection(by: event.keyCode == 123 ? -1 : 1, extending: event.modifierFlags.contains(.shift))
             return true
         case 0 where command: // ⌘A
             selection = Set(store.items.map(\.id))
@@ -202,12 +233,22 @@ public final class ShelfModule: NotchModule {
             let all = waiting + inputs
             prompt = .duplicates(inputs: all, count: all.filter(store.contains).count)
         case .full(let pending):
-            prompt = .full(pending: pending + inputs)
+            prompt = .full(pending: pending + waitingInputs(inputs, after: pending))
         case .choosing(let pending):
-            prompt = .choosing(pending: pending + inputs)
+            prompt = .choosing(pending: pending + waitingInputs(inputs, after: pending))
         case nil:
             apply(store.add(inputs, duplicates: settings.duplicatePolicy), inputs: inputs)
         }
+    }
+
+    /// Content dropped while the shelf is full joins the waiting items. Unless duplicates are always
+    /// added again, anything already on the shelf or already waiting is left out (it's there already).
+    private func waitingInputs(_ inputs: [ShelfInput], after pending: [ShelfInput]) -> [ShelfInput] {
+        guard settings.duplicatePolicy != .addAgain else { return inputs }
+        let waiting = Set(pending.map(\.key))
+        let fresh = inputs.filter { !store.contains($0) && !waiting.contains($0.key) }
+        store.discard(inputs.filter { input in !fresh.contains(input) })
+        return fresh
     }
 
     private func apply(_ result: ShelfStore.AddResult, inputs: [ShelfInput]) {
@@ -276,7 +317,7 @@ public final class ShelfModule: NotchModule {
         defer { isRefilling = false }
         switch store.add(pending, duplicates: .addAgain) {
         case .overflow(_, let rest):
-            prompt = .full(pending: rest)
+            prompt = isChoosing ? .choosing(pending: rest) : .full(pending: rest)
         default:
             prompt = nil
         }
@@ -300,23 +341,32 @@ public final class ShelfModule: NotchModule {
             logger.error("A promised file didn't arrive")
             return
         }
+        defer {
+            // The drop's temporary folder, once its last file has moved out.
+            let folder = url.deletingLastPathComponent()
+            if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true {
+                try? FileManager.default.removeItem(at: folder)
+            }
+        }
         do {
             let target = try store.newFilesFolder().appending(path: url.lastPathComponent)
             try FileManager.default.moveItem(at: url, to: target)
             logger.info("Promised file arrived")
             offer([.file(target, owned: true)])
         } catch {
-            logger.error("Couldn't keep a promised file: \(error.localizedDescription, privacy: .public)")
+            logger.error("Couldn't keep a promised file: \(error.localizedDescription, privacy: .private)")
         }
     }
 
     /// Content dropped on the AirDrop zone; promised files are received first, then everything is sent at once.
-    private func receiveForAirDrop(_ drop: ShelfDrop) {
-        let batch = AirDropBatch(items: drop.inputs.map(\.shareable), waiting: ShelfDropReader.expectedFileCount(drop.promises))
-        guard batch.waiting > 0, let destination = try? ShelfSharing.makeTemporaryFolder() else {
+    private func receiveForAirDrop(_ drop: ShelfDrop, folders: [URL]) {
+        sharing.deleteWhenFinished(folders)
+        let batch = AirDropBatch(items: drop.inputs.map(\.shareable), waiting: 0)
+        guard !drop.promises.isEmpty, let destination = try? ShelfSharing.makeTemporaryFolder() else {
             sharing.airDrop(batch.items)
             return
         }
+        sharing.deleteWhenFinished([destination])
         for promise in drop.promises {
             ShelfDropReader.receive(promise, into: destination, queue: promiseQueue) { [weak self] url in
                 Task { @MainActor in
@@ -326,6 +376,8 @@ public final class ShelfModule: NotchModule {
                 }
             }
         }
+        // File names are known only once receiving has started; arrivals run on a later main-actor turn.
+        batch.waiting = ShelfDropReader.expectedFileCount(drop.promises)
     }
 
     // MARK: Store changes
@@ -370,6 +422,25 @@ public final class ShelfModule: NotchModule {
             selection = [id]
             selectionAnchor = id
         }
+        selectionCursor = id
+    }
+
+    /// Arrow keys: select the neighbouring item (⇧ extends the selection).
+    func moveSelection(by step: Int, extending: Bool) {
+        let ids = store.items.map(\.id)
+        guard !ids.isEmpty else { return }
+        let current = (selectionCursor ?? selectionAnchor).flatMap { ids.firstIndex(of: $0) }
+        let next = current.map { min(max($0 + step, 0), ids.count - 1) } ?? (step > 0 ? 0 : ids.count - 1)
+        selectionCursor = ids[next]
+        if isChoosing {
+            return // While choosing, a click (or VoiceOver's default action) toggles; arrows don't.
+        }
+        if extending, let anchor = selectionAnchor.flatMap({ ids.firstIndex(of: $0) }) {
+            selection = Set(ids[min(anchor, next)...max(anchor, next)])
+        } else {
+            selection = [ids[next]]
+            selectionAnchor = ids[next]
+        }
     }
 
     func backgroundClicked() {
@@ -389,6 +460,10 @@ public final class ShelfModule: NotchModule {
 
     /// Double-click or Return: open a file, copy a text or link item.
     func activate(_ id: UUID) {
+        if case .choosing = prompt {
+            click(id, modifiers: [])
+            return
+        }
         guard let item = store.items.first(where: { $0.id == id }) else { return }
         if item.isFile {
             open([item])
@@ -420,6 +495,7 @@ public final class ShelfModule: NotchModule {
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects(objects)
+        AccessibilityNotification.Announcement(String(localized: "Copied")).post()
         if items.count == 1, let id = items.first?.id {
             copiedID = id
             Task { [weak self] in
@@ -493,7 +569,8 @@ public final class ShelfModule: NotchModule {
         targets(for: id).compactMap { item in
             switch item.kind {
             case .file:
-                guard let url = store.resolvedURL(for: item) else { return nil }
+                // The path checked when the notch opened: no disk access as the drag starts.
+                guard let url = item.fileURL ?? store.resolvedURL(for: item) else { return nil }
                 return (item, url as NSURL)
             case .text(let text):
                 return (item, text as NSString)
@@ -537,6 +614,12 @@ extension ShelfStore {
 }
 
 extension ShelfInput {
+    /// The temporary folder of a file read from the AirDrop zone (deleted after sending).
+    var temporaryFolder: URL? {
+        guard case .file(let url, true) = self else { return nil }
+        return url.deletingLastPathComponent()
+    }
+
     /// The value handed to AirDrop/Share.
     var shareable: Any {
         switch self {

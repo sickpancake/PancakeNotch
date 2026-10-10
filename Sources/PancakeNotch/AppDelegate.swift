@@ -52,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
         notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
+        ShelfModule.removeTemporaryFiles()
+        shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
         observeShelf()
         _ = shortcuts // registers the saved shortcut

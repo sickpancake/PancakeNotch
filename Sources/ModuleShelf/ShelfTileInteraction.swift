@@ -47,7 +47,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
         window?.makeFirstResponder(self)
         guard let itemID else { return }
         let modifiers = event.modifierFlags.intersection([.command, .shift])
-        if event.clickCount == 2 {
+        if event.clickCount == 2, !module.isChoosing {
             module.activate(itemID)
         } else if modifiers.isEmpty, module.selection.contains(itemID), module.selection.count > 1 {
             narrowSelectionOnMouseUp = true

@@ -15,6 +15,9 @@ public protocol NotchModule: AnyObject {
     /// Content for the compact ears, or `nil` to leave them empty.
     func compactView(layout: NotchLayout) -> AnyView?
 
+    /// Read by VoiceOver while the notch is closed or compact (e.g. "Shelf is full").
+    var accessibilityStatus: String? { get }
+
     /// True while something must keep the notch open: a menu, a preview, a prompt, a drag in progress.
     /// Call `NotchViewModel.holdReleased()` when it turns false.
     var holdsOpen: Bool { get }
@@ -38,6 +41,7 @@ public protocol NotchModule: AnyObject {
 public extension NotchModule {
     func compactView(layout: NotchLayout) -> AnyView? { nil }
     var holdsOpen: Bool { false }
+    var accessibilityStatus: String? { nil }
     func notchDidOpen() {}
     func notchDidClose() {}
     func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation { [] }

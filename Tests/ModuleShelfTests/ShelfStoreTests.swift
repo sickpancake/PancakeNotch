@@ -167,3 +167,20 @@ struct ShelfStoreTests {
         #expect(changes == 2)
     }
 }
+
+@MainActor
+struct ShelfOrphanTests {
+    @Test func launchSweepKeepsOnlyFilesItemsPointTo() throws {
+        let fixture = try ShelfFixture()
+        let store = fixture.makeStore()
+        let kept = try store.newFilesFolder()
+        try Data([1]).write(to: kept.appending(path: "a.png"))
+        store.add([.file(kept.appending(path: "a.png"), owned: true)], duplicates: .ask)
+        let orphan = try store.newFilesFolder()
+        try Data([1]).write(to: orphan.appending(path: "b.png"))
+
+        store.removeOrphanedFiles()
+        #expect(FileManager.default.fileExists(atPath: kept.path))
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+    }
+}

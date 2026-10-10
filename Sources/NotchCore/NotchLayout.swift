@@ -71,6 +71,14 @@ public struct NotchLayout: Equatable, Sendable {
         CGPoint(x: (largestWindowSize.width - bodySize(for: state).width) / 2, y: 0)
     }
 
+    /// The notch outline on screen for a state: the window frame without the shadow margin.
+    /// This is what the pointer hovers.
+    public func outlineFrame(for state: NotchState) -> CGRect {
+        let window = windowFrame(for: state)
+        let padding = state == .expanded ? Self.shadowPadding : 0
+        return CGRect(x: window.minX + padding, y: window.minY + padding, width: window.width - 2 * padding, height: window.height - padding)
+    }
+
     /// Window frame for a state: just the outline (plus shadow room when expanded), centered on the
     /// notch and touching the top of the screen, so the window never covers more than it shows.
     public func windowFrame(for state: NotchState) -> CGRect {

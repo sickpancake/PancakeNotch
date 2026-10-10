@@ -41,7 +41,7 @@ public final class ShelfStore {
             do {
                 items = try JSONDecoder().decode([ShelfItem].self, from: data)
             } catch {
-                logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .public)")
+                logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -101,7 +101,7 @@ public final class ShelfStore {
                 let bookmark = try url.bookmarkData()
                 return ShelfItem(kind: .file(bookmark: bookmark, owned: owned), path: url.resolvingSymlinksInPath().path, addedAt: now())
             } catch {
-                logger.error("Couldn't keep \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
+                logger.error("Couldn't keep \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
                 if owned { deleteOwnedFile(at: url) }
                 return nil
             }
@@ -138,6 +138,22 @@ public final class ShelfStore {
         let relative = path.dropFirst(files.count)
         guard let folder = relative.split(separator: "/").first else { return }
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: files + folder))
+    }
+
+    /// Deletes owned files no item points to (e.g. waiting files when the app quit with a card open).
+    /// Only looks inside our own `Files` folder, so it's safe at launch.
+    public func removeOrphanedFiles() {
+        let files = filesDirectory.resolvingSymlinksInPath().path + "/"
+        let used = Set(items.compactMap { item -> String? in
+            guard item.isOwnedFile, let path = item.path else { return nil }
+            let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            guard resolved.hasPrefix(files) else { return nil }
+            return resolved.dropFirst(files.count).split(separator: "/").first.map(String.init)
+        })
+        let folders = (try? FileManager.default.contentsOfDirectory(atPath: files)) ?? []
+        for folder in folders where !used.contains(folder) {
+            try? FileManager.default.removeItem(atPath: files + folder)
+        }
     }
 
     // MARK: Checking
@@ -198,7 +214,7 @@ public final class ShelfStore {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(items).write(to: indexURL, options: .atomic)
         } catch {
-            logger.error("Couldn't save the Shelf: \(error.localizedDescription, privacy: .public)")
+            logger.error("Couldn't save the Shelf: \(error.localizedDescription, privacy: .private)")
         }
         onChange?()
     }

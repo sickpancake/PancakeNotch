@@ -160,6 +160,7 @@ private struct NowPlayingArt: View {
 private struct ShelfSettingsCard: View {
     @Bindable var settings: ShelfSettings
     let store: ShelfStore
+    @State private var confirmingClear = false
 
     var body: some View {
         SettingsCard(
@@ -178,8 +179,14 @@ private struct ShelfSettingsCard: View {
                     title: String(localized: "On the Shelf now"),
                     subtitle: String(localized: "\(store.items.count) of \(ShelfStore.capacity) items")
                 ) {
-                    Button(String(localized: "Clear Shelf")) { store.clear() }
-                        .disabled(store.items.isEmpty)
+                    // Two clicks, like Clear all in the notch.
+                    Button(!confirmingClear ? String(localized: "Clear Shelf")
+                           : store.items.count == 1 ? String(localized: "Clear 1 item?")
+                           : String(localized: "Clear \(store.items.count) items?")) {
+                        if confirmingClear { store.clear() }
+                        confirmingClear.toggle()
+                    }
+                    .disabled(store.items.isEmpty)
                 }
                 SettingsRow(
                     title: String(localized: "Dragging files out"),

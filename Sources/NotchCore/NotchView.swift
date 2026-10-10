@@ -21,13 +21,18 @@ struct NotchView: View {
         .onHover { model.hoverChanged($0) }
         .onTapGesture { model.tap() }
         .accessibilityElement(children: state == .expanded ? .contain : .ignore)
-        .accessibilityLabel(Text("PancakeNotch"))
+        .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityAddTraits(state == .expanded ? [] : .isButton)
         .accessibilityAction { model.open() }
         .accessibilityAction(named: Text("Close")) { model.close() }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // The window sits over the notch, which AppKit reports as unsafe area; draw into it anyway.
         .ignoresSafeArea()
+    }
+
+    private var accessibilityLabel: String {
+        guard model.state != .expanded, let status = model.module?.accessibilityStatus else { return "PancakeNotch" }
+        return "PancakeNotch, " + status
     }
 
     private func notch(state: NotchState) -> some View {
@@ -102,7 +107,7 @@ private struct ExpandedPlaceholderView: View {
                 Text("No modules yet")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                Text("Now Playing and the Shelf are on the way.")
+                Text("Turn on the Shelf on the Modules page. Now Playing is on the way.")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.45))
             }

@@ -25,10 +25,11 @@ final class ShelfThumbnails {
             let id = item.id
             Self.generate(request) { [weak self] image in
                 Task { @MainActor in
-                    guard let self, self.generation == current else { return }
+                    // Skip results for items removed (or a notch closed) in the meantime.
+                    guard let self, self.generation == current, self.requests[id] != nil else { return }
                     self.requests[id] = nil
                     self.images[id] = image.map { NSImage(cgImage: $0, size: Self.pointSize) }
-                        ?? NSWorkspace.shared.icon(forFile: url.path)
+                        ?? Self.smallIcon(forFile: url.path)
                 }
             }
         }
@@ -42,6 +43,21 @@ final class ShelfThumbnails {
     /// Forgets previews of removed items.
     func keepOnly(_ ids: Set<UUID>) {
         for id in images.keys where !ids.contains(id) { images[id] = nil }
+        for (id, request) in requests where !ids.contains(id) {
+            QLThumbnailGenerator.shared.cancel(request)
+            requests[id] = nil
+        }
+    }
+
+    /// The Finder icon at tile size only, not every size the full icon carries.
+    static func smallIcon(forFile path: String) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        let small = NSImage(size: pointSize)
+        var rect = CGRect(origin: .zero, size: CGSize(width: pointSize.width * 2, height: pointSize.height * 2))
+        if let cgImage = icon.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
+            small.addRepresentation(NSBitmapImageRep(cgImage: cgImage))
+        }
+        return small
     }
 
     /// Drops every preview and cancels pending work (the notch closed).

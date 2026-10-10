@@ -31,7 +31,7 @@ struct ShelfView: View {
     private var content: some View {
         if let zone = module.dropZone {
             ShelfDropZones(zone: zone, showsAirDrop: module.dragCanAirDrop, layout: layout)
-        } else if let prompt = module.prompt, !prompt.isChoosing {
+        } else if let prompt = module.prompt, !module.isChoosing {
             ShelfPromptCard(module: module, prompt: prompt)
         } else if module.store.items.isEmpty {
             ShelfEmptyView()
@@ -41,12 +41,6 @@ struct ShelfView: View {
     }
 }
 
-private extension ShelfModule.Prompt {
-    var isChoosing: Bool {
-        if case .choosing = self { return true }
-        return false
-    }
-}
 
 // MARK: Header
 
@@ -116,6 +110,7 @@ private struct ShelfDragAllHandle: View {
             .help(String(localized: "Drag all items"))
             .accessibilityElement()
             .accessibilityLabel(Text("Drag all items"))
+            .accessibilityAction(named: Text("Copy all items")) { module.copy(module.store.items) }
     }
 }
 
@@ -147,23 +142,22 @@ private struct ShelfTileRow: View {
 
     var body: some View {
         if module.isSnapshot {
-            tiles.fixedSize(horizontal: true, vertical: false)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .clipped()
+            // Off-screen renders can't scroll: show what fits.
+            tiles(limit: 7).frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            ScrollView(.horizontal, showsIndicators: false) { tiles }
+            ScrollView(.horizontal, showsIndicators: false) { tiles() }
         }
     }
 
-    private var tiles: some View {
+    private func tiles(limit: Int = ShelfStore.capacity) -> some View {
             HStack(spacing: ShelfLayout.tileSpacing) {
-                ForEach(module.store.items) { item in
+                ForEach(module.store.items.prefix(limit)) { item in
                     ShelfTile(
                         module: module,
                         item: item,
                         thumbnail: module.thumbnails.images[item.id],
                         isSelected: module.selection.contains(item.id),
-                        isChoosing: module.prompt?.isChoosing ?? false,
+                        isChoosing: module.isChoosing,
                         isCopied: module.copiedID == item.id
                     )
                 }
@@ -226,9 +220,25 @@ struct ShelfTile: View {
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction { module.activate(item.id) }
-        .accessibilityAction(named: Text(item.isFile ? "Open" : "Copy")) { module.activate(item.id) }
-        .accessibilityAction(named: Text("Quick Look")) { module.quickLook([item]) }
-        .accessibilityAction(named: Text("Remove")) { module.remove([item.id]) }
+        .accessibilityActions { accessibilityActions }
+    }
+
+    /// The right-click menu's actions, for VoiceOver.
+    @ViewBuilder
+    private var accessibilityActions: some View {
+        if item.isFile {
+            Button(String(localized: "Open")) { module.open([item]) }
+            Button(String(localized: "Quick Look")) { module.quickLook([item]) }
+            Button(String(localized: "Show in Finder")) { module.reveal([item]) }
+            Button(String(localized: "Copy Path")) { module.copyPaths([item]) }
+        } else {
+            Button(String(localized: "Copy")) { module.copy([item]) }
+        }
+        if case .link = item.kind {
+            Button(String(localized: "Open Link")) { module.open([item]) }
+        }
+        Button(String(localized: "AirDrop")) { module.airDrop([item]) }
+        Button(String(localized: "Remove")) { module.remove([item.id]) }
     }
 
     @ViewBuilder
@@ -307,6 +317,7 @@ struct ShelfDropZones: View {
     let zone: ShelfModule.DropZone
     let showsAirDrop: Bool
     let layout: ShelfLayout
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 8) {
@@ -329,7 +340,10 @@ struct ShelfDropZones: View {
     private func target(symbol: String, title: String, isTargeted: Bool) -> some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(.white.opacity(isTargeted ? 0.14 : 0.04))
-            .strokeBorder(.white.opacity(isTargeted ? 0.85 : 0.3), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            .strokeBorder(
+                .white.opacity(isTargeted ? 0.85 : contrast == .increased ? 0.7 : 0.45),
+                style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+            )
             .overlay {
                 VStack(spacing: 7) {
                     Image(systemName: symbol)
@@ -387,9 +401,15 @@ struct ShelfPromptCard: View {
             }
             .buttonStyle(.plain)
             .padding(8)
-            .accessibilityLabel(Text("Close"))
+            .accessibilityLabel(Text("Dismiss"))
+            .accessibilityHint(Text(dismissHint))
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private var dismissHint: String {
+        if case .duplicates = prompt { return String(localized: "Adds only the items that aren't on the Shelf yet.") }
+        return String(localized: "The items that didn't fit are not added.")
     }
 
     private var symbol: String {
@@ -437,7 +457,8 @@ struct ShelfPromptCard: View {
             }
             .buttonStyle(.plain)
             .padding(.leading, 4)
-            .accessibilityAddTraits(remember ? .isSelected : [])
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityValue(Text(remember ? "On" : "Off"))
         case .full, .choosing:
             ShelfPillButton(title: String(localized: "Clear all"), prominent: true) { module.clearForPending() }
             ShelfPillButton(title: String(localized: "Choose items to remove")) { module.startChoosing() }

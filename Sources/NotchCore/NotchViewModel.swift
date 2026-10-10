@@ -122,7 +122,7 @@ public final class NotchViewModel {
     var isHeld: Bool { module?.holdsOpen ?? false }
 
     private func closeIfPointerOutside() {
-        guard !layout.windowFrame(for: state).contains(pointerLocation()) else { return }
+        guard !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
         scheduleCloseIfIdle()
     }
 
