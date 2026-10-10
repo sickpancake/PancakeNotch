@@ -75,6 +75,13 @@ public enum ShelfSnapshot {
             module.largePreview.preload(NSWorkspace.shared.icon(for: .pdf))
         }
 
+        // The app window's preview: example items, open and shrunk.
+        for state in [NotchState.expanded, .compact] {
+            let model = NotchViewModel(layout: layout, state: state)
+            model.module = ShelfPreviewModule()
+            rows.append(model)
+        }
+
         try? FileManager.default.removeItem(at: root)
         return rows
     }

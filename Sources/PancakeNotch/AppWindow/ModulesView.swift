@@ -1,8 +1,8 @@
 import ModuleShelf
 import SwiftUI
 
-/// The modules that live in the notch: the Shelf with its settings, and a "Coming soon" card
-/// for Now Playing.
+/// The modules that live in the notch: the Shelf (what it does, then its settings), and a
+/// "Coming soon" card for Now Playing.
 struct ModulesView: View {
     @Bindable var shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
@@ -12,6 +12,20 @@ struct ModulesView: View {
             title: String(localized: "Modules"),
             subtitle: String(localized: "Small tools that live inside the notch.")
         ) {
+            ModuleCard(
+                title: String(localized: "Shelf"),
+                symbol: "tray",
+                summary: String(localized: "A place in the notch for things you're about to use: drop them on, drag them out later."),
+                points: [
+                    String(localized: "Drop files, images, text and links on the notch"),
+                    String(localized: "Click an item for a big preview, or to edit a note or link"),
+                    String(localized: "Right-click to copy, share or AirDrop"),
+                    String(localized: "A small tray in the notch shows the count when it's nearly full"),
+                ],
+                isComingSoon: false
+            ) {
+                ShelfArt()
+            }
             ShelfSettingsCard(settings: shelfSettings, store: shelfStore)
             VStack(spacing: 16) {
                 ModuleCard(
@@ -35,6 +49,7 @@ private struct ModuleCard<Art: View>: View {
     let symbol: String
     let summary: String
     let points: [String]
+    var isComingSoon = true
     @ViewBuilder let art: Art
 
     var body: some View {
@@ -65,7 +80,7 @@ private struct ModuleCard<Art: View>: View {
                         .font(.app(size: 18, weight: .bold))
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
-                    ComingSoonBadge()
+                    if isComingSoon { ComingSoonBadge() }
                 }
                 Text(summary)
                     .font(.app(size: 13.5))
@@ -106,6 +121,44 @@ struct ComingSoonBadge: View {
             .padding(.horizontal, 9)
             .frame(height: 22)
             .overlay(PillOutline(color: AppPalette.hairlineStrong))
+    }
+}
+
+/// An open notch with a few things on the Shelf: a document, a photo, a note and a link.
+private struct ShelfArt: View {
+    var body: some View {
+        ZStack(alignment: .top) {
+            NotchPanelShape()
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Capsule().fill(.white.opacity(0.85)).frame(width: 34, height: 6)
+                    Capsule().fill(.white.opacity(0.35)).frame(width: 26, height: 6)
+                }
+                HStack(spacing: 10) {
+                    tile(symbol: "doc.richtext.fill")
+                    tile(symbol: "photo.fill")
+                    tile(symbol: "text.alignleft")
+                    tile(symbol: "link")
+                }
+            }
+            .padding(.horizontal, 30)
+            .padding(.top, 38)
+        }
+        .frame(width: 236, height: 138)
+    }
+
+    private func tile(symbol: String) -> some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.white.opacity(0.14))
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Image(systemName: symbol)
+                        .font(.app(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+            Capsule().fill(.white.opacity(0.3)).frame(width: 28, height: 4)
+        }
     }
 }
 

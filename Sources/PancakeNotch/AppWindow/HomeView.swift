@@ -15,11 +15,11 @@ struct HomeView: View {
     var body: some View {
         PageScroll {
             HomeHeader()
-            NotchHero(preferences: preferences)
+            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled)
                 .padding(.top, 26)
             StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 .padding(.top, 14)
-            TipsCard(preferences: preferences, shortcuts: shortcuts) { section = .keyboard }
+            TipsCard(preferences: preferences, shortcuts: shortcuts, showsShelfTips: shelfSettings.isEnabled) { section = .keyboard }
                 .padding(.top, 14)
         }
     }
@@ -56,6 +56,7 @@ private struct HomeHeader: View {
 /// The big switch: a pretend screen with the live notch on top, its state and the toggle below.
 private struct NotchHero: View {
     @Bindable var preferences: Preferences
+    let showsShelf: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -63,7 +64,7 @@ private struct NotchHero: View {
     var body: some View {
         let isOn = preferences.notchEnabled
         VStack(spacing: 0) {
-            NotchStage(behavior: preferences.notchBehavior, isActive: isOn)
+            NotchStage(behavior: preferences.notchBehavior, isActive: isOn, showsShelf: showsShelf)
 
             HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)
@@ -238,6 +239,7 @@ private struct TileLabel: View {
 private struct TipsCard: View {
     let preferences: Preferences
     let shortcuts: ShortcutController
+    let showsShelfTips: Bool
     let openKeyboardSettings: () -> Void
 
     var body: some View {
@@ -294,11 +296,18 @@ private struct TipsCard: View {
     }
 
     private var tips: [(symbol: String, title: String, detail: String)] {
-        [
+        let shelf: [(symbol: String, title: String, detail: String)] = showsShelfTips ? [
+            ("tray.and.arrow.down", String(localized: "Drop things on the notch"),
+             String(localized: "Drag files, images, text or links to the notch to keep them on the Shelf.")),
+            ("hand.point.up.left", String(localized: "Click an item to open it"),
+             String(localized: "See a big preview or edit a note or link. Right-click for Copy, AirDrop and more.")),
+        ] : []
+        return [
             ("cursorarrow.rays", String(localized: "Hover to open"),
              String(localized: "Rest the pointer on the notch and it slides open.")),
             ("hand.tap", String(localized: "Click to shrink"),
-             String(localized: "Click the open notch to tuck it away again.")),
+             String(localized: "Click the open notch to shrink it. It stays small until you click it again.")),
+        ] + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
                    String(localized: "The PancakeNotch menu bar icon turns the notch on or off."))

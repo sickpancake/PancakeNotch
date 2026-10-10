@@ -1,3 +1,4 @@
+import ModuleShelf
 import NotchCore
 import SwiftUI
 
@@ -7,13 +8,15 @@ import SwiftUI
 struct NotchStage: View {
     let behavior: NotchBehavior
     var isActive = true
+    /// Shows a sample Shelf inside the preview (when the Shelf is on).
+    var showsShelf = false
     /// Width of the pretend screen the preview lays itself out for.
     var screenWidth: CGFloat = 560
     /// The preview is drawn a little smaller than life so the whole page fits.
     var scale: CGFloat = 0.85
 
     var body: some View {
-        let preview = NotchPreview(behavior: behavior, screenWidth: screenWidth)
+        let preview = NotchPreview(behavior: behavior, screenWidth: screenWidth, module: showsShelf ? Self.sampleShelf : nil)
         let size = CGSize(width: preview.size.width * scale, height: preview.size.height * scale)
         ZStack(alignment: .top) {
             DotGrid()
@@ -39,13 +42,16 @@ struct NotchStage: View {
         .clipped()
     }
 
+    /// Example items, shared by every preview (it holds nothing real).
+    private static let sampleShelf = ShelfPreviewModule()
+
     /// Sits under the notch, so the opening panel covers it.
     private var hint: some View {
         HStack(spacing: 6) {
             Image(systemName: isActive ? "cursorarrow.rays" : "power")
                 .font(.app(size: 12, weight: .semibold))
             Text(isActive
-                ? String(localized: "Hover the notch to try it. Click it to shrink it.")
+                ? String(localized: "Hover the notch to try it. Click it to shrink it, and again to open it.")
                 : String(localized: "Turn the notch on to try it here."))
                 .font(.app(size: 12.5, weight: .medium))
         }
