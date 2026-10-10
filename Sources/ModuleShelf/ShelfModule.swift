@@ -552,10 +552,16 @@ public final class ShelfModule: NotchModule {
         }
     }
 
+    /// A click on empty space: clears the selection (or the "Clear all?" question) if there is one,
+    /// otherwise shrinks the notch to Compact like a click on any open panel (ADR-0011).
     func backgroundClicked() {
-        confirmingClear = false
         if case .choosing = prompt { return }
-        selection = []
+        guard selection.isEmpty, !confirmingClear else {
+            confirmingClear = false
+            selection = []
+            return
+        }
+        notch?.tap()
     }
 
     /// The items an action on `id` applies to: the whole selection if `id` is part of it.

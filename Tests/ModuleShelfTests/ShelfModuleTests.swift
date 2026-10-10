@@ -39,6 +39,20 @@ struct ShelfModuleTests {
         #expect(notch.restingState == .compact)
     }
 
+    /// A click on empty space clears the selection first; with nothing selected it shrinks the notch.
+    @Test func emptySpaceClickDeselectsThenShrinks() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(2))
+        notch.open()
+        module.selection = [module.store.items[0].id]
+        module.backgroundClicked()
+        #expect(module.selection.isEmpty)
+        #expect(notch.state == .expanded)
+        module.backgroundClicked()
+        #expect(notch.state == .compact)
+    }
+
     @Test func earLabels() {
         #expect(ShelfModule.earLabel(count: 0) == "Shelf is empty")
         #expect(ShelfModule.earLabel(count: 16) == "Shelf, 16 items")

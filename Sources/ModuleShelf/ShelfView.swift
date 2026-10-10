@@ -28,7 +28,7 @@ struct ShelfView: View {
             Spacer(minLength: 0)
         }
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
-        // Clicks on empty space clear the selection instead of shrinking the notch.
+        // Clicks on empty space clear the selection first, then shrink the notch.
         .background(Color.black.opacity(0.001).onTapGesture { module.backgroundClicked() })
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)
