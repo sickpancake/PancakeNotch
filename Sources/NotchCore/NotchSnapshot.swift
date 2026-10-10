@@ -5,16 +5,22 @@ import SwiftUI
 /// Triggered by `PANCAKENOTCH_SNAPSHOT=/path/out.png`.
 @MainActor
 public enum NotchSnapshot {
-    public static func write(geometry: NotchGeometry, to url: URL) throws {
+    /// - Parameter moduleRows: extra rows, each a notch model already set up with a module in some state.
+    public static func write(
+        geometry: NotchGeometry,
+        to url: URL,
+        moduleRows: (NotchLayout) -> [NotchViewModel] = { _ in [] }
+    ) throws {
         let layout = NotchLayout(geometry: geometry)
-        let window = layout.windowFrame(for: .expanded).size
+        let models = NotchState.allCases.map { NotchViewModel(layout: layout, state: $0) } + moduleRows(layout)
         let view = VStack(spacing: 12) {
-            ForEach(NotchState.allCases, id: \.self) { state in
+            ForEach(models.indices, id: \.self) { index in
+                let window = models[index].layout.windowFrame(for: .expanded).size
                 ZStack(alignment: .top) {
                     // Stand-in for a light menu bar and desktop, so the black outline is visible.
                     Color(white: 0.55)
                     Color(white: 0.85).frame(height: geometry.notchRect.height)
-                    NotchView(model: NotchViewModel(layout: layout, state: state))
+                    NotchView(model: models[index])
                 }
                 .frame(width: window.width, height: window.height)
             }

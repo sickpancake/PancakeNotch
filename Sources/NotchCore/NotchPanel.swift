@@ -11,7 +11,9 @@ final class NotchPanel: NSPanel {
         )
         isFloatingPanel = true
         level = .mainMenu + 3
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // `.transient`: Mission Control hides the notch instead of leaving it drawn over its window
+        // thumbnails (a drag touching the top edge can start Mission Control mid-drop).
+        collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
@@ -22,6 +24,17 @@ final class NotchPanel: NSPanel {
         appearance = NSAppearance(named: .darkAqua)
     }
 
-    override var canBecomeKey: Bool { false }
+    /// Lets the panel take keyboard focus; only switched on after a click inside a module.
+    var allowsKey = false
+
+    /// Handles key presses while the panel has focus; returns `true` if handled.
+    var keyHandler: ((NSEvent) -> Bool)?
+
+    override var canBecomeKey: Bool { allowsKey }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, keyHandler?(event) == true { return }
+        super.sendEvent(event)
+    }
     override var canBecomeMain: Bool { false }
 }

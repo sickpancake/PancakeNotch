@@ -9,6 +9,9 @@ public struct NotchGeometry: Equatable, Sendable {
     public let screenFrame: CGRect
     public let notchRect: CGRect
     public let isSimulated: Bool
+    /// Height of the compact ears: the menu bar's, which macOS sizes to reach the bottom of the notch.
+    /// `safeAreaInsets.top` is rounded and can end a fraction short of it on scaled resolutions.
+    public let compactHeight: CGFloat
 
     /// Builds geometry from the values `NSScreen` reports. Returns `nil` when the screen has no notch.
     ///
@@ -17,11 +20,13 @@ public struct NotchGeometry: Equatable, Sendable {
     ///   - safeAreaTop: `NSScreen.safeAreaInsets.top`.
     ///   - auxiliaryTopLeftWidth: width of `NSScreen.auxiliaryTopLeftArea`.
     ///   - auxiliaryTopRightWidth: width of `NSScreen.auxiliaryTopRightArea`.
+    ///   - menuBarHeight: `frame.maxY - visibleFrame.maxY`; 0 when the menu bar hides itself.
     public init?(
         screenFrame: CGRect,
         safeAreaTop: CGFloat,
         auxiliaryTopLeftWidth: CGFloat?,
-        auxiliaryTopRightWidth: CGFloat?
+        auxiliaryTopRightWidth: CGFloat?,
+        menuBarHeight: CGFloat = 0
     ) {
         guard safeAreaTop > 0,
               let leftWidth = auxiliaryTopLeftWidth,
@@ -39,6 +44,9 @@ public struct NotchGeometry: Equatable, Sendable {
             height: safeAreaTop
         )
         self.isSimulated = false
+        // Only a value just above the safe area is the notch's real bottom; anything else (hidden
+        // menu bar, odd layouts) falls back to the safe area.
+        self.compactHeight = (safeAreaTop...safeAreaTop + 3).contains(menuBarHeight) ? menuBarHeight : safeAreaTop
     }
 
     /// A notch-sized rectangle centered at the top of `screenFrame`, for screens without a notch.
@@ -59,5 +67,6 @@ public struct NotchGeometry: Equatable, Sendable {
         self.screenFrame = screenFrame
         self.notchRect = notchRect
         self.isSimulated = isSimulated
+        self.compactHeight = notchRect.height
     }
 }

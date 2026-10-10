@@ -21,13 +21,18 @@ struct NotchView: View {
         .onHover { model.hoverChanged($0) }
         .onTapGesture { model.tap() }
         .accessibilityElement(children: state == .expanded ? .contain : .ignore)
-        .accessibilityLabel(Text("PancakeNotch"))
+        .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityAddTraits(state == .expanded ? [] : .isButton)
         .accessibilityAction { model.open() }
         .accessibilityAction(named: Text("Close")) { model.close() }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // The window sits over the notch, which AppKit reports as unsafe area; draw into it anyway.
         .ignoresSafeArea()
+    }
+
+    private var accessibilityLabel: String {
+        guard model.state != .expanded, let status = model.module?.accessibilityStatus else { return "PancakeNotch" }
+        return "PancakeNotch, " + status
     }
 
     private func notch(state: NotchState) -> some View {
@@ -37,6 +42,9 @@ struct NotchView: View {
         return ZStack(alignment: .top) {
             Color.black
             content(layout: layout, state: state)
+            if let ears = model.module?.compactEars(layout: layout) {
+                CompactEarsView(ears: ears, layout: layout, state: state, reduceMotion: reduceMotion)
+            }
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .clipShape(shape)
@@ -49,17 +57,25 @@ struct NotchView: View {
     @ViewBuilder
     private func content(layout: NotchLayout, state: NotchState) -> some View {
         switch state {
-        case .compact where model.isPinned:
-            CompactPlaceholderView(layout: layout)
-                .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
-                .transition(.opacity)
-        case .closed, .compact:
-            // Compact ears stay empty until a module supplies live info (Now Playing, M3).
+        case .compact:
+            // A module's ears are drawn by `CompactEarsView` in every state.
+            if model.module?.compactEars(layout: layout) == nil, model.isPinned {
+                CompactPlaceholderView(layout: layout)
+                    .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
+                    .transition(.opacity)
+            }
+        case .closed:
             EmptyView()
         case .expanded:
-            ExpandedPlaceholderView(layout: layout)
-                .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
-                .transition(reduceMotion ? .opacity : .blurReveal)
+            Group {
+                if let module = model.module {
+                    module.expandedView(layout: layout)
+                } else {
+                    ExpandedPlaceholderView(layout: layout)
+                }
+            }
+            .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
+            .transition(reduceMotion ? .opacity : .blurReveal)
         }
     }
 }
@@ -91,7 +107,7 @@ private struct ExpandedPlaceholderView: View {
                 Text("No modules yet")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                Text("Now Playing and the Shelf are on the way.")
+                Text("Turn on the Shelf on the Modules page. Now Playing is on the way.")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -107,7 +123,7 @@ private struct CompactPlaceholderView: View {
 
     var body: some View {
         let ear = layout.compactEarWidth
-        let height = layout.geometry.notchRect.height
+        let height = layout.bodySize(for: .compact).height
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(.white.opacity(0.18))
@@ -133,6 +149,45 @@ private extension AnyTransition {
             active: BlurRevealModifier(progress: 0),
             identity: BlurRevealModifier(progress: 1)
         )
+    }
+}
+
+/// The ears' content, kept in every state so it can move: it slides out from under the notch as the ears
+/// grow, and back under it as they shrink, where the hardware cutout hides it. That reads even on a black
+/// app, where the black ears themselves can't be seen. Hidden (and not clickable) unless Compact.
+private struct CompactEarsView: View {
+    let ears: CompactEars
+    let layout: NotchLayout
+    let state: NotchState
+    let reduceMotion: Bool
+
+    var body: some View {
+        let width = layout.compactEarWidth
+        let height = layout.bodySize(for: .compact).height
+        let isShown = state == .compact
+        // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
+        let tuck = state == .closed && !reduceMotion ? width + 8 : 0
+        HStack(spacing: 0) {
+            ear(ears.leading, width: width, height: height)
+                .offset(x: tuck)
+            Spacer(minLength: 0)
+            ear(ears.trailing, width: width, height: height)
+                .offset(x: -tuck)
+        }
+        .frame(width: layout.bodySize(for: .compact).width, height: height)
+        // Fading out to Closed waits until the content is under the notch, so the slide stays visible.
+        .animation(fade(isShown: isShown)) { $0.opacity(isShown ? 1 : 0) }
+        .allowsHitTesting(false)
+        .accessibilityHidden(!isShown)
+    }
+
+    private func ear(_ view: AnyView?, width: CGFloat, height: CGFloat) -> some View {
+        (view ?? AnyView(Color.clear)).frame(width: width, height: height)
+    }
+
+    private func fade(isShown: Bool) -> Animation {
+        if isShown { return .easeOut(duration: 0.18) }
+        return state == .closed && !reduceMotion ? .easeIn(duration: 0.12).delay(0.3) : .easeOut(duration: 0.12)
     }
 }
 

@@ -1,3 +1,4 @@
+import ModuleShelf
 import NotchCore
 import SwiftUI
 
@@ -7,16 +8,18 @@ struct HomeView: View {
     @Bindable var preferences: Preferences
     let shortcuts: ShortcutController
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
     @Binding var section: AppSection
 
     var body: some View {
         PageScroll {
             HomeHeader()
-            NotchHero(preferences: preferences)
+            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled)
                 .padding(.top, 26)
-            StatsRow(stats: stats)
+            StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 .padding(.top, 14)
-            TipsCard(preferences: preferences, shortcuts: shortcuts) { section = .keyboard }
+            TipsCard(preferences: preferences, shortcuts: shortcuts, showsShelfTips: shelfSettings.isEnabled) { section = .keyboard }
                 .padding(.top, 14)
         }
     }
@@ -53,6 +56,7 @@ private struct HomeHeader: View {
 /// The big switch: a pretend screen with the live notch on top, its state and the toggle below.
 private struct NotchHero: View {
     @Bindable var preferences: Preferences
+    let showsShelf: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -60,7 +64,7 @@ private struct NotchHero: View {
     var body: some View {
         let isOn = preferences.notchEnabled
         VStack(spacing: 0) {
-            NotchStage(behavior: preferences.notchBehavior, isActive: isOn)
+            NotchStage(behavior: preferences.notchBehavior, isActive: isOn, showsShelf: showsShelf)
 
             HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)
@@ -126,9 +130,11 @@ private struct StatusBadge: View {
     }
 }
 
-/// Big-number tiles. Shelf has no numbers yet, so its tile only says it's coming.
+/// Big-number tiles: notch opens, days together, and what's on the Shelf.
 private struct StatsRow: View {
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
 
     var body: some View {
         HStack(spacing: 12) {
@@ -152,7 +158,14 @@ private struct StatsRow: View {
                     ? String(localized: "day, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
                     : String(localized: "days, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
             )
-            ComingStatTile()
+            StatTile(
+                label: String(localized: "Shelf"),
+                symbol: "tray",
+                value: shelfStore.items.count.formatted(),
+                caption: shelfSettings.isEnabled
+                    ? String(localized: "of \(ShelfStore.capacity) on the Shelf")
+                    : String(localized: "Shelf is off")
+            )
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -206,31 +219,6 @@ private struct StatTile: View {
     }
 }
 
-private struct ComingStatTile: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TileLabel(label: String(localized: "Shelf"), symbol: "tray")
-            Spacer(minLength: 14)
-            Text("Coming soon")
-                .font(.app(size: 13, weight: .semibold))
-            Text("Files kept handy")
-                .font(.app(size: 12))
-                .foregroundStyle(AppPalette.secondaryText)
-                .padding(.top, 2)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .padding(.horizontal, AppMetrics.cardInset)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(AppPalette.hairlineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
 private struct TileLabel: View {
     let label: String
     let symbol: String
@@ -251,6 +239,7 @@ private struct TileLabel: View {
 private struct TipsCard: View {
     let preferences: Preferences
     let shortcuts: ShortcutController
+    let showsShelfTips: Bool
     let openKeyboardSettings: () -> Void
 
     var body: some View {
@@ -307,11 +296,18 @@ private struct TipsCard: View {
     }
 
     private var tips: [(symbol: String, title: String, detail: String)] {
-        [
+        let shelf: [(symbol: String, title: String, detail: String)] = showsShelfTips ? [
+            ("tray.and.arrow.down", String(localized: "Drop things on the notch"),
+             String(localized: "Drag files, images, text or links to the notch to keep them on the Shelf.")),
+            ("hand.point.up.left", String(localized: "Click an item to open it"),
+             String(localized: "See a big preview or edit a note or link. Right-click for Copy, AirDrop and more.")),
+        ] : []
+        return [
             ("cursorarrow.rays", String(localized: "Hover to open"),
              String(localized: "Rest the pointer on the notch and it slides open.")),
-            ("hand.tap", String(localized: "Click to shrink"),
-             String(localized: "Click the open notch to tuck it away again.")),
+            ("hand.tap", String(localized: "Click to keep it small"),
+             String(localized: "Click the open notch and it stays small: hover to open it, click again to close it fully.")),
+        ] + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
                    String(localized: "The PancakeNotch menu bar icon turns the notch on or off."))

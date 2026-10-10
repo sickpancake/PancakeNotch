@@ -410,3 +410,39 @@ struct PillOutline: View {
         }
     }
 }
+
+/// A row of capsules where one option is chosen: the chosen one is solid white with black text.
+/// VoiceOver reads it as a standard picker.
+struct MonochromeSegmented<Value: Hashable>: View {
+    let title: String
+    let options: [(value: Value, label: String)]
+    @Binding var selection: Value
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.value) { option in
+                let isSelected = option.value == selection
+                Button { selection = option.value } label: {
+                    Text(option.label)
+                        .font(.app(size: 12, weight: .semibold))
+                        .foregroundStyle(isSelected ? Color.black : AppPalette.primaryText)
+                        .padding(.horizontal, 11)
+                        .frame(minHeight: 26)
+                        .background(isSelected ? AppPalette.ink : .clear, in: Capsule())
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(AppPalette.hover, in: Capsule())
+        .overlay(PillOutline(color: AppPalette.hairline))
+        .opacity(isEnabled ? 1 : 0.4)
+        .accessibilityRepresentation {
+            Picker(title, selection: $selection) {
+                ForEach(options, id: \.value) { Text($0.label).tag($0.value) }
+            }
+        }
+    }
+}

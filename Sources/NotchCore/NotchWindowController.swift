@@ -1,4 +1,5 @@
 import AppKit
+import os
 import SwiftUI
 
 /// Shows the notch window on the built-in display and keeps it aligned with the hardware notch.
@@ -41,10 +42,28 @@ public final class NotchWindowController {
         didSet { model?.behavior = behavior }
     }
 
+    /// The module shown in the notch; `nil` shows the placeholder and refuses drops.
+    public var module: (any NotchModule)? {
+        didSet {
+            model?.module = module
+            updateDragWatcher()
+        }
+    }
+
+    /// When true, taking keyboard focus also activates the app (fallback if a non-activating
+    /// panel doesn't receive keys while another app stays active).
+    public var activatesForKeyFocus = false
+
+    private var appToRestore: NSRunningApplication?
+    private let dragWatcher = NotchDragWatcher()
+    private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
+
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
-        guard hasGeometry, !isSuppressed, isEnabled else { return }
-        model?.toggle()
+        guard hasGeometry, !isSuppressed, isEnabled, let model else { return }
+        model.toggle()
+        // Opened from the keyboard: keep using the keyboard inside it.
+        if model.state == .expanded, model.module != nil { takeKeyFocus() }
     }
 
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
@@ -54,9 +73,10 @@ public final class NotchWindowController {
             updateVisibility()
             return
         }
-        let layout = NotchLayout(geometry: geometry)
+        var layout = NotchLayout(geometry: geometry)
 
         if let panel, let model {
+            layout.isTall = model.layout.isTall
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
             panel.setFrame(layout.windowFrame(for: model.state), display: true)
@@ -73,17 +93,50 @@ public final class NotchWindowController {
             model?.reset()
             panel?.orderOut(nil)
         }
+        updateDragWatcher()
+    }
+
+    /// Watches for file drags heading to the notch while it's showing and a module takes drops.
+    private func updateDragWatcher() {
+        guard let model, module != nil, !model.isPinned, hasGeometry, !isSuppressed, isEnabled else {
+            dragWatcher.stop()
+            return
+        }
+        guard !dragWatcher.isRunning else { return }
+        dragWatcher.zone = { [weak model] in
+            guard let model else { return .zero }
+            // The area the normal open panel covers, so the drop lands inside it.
+            return NotchLayout(geometry: model.layout.geometry).outlineFrame(for: .expanded)
+        }
+        dragWatcher.accepts = { [weak model] pasteboard in
+            model?.module?.canAcceptDrag(pasteboard) ?? false
+        }
+        dragWatcher.onApproach = { [weak self, weak model] in
+            self?.logger.info("File drag approaching the notch: opening early")
+            model?.dragApproached()
+        }
+        dragWatcher.onMove = { [weak self, weak model] pasteboard, location in
+            guard let self, let model, model.state == .expanded else { return }
+            model.module?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
+        }
+        dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
+        dragWatcher.start()
     }
 
     private func createPanel(layout: NotchLayout) {
         let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior)
         model.isPinned = initialState != nil
         model.onOpen = onOpen
+        model.module = module
+        model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
+        model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
         let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
+        container.dropDelegate = self
         panel.contentView = container
+        panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak panel, weak model] state in
             guard let panel, let model else { return }
             panel.setFrame(model.layout.windowFrame(for: state), display: true)
@@ -91,5 +144,78 @@ public final class NotchWindowController {
         self.model = model
         self.panel = panel
         self.container = container
+        updateDragWatcher()
+    }
+
+    private func takeKeyFocus() {
+        guard let panel, !panel.isKeyWindow else { return }
+        panel.allowsKey = true
+        if activatesForKeyFocus {
+            appToRestore = NSWorkspace.shared.frontmostApplication
+            NSApp.activate()
+        }
+        panel.makeKey()
+        logger.info("Notch took key focus (isKey=\(panel.isKeyWindow), activated=\(self.activatesForKeyFocus))")
+    }
+
+    private func releaseKeyFocus() {
+        guard let panel, panel.allowsKey else { return }
+        let wasKey = panel.isKeyWindow
+        panel.allowsKey = false
+        if wasKey { panel.resignKey() }
+        if let app = appToRestore {
+            appToRestore = nil
+            app.activate(options: [])
+        }
+        logger.info("Notch released key focus (wasKey=\(wasKey))")
+    }
+}
+
+extension NotchWindowController: NotchDropDelegate {
+    /// Converts a point in the hosted content to the expanded notch body, where modules lay out their drop zones.
+    private func bodyPoint(_ contentPoint: CGPoint, layout: NotchLayout) -> CGPoint {
+        let origin = layout.bodyOrigin(for: .expanded)
+        return CGPoint(x: contentPoint.x - origin.x, y: contentPoint.y - origin.y)
+    }
+
+    /// Converts a screen point (y up) to the expanded notch body: the body is centered on the notch
+    /// and hangs from the top of the screen.
+    private func bodyPoint(screen point: CGPoint, layout: NotchLayout) -> CGPoint {
+        let bodyWidth = layout.bodySize(for: .expanded).width
+        return CGPoint(
+            x: point.x - (layout.geometry.notchRect.midX - bodyWidth / 2),
+            y: layout.geometry.screenFrame.maxY - point.y
+        )
+    }
+
+    func dragEntered(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
+        // Our own drags (an item being dragged out of the Shelf) never drop back in.
+        guard let model, let module = model.module, info.draggingSource == nil else { return [] }
+        logger.info("Drag entered notch: \(info.draggingPasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
+        let operation = module.dragUpdated(info, at: bodyPoint(contentPoint, layout: model.layout))
+        if !operation.isEmpty { model.dragEntered() }
+        return operation
+    }
+
+    func dragUpdated(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
+        guard let model, let module = model.module, info.draggingSource == nil else { return [] }
+        let operation = module.dragUpdated(info, at: bodyPoint(contentPoint, layout: model.layout))
+        if !operation.isEmpty, model.state != .expanded { model.dragEntered() }
+        return operation
+    }
+
+    func dragExited() {
+        model?.dragExited()
+    }
+
+    func performDrop(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> Bool {
+        guard let model, let module = model.module, info.draggingSource == nil else { return false }
+        let accepted = module.performDrop(info, at: bodyPoint(contentPoint, layout: model.layout))
+        logger.info("Drop on notch accepted=\(accepted)")
+        return accepted
+    }
+
+    func dragConcluded() {
+        model?.dragConcluded()
     }
 }

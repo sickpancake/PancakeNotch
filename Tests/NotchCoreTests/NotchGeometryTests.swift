@@ -29,6 +29,21 @@ struct NotchGeometryTests {
         #expect(geometry.notchRect.maxY == offsetScreen.maxY)
     }
 
+    /// The ears reach the menu bar's bottom, where the notch ends; the rounded safe area can stop short.
+    @Test func compactHeightFollowsTheMenuBar() throws {
+        func geometry(menuBar: CGFloat) throws -> NotchGeometry {
+            try #require(NotchGeometry(screenFrame: screen, safeAreaTop: 32, auxiliaryTopLeftWidth: 662, auxiliaryTopRightWidth: 662, menuBarHeight: menuBar))
+        }
+        #expect(try geometry(menuBar: 33).compactHeight == 33)
+        #expect(try geometry(menuBar: 33).notchRect.height == 32)
+        // Hidden menu bar, or something unexpected: the safe area.
+        #expect(try geometry(menuBar: 0).compactHeight == 32)
+        #expect(try geometry(menuBar: 60).compactHeight == 32)
+        let layout = NotchLayout(geometry: try geometry(menuBar: 33))
+        #expect(layout.bodySize(for: .compact).height == 33)
+        #expect(layout.bodySize(for: .closed).height == 32)
+    }
+
     @Test func noNotchWithoutSafeArea() {
         #expect(NotchGeometry(screenFrame: screen, safeAreaTop: 0, auxiliaryTopLeftWidth: 662, auxiliaryTopRightWidth: 662) == nil)
     }
