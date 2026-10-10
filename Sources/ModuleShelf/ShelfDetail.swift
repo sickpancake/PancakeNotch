@@ -183,7 +183,8 @@ extension ShelfModule {
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }
         let hasScheme = trimmed.contains("://") || trimmed.lowercased().hasPrefix("mailto:")
         guard let url = ShelfDropReader.webURL(hasScheme ? trimmed : "https://" + trimmed) else { return nil }
-        if url.scheme?.lowercased() == "mailto" { return url.path().contains("@") ? url : nil }
+        // Not `path()`: it's empty for `mailto:` URLs on macOS 15.
+        if url.scheme?.lowercased() == "mailto" { return url.absoluteString.dropFirst(7).contains("@") ? url : nil }
         guard let host = url.host(), host == "localhost" || (host.contains(".") && !host.hasSuffix(".")) else { return nil }
         return url
     }
