@@ -84,7 +84,7 @@ struct AppWindowView: View {
                         shelfStore: shelfStore,
                         section: $section
                     )
-                case .modules: ModulesView(shelfSettings: shelfSettings, shelfStore: shelfStore)
+                case .modules: ModulesView(preferences: preferences, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 case .general: GeneralSettingsView(preferences: preferences)
                 case .notch: NotchSettingsView(preferences: preferences, shelfSettings: shelfSettings)
                 case .keyboard: KeyboardSettingsView(shortcuts: shortcuts)

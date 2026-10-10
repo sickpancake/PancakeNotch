@@ -10,6 +10,8 @@ struct NotchStage: View {
     var isActive = true
     /// Shows a sample Shelf inside the preview (when the Shelf is on).
     var showsShelf = false
+    /// What the hint says while inactive; by default, that the notch is off.
+    var inactiveHint: String?
     /// Width of the pretend screen the preview lays itself out for.
     var screenWidth: CGFloat = 560
     /// The preview is drawn a little smaller than life so the whole page fits.
@@ -52,7 +54,7 @@ struct NotchStage: View {
                 .font(.app(size: 12, weight: .semibold))
             Text(isActive
                 ? String(localized: "Hover the notch to try it. Click it to keep it small, and again to close it.")
-                : String(localized: "Turn the notch on to try it here."))
+                : inactiveHint ?? String(localized: "Turn the notch on to try it here."))
                 .font(.app(size: 12.5, weight: .medium))
         }
         .foregroundStyle(AppPalette.secondaryText)
