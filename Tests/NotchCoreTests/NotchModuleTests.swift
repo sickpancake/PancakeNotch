@@ -33,7 +33,6 @@ struct NotchModuleTests {
             layout: layout,
             state: state,
             behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
-            collapseLinger: .milliseconds(10),
             pointerLocation: { pointer }
         )
         let module = FakeModule()

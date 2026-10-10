@@ -16,7 +16,9 @@ public final class NotchViewModel {
     }
 
     /// Where closing goes: the resting state, or Compact during a module's brief compact moment.
-    var restingTarget: NotchState { isShowingBriefly ? max(restingState, .compact) : restingState }
+    var restingTarget: NotchState {
+        isShowingBriefly || collapsedByClick ? max(restingState, .compact) : restingState
+    }
 
     /// Keeps the current state regardless of hover (used by `PANCAKENOTCH_DEBUG_STATE`).
     public var isPinned = false
@@ -46,13 +48,12 @@ public final class NotchViewModel {
 
     /// Hover delays and haptics from Settings.
     @ObservationIgnored public var behavior: NotchBehavior
-    /// How long the compact notch stays after a click shrinks it, if the pointer isn't on it.
-    @ObservationIgnored private let collapseLinger: Duration
     /// Current pointer position in screen coordinates; injectable for tests.
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     /// Whether Mission Control is up; injectable for tests.
     @ObservationIgnored private let isMissionControlActive: @MainActor () -> Bool
-    /// Set when a click shrinks the panel: hovering the compact notch then doesn't reopen it.
+    /// Set when a click shrinks the panel: the notch stays Compact (hover neither reopens nor closes it)
+    /// until it's clicked again.
     @ObservationIgnored private var collapsedByClick = false
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
     private static let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
@@ -66,14 +67,12 @@ public final class NotchViewModel {
         layout: NotchLayout,
         state: NotchState = .closed,
         behavior: NotchBehavior = NotchBehavior(),
-        collapseLinger: Duration = .seconds(1),
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
     ) {
         self.layout = layout
         self.state = state
         self.behavior = behavior
-        self.collapseLinger = collapseLinger
         self.pointerLocation = pointerLocation
         self.isMissionControlActive = isMissionControlActive
     }
@@ -94,8 +93,7 @@ public final class NotchViewModel {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
             }
-        } else {
-            collapsedByClick = false
+        } else if !collapsedByClick {
             scheduleCloseIfIdle()
         }
     }
@@ -184,7 +182,8 @@ public final class NotchViewModel {
         }
     }
 
-    /// A click opens the notch, or shrinks the open panel to the compact version (ADR-0011).
+    /// A click opens the notch, or shrinks the open panel to the compact version, which then stays
+    /// until the next click (ADR-0011).
     public func tap() {
         Self.logger.debug("Tap in \(self.state.rawValue, privacy: .public)")
         guard state == .expanded else {
@@ -195,13 +194,6 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         collapsedByClick = true
         transition(to: .compact)
-        // The click was usually on the panel body, below the compact notch: let it linger, then rest.
-        if !layout.windowFrame(for: .compact).contains(pointerLocation()) {
-            schedule(after: collapseLinger) { model in
-                guard !model.isHeld else { return }
-                model.close()
-            }
-        }
     }
 
     /// Opens or closes the notch, e.g. from the keyboard shortcut.

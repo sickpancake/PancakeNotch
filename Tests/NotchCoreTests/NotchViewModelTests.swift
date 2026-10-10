@@ -224,7 +224,6 @@ struct NotchClickTests {
             layout: layout,
             state: state,
             behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
-            collapseLinger: .milliseconds(10),
             pointerLocation: { pointer }
         )
     }
@@ -235,10 +234,20 @@ struct NotchClickTests {
         #expect(model.state == .expanded)
     }
 
-    @Test func clickShrinksOpenPanelToCompactThenRests() async throws {
-        let model = makeModel(state: .expanded)
+    /// After a click shrinks it, the notch stays Compact (whatever the pointer does) until the next click.
+    @Test func clickShrinksToCompactUntilClickedAgain() async throws {
+        let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 300))
         model.tap()
         #expect(model.state == .compact)
+        model.hoverChanged(false)
+        model.hoverChanged(true)
+        model.hoverChanged(false)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.state == .compact)
+        model.tap()
+        #expect(model.state == .expanded)
+        // Leaving the reopened panel closes it as usual.
+        model.hoverChanged(false)
         try await settle(.milliseconds(300)) { model.state == .closed }
         #expect(model.state == .closed)
     }

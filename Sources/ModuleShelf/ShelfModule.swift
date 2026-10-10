@@ -134,8 +134,8 @@ public final class ShelfModule: NotchModule {
 
     /// The Shelf in the left ear (it's the only module, so #1; ADR-0011). Shown whenever the notch is
     /// compact: from 15 items, after a drop, and in the short shrink after a click.
-    public func compactView(layout: NotchLayout) -> AnyView? {
-        AnyView(ShelfEars(module: self, layout: layout))
+    public func compactEars(layout: NotchLayout) -> CompactEars? {
+        CompactEars(leading: AnyView(ShelfEar(module: self)))
     }
 
     public var holdsOpen: Bool { prompt != nil || detailID != nil || otherHolds }

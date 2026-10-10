@@ -12,8 +12,9 @@ public protocol NotchModule: AnyObject {
 
     /// The open panel's content, laid out at `layout.bodySize(for: .expanded)`.
     func expandedView(layout: NotchLayout) -> AnyView
-    /// Content for the compact ears, or `nil` to leave them empty.
-    func compactView(layout: NotchLayout) -> AnyView?
+    /// Content for the compact ears, one view per side, or `nil` to leave them empty. The views stay
+    /// alive while the notch is closed or open (hidden, under the notch), so they can slide in and out.
+    func compactEars(layout: NotchLayout) -> CompactEars?
 
     /// Read by VoiceOver while the notch is closed or compact (e.g. "Shelf is full").
     var accessibilityStatus: String? { get }
@@ -45,7 +46,7 @@ public protocol NotchModule: AnyObject {
 }
 
 public extension NotchModule {
-    func compactView(layout: NotchLayout) -> AnyView? { nil }
+    func compactEars(layout: NotchLayout) -> CompactEars? { nil }
     var holdsOpen: Bool { false }
     var accessibilityStatus: String? { nil }
     func notchDidOpen() {}
@@ -56,4 +57,15 @@ public extension NotchModule {
     func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool { false }
     func dragEnded() {}
     func handleKey(_ event: NSEvent) -> Bool { false }
+}
+
+/// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.
+public struct CompactEars {
+    public var leading: AnyView?
+    public var trailing: AnyView?
+
+    public init(leading: AnyView? = nil, trailing: AnyView? = nil) {
+        self.leading = leading
+        self.trailing = trailing
+    }
 }

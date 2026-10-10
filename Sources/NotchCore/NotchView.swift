@@ -42,6 +42,9 @@ struct NotchView: View {
         return ZStack(alignment: .top) {
             Color.black
             content(layout: layout, state: state)
+            if let ears = model.module?.compactEars(layout: layout) {
+                CompactEarsView(ears: ears, layout: layout, state: state, reduceMotion: reduceMotion)
+            }
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .clipShape(shape)
@@ -55,11 +58,8 @@ struct NotchView: View {
     private func content(layout: NotchLayout, state: NotchState) -> some View {
         switch state {
         case .compact:
-            if let ears = model.module?.compactView(layout: layout) {
-                ears
-                    .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
-                    .transition(reduceMotion ? .opacity : .earsTuck)
-            } else if model.isPinned {
+            // A module's ears are drawn by `CompactEarsView` in every state.
+            if model.module?.compactEars(layout: layout) == nil, model.isPinned {
                 CompactPlaceholderView(layout: layout)
                     .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
                     .transition(.opacity)
@@ -152,22 +152,42 @@ private extension AnyTransition {
     }
 }
 
-private extension AnyTransition {
-    /// The ears' content slides in toward the notch and blurs away as they shrink (and back out as they
-    /// grow), so closing reads even on a black background where the black ears themselves can't be seen.
-    static var earsTuck: AnyTransition {
-        .modifier(active: EarsTuckModifier(progress: 0), identity: EarsTuckModifier(progress: 1))
+/// The ears' content, kept in every state so it can move: it slides out from under the notch as the ears
+/// grow, and back under it as they shrink, where the hardware cutout hides it. That reads even on a black
+/// app, where the black ears themselves can't be seen. Hidden (and not clickable) unless Compact.
+private struct CompactEarsView: View {
+    let ears: CompactEars
+    let layout: NotchLayout
+    let state: NotchState
+    let reduceMotion: Bool
+
+    var body: some View {
+        let width = layout.compactEarWidth
+        let height = layout.bodySize(for: .compact).height
+        let isShown = state == .compact
+        // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
+        let tuck = state == .closed && !reduceMotion ? width + 8 : 0
+        HStack(spacing: 0) {
+            ear(ears.leading, width: width, height: height)
+                .offset(x: tuck)
+            Spacer(minLength: 0)
+            ear(ears.trailing, width: width, height: height)
+                .offset(x: -tuck)
+        }
+        .frame(width: layout.bodySize(for: .compact).width, height: height)
+        // Fading out to Closed waits until the content is under the notch, so the slide stays visible.
+        .animation(fade(isShown: isShown)) { $0.opacity(isShown ? 1 : 0) }
+        .allowsHitTesting(false)
+        .accessibilityHidden(!isShown)
     }
-}
 
-private struct EarsTuckModifier: ViewModifier {
-    let progress: Double
+    private func ear(_ view: AnyView?, width: CGFloat, height: CGFloat) -> some View {
+        (view ?? AnyView(Color.clear)).frame(width: width, height: height)
+    }
 
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(x: 0.3 + 0.7 * progress, y: 0.5 + 0.5 * progress, anchor: .center)
-            .blur(radius: (1 - progress) * 4)
-            .opacity(progress)
+    private func fade(isShown: Bool) -> Animation {
+        if isShown { return .easeOut(duration: 0.18) }
+        return state == .closed && !reduceMotion ? .easeIn(duration: 0.12).delay(0.3) : .easeOut(duration: 0.12)
     }
 }
 

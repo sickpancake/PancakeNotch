@@ -477,9 +477,8 @@ struct ShelfPromptCard: View {
 
 /// The Shelf in the compact notch's left ear: a tray with a count badge, "!" when full (ADR-0013).
 /// The right ear stays free for another module.
-struct ShelfEars: View {
+struct ShelfEar: View {
     let module: ShelfModule
-    let layout: NotchLayout
     /// The number on the badge while it counts up after a drop; `nil` shows the real count.
     @State private var shownCount: Int?
     @State private var bounce = false
@@ -487,14 +486,13 @@ struct ShelfEars: View {
 
     var body: some View {
         let count = shownCount ?? module.store.items.count
-        HStack(spacing: 0) {
-            ShelfTrayBadge(count: count, bounce: bounce, reduceMotion: reduceMotion)
-                .frame(width: layout.compactEarWidth, height: layout.bodySize(for: .compact).height)
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(ShelfModule.earLabel(count: module.store.items.count)))
-        .task { await countUpAfterDrop() }
+        ShelfTrayBadge(count: count, bounce: bounce, reduceMotion: reduceMotion)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(ShelfModule.earLabel(count: module.store.items.count)))
+            // The ear lives on while the notch is closed or open: count up each time it comes out.
+            .task(id: module.notch?.state == .compact) {
+                if module.notch?.state == .compact { await countUpAfterDrop() }
+            }
     }
 
     /// After a drop: start at the old count, then count up with a bounce once the ear has slid out.
