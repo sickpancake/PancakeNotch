@@ -1,5 +1,6 @@
 import AppKit
 import HotKey
+import ModuleShelf
 import SwiftUI
 
 /// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
@@ -10,12 +11,16 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     private let preferences: Preferences
     private let shortcuts: ShortcutController
     private let stats: UsageStats
+    private let shelfSettings: ShelfSettings
+    private let shelfStore: ShelfStore
     private var window: NSWindow?
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats) {
+    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, shelfSettings: ShelfSettings, shelfStore: ShelfStore) {
         self.preferences = preferences
         self.shortcuts = shortcuts
         self.stats = stats
+        self.shelfSettings = shelfSettings
+        self.shelfStore = shelfStore
     }
 
     func show() {
@@ -28,7 +33,13 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = Self.makeWindow(
-            rootView: AppWindowView(preferences: preferences, shortcuts: shortcuts, stats: stats),
+            rootView: AppWindowView(
+                preferences: preferences,
+                shortcuts: shortcuts,
+                stats: stats,
+                shelfSettings: shelfSettings,
+                shelfStore: shelfStore
+            ),
             windowClass: NSWindow.self,
             size: AppWindowView.defaultSize
         )
@@ -84,11 +95,26 @@ extension AppWindowController {
         let preferences = Preferences(defaults: defaults)
         let stats = sampleStats(defaults: defaults)
         let noShortcut = ShortcutController(defaults: defaults) {}
+        let shelfSettings = ShelfSettings(defaults: defaults)
+        let shelfFolder = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-snapshot-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: shelfFolder) }
+        let shelfStore = ShelfStore(directory: shelfFolder)
+        shelfStore.add(
+            [.text("Meeting notes"), .link(URL(string: "https://github.com")!), .text("Call back at 4"), .text("Address")],
+            duplicates: .addAgain
+        )
 
         func render(_ name: String, section: AppSection, shortcuts: ShortcutController = noShortcut,
                     size: CGSize = AppWindowView.defaultSize) throws {
             let window = makeWindow(
-                rootView: AppWindowView(preferences: preferences, shortcuts: shortcuts, stats: stats, section: section),
+                rootView: AppWindowView(
+                    preferences: preferences,
+                    shortcuts: shortcuts,
+                    stats: stats,
+                    shelfSettings: shelfSettings,
+                    shelfStore: shelfStore,
+                    section: section
+                ),
                 windowClass: SnapshotWindow.self,
                 size: size
             )

@@ -1,13 +1,18 @@
+import ModuleShelf
 import SwiftUI
 
-/// The modules that will live in the notch. None has shipped yet, so each is a "Coming soon" card
-/// with a sketch of how it will look.
+/// The modules that live in the notch: the Shelf with its settings, and a "Coming soon" card
+/// for Now Playing.
 struct ModulesView: View {
+    @Bindable var shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
+
     var body: some View {
         AppPage(
             title: String(localized: "Modules"),
-            subtitle: String(localized: "Small tools that live inside the notch. These are on the way.")
+            subtitle: String(localized: "Small tools that live inside the notch.")
         ) {
+            ShelfSettingsCard(settings: shelfSettings, store: shelfStore)
             VStack(spacing: 16) {
                 ModuleCard(
                     title: String(localized: "Now Playing"),
@@ -19,17 +24,6 @@ struct ModulesView: View {
                     ]
                 ) {
                     NowPlayingArt()
-                }
-                ModuleCard(
-                    title: String(localized: "Shelf"),
-                    symbol: "tray",
-                    summary: String(localized: "Drop files on the notch to keep them handy, then drag them out wherever you need them."),
-                    points: [
-                        String(localized: "A place to park files between apps"),
-                        String(localized: "Always one hover away"),
-                    ]
-                ) {
-                    ShelfArt()
                 }
             }
         }
@@ -162,41 +156,86 @@ private struct NowPlayingArt: View {
     }
 }
 
-/// An open notch holding a few files, with room to drop another.
-private struct ShelfArt: View {
-    var body: some View {
-        ZStack(alignment: .top) {
-            NotchPanelShape()
-            HStack(spacing: 10) {
-                file("doc.text.fill", width: 38)
-                file("photo.fill", width: 30)
-                file("folder.fill", width: 34)
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
-                    .frame(width: 40, height: 50)
-                    .overlay {
-                        Image(systemName: "plus")
-                            .font(.app(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    .padding(.bottom, 13)
-            }
-            .padding(.top, 40)
-        }
-        .frame(width: 236, height: 138)
-    }
+/// The Shelf's settings (ADR-0013).
+private struct ShelfSettingsCard: View {
+    @Bindable var settings: ShelfSettings
+    let store: ShelfStore
 
-    private func file(_ symbol: String, width: CGFloat) -> some View {
-        VStack(spacing: 7) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                .frame(width: 40, height: 50)
-                .overlay {
-                    Image(systemName: symbol)
-                        .font(.app(size: 17))
-                        .foregroundStyle(.white.opacity(0.9))
+    var body: some View {
+        SettingsCard(
+            header: String(localized: "Shelf"),
+            footer: String(localized: "Holds up to \(ShelfStore.capacity) items. Files stay where they are: the Shelf only remembers where to find them.")
+        ) {
+            SettingsRow(
+                title: String(localized: "Shelf"),
+                subtitle: String(localized: "Drop files, images, text and links on the notch to keep them handy.")
+            ) {
+                Toggle(String(localized: "Shelf"), isOn: $settings.isEnabled)
+                    .labelsHidden()
+            }
+            Group {
+                SettingsRow(
+                    title: String(localized: "On the Shelf now"),
+                    subtitle: String(localized: "\(store.items.count) of \(ShelfStore.capacity) items")
+                ) {
+                    Button(String(localized: "Clear Shelf")) { store.clear() }
+                        .disabled(store.items.isEmpty)
                 }
-            Capsule().fill(.white.opacity(0.4)).frame(width: width, height: 5)
+                SettingsRow(
+                    title: String(localized: "Dragging files out"),
+                    subtitle: String(localized: "Copy leaves the original where it is. Move works like Finder: same disk moves, another disk copies.")
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Dragging files out"),
+                        options: [(.copy, String(localized: "Copy")), (.move, String(localized: "Move"))],
+                        selection: $settings.dragOutMode
+                    )
+                }
+                SettingsRow(
+                    title: String(localized: "Remove items after dragging them out"),
+                    subtitle: String(localized: "Off keeps them on the Shelf so you can drop them again.")
+                ) {
+                    Toggle(String(localized: "Remove items after dragging them out"), isOn: $settings.removeAfterDragOut)
+                        .labelsHidden()
+                }
+                SettingsRow(
+                    title: String(localized: "Adding something already there"),
+                    subtitle: String(localized: "What happens when you drop an item that's already on the Shelf.")
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Adding something already there"),
+                        options: [
+                            (.ask, String(localized: "Ask")),
+                            (.moveToFront, String(localized: "Move to front")),
+                            (.addAgain, String(localized: "Add again")),
+                        ],
+                        selection: $settings.duplicatePolicy
+                    )
+                }
+                SettingsRow(
+                    title: String(localized: "Clear the Shelf after"),
+                    subtitle: String(localized: "Older items are removed the next time the notch opens.")
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Clear the Shelf after"),
+                        options: [
+                            (.never, String(localized: "Never")),
+                            (.day, String(localized: "1 day")),
+                            (.week, String(localized: "1 week")),
+                            (.month, String(localized: "1 month")),
+                        ],
+                        selection: $settings.autoClear
+                    )
+                }
+                SettingsRow(
+                    title: String(localized: "Show AirDrop while dragging"),
+                    subtitle: String(localized: "Drop on it to send right away, without keeping the item.")
+                ) {
+                    Toggle(String(localized: "Show AirDrop while dragging"), isOn: $settings.showsAirDropZone)
+                        .labelsHidden()
+                }
+            }
+            .disabled(!settings.isEnabled)
         }
     }
 }

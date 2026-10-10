@@ -1,4 +1,5 @@
 import AppKit
+import ModuleShelf
 import NotchCore
 import os
 
@@ -16,8 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let preferences = Preferences()
     private let stats = UsageStats()
+    private let shelfSettings = ShelfSettings()
+    /// Loads only the saved item list; files are checked when the notch opens.
+    private lazy var shelfStore = ShelfStore()
+    /// Exists only while the Shelf is switched on.
+    private var shelf: ShelfModule?
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
-    private lazy var appWindow = AppWindowController(preferences: preferences, shortcuts: shortcuts, stats: stats)
+    private lazy var appWindow = AppWindowController(
+        preferences: preferences,
+        shortcuts: shortcuts,
+        stats: stats,
+        shelfSettings: shelfSettings,
+        shelfStore: shelfStore
+    )
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
         openApp: { [weak self] in self?.showAppWindow() }
@@ -40,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
         notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
+        seedShelfIfRequested()
+        observeShelf()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -89,6 +103,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// `PANCAKENOTCH_SHELF_SEED=/folder` fills an empty Shelf with that folder's files (memory checks;
+    /// pair it with `PANCAKENOTCH_SHELF_DIR` so the real Shelf isn't touched).
+    private func seedShelfIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SHELF_SEED"], shelfStore.items.isEmpty,
+              let files = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: path), includingPropertiesForKeys: nil)
+        else { return }
+        let inputs = files.sorted { $0.path < $1.path }.map { ShelfInput.file($0, owned: false) }
+        shelfStore.add(inputs, duplicates: .addAgain)
+    }
+
+    /// Creates the Shelf when it's switched on and drops it when it's off (no drops are accepted then).
+    private func observeShelf() {
+        withObservationTracking {
+            if shelfSettings.isEnabled {
+                if shelf == nil { shelf = ShelfModule(store: shelfStore, settings: shelfSettings) }
+            } else {
+                shelf = nil
+            }
+            notchController.module = shelf
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeShelf() }
+        }
+    }
+
     /// Full-screen apps keep the notch working, except apps on the user's hide list (ADR-0030).
     private func updateFullScreen() {
         let hiddenApps = NotchSettings.appsHiddenInFullScreen
@@ -120,7 +158,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func writeSnapshot(to path: String) {
         let geometry = currentGeometry() ?? .simulated(in: NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1512, height: 982))
         do {
-            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path))
+            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
+                ShelfSnapshot.models(layout: layout)
+            }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }

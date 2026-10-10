@@ -65,6 +65,12 @@ public struct NotchLayout: Equatable, Sendable {
         }
     }
 
+    /// Top-left corner of a state's notch body inside the hosted content, which is laid out at
+    /// `largestWindowSize` with the notch top-centred (y down).
+    public func bodyOrigin(for state: NotchState) -> CGPoint {
+        CGPoint(x: (largestWindowSize.width - bodySize(for: state).width) / 2, y: 0)
+    }
+
     /// Window frame for a state: just the outline (plus shadow room when expanded), centered on the
     /// notch and touching the top of the screen, so the window never covers more than it shows.
     public func windowFrame(for state: NotchState) -> CGRect {

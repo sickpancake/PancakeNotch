@@ -49,17 +49,28 @@ struct NotchView: View {
     @ViewBuilder
     private func content(layout: NotchLayout, state: NotchState) -> some View {
         switch state {
-        case .compact where model.isPinned:
-            CompactPlaceholderView(layout: layout)
-                .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
-                .transition(.opacity)
-        case .closed, .compact:
-            // Compact ears stay empty until a module supplies live info (Now Playing, M3).
+        case .compact:
+            if let ears = model.module?.compactView(layout: layout) {
+                ears
+                    .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
+                    .transition(.opacity)
+            } else if model.isPinned {
+                CompactPlaceholderView(layout: layout)
+                    .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
+                    .transition(.opacity)
+            }
+        case .closed:
             EmptyView()
         case .expanded:
-            ExpandedPlaceholderView(layout: layout)
-                .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
-                .transition(reduceMotion ? .opacity : .blurReveal)
+            Group {
+                if let module = model.module {
+                    module.expandedView(layout: layout)
+                } else {
+                    ExpandedPlaceholderView(layout: layout)
+                }
+            }
+            .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
+            .transition(reduceMotion ? .opacity : .blurReveal)
         }
     }
 }

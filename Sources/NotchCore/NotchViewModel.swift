@@ -17,6 +17,22 @@ public final class NotchViewModel {
     /// Keeps the current state regardless of hover (used by `PANCAKENOTCH_DEBUG_STATE`).
     public var isPinned = false
 
+    /// The module shown in the notch (Shelf, later Now Playing). `nil` shows the placeholder and refuses drops.
+    public var module: (any NotchModule)? {
+        didSet {
+            guard module !== oldValue else { return }
+            oldValue?.attach(to: nil)
+            module?.attach(to: self)
+            // Attached while already open (e.g. pinned with PANCAKENOTCH_DEBUG_STATE=expanded).
+            if state == .expanded { module?.notchDidOpen() }
+        }
+    }
+
+    /// Gives the notch keyboard focus, e.g. after a click inside the Shelf. Set by the window controller.
+    @ObservationIgnored public var requestKeyFocus: (() -> Void)?
+    /// Hands keyboard focus back to the previous app. Called when the notch leaves the expanded state.
+    @ObservationIgnored public var releaseKeyFocus: (() -> Void)?
+
     /// Asks the window to fit a state. Called with the larger state before an animation starts,
     /// and with the final state once it settles.
     @ObservationIgnored public var fitWindow: ((NotchState) -> Void)?
@@ -63,8 +79,58 @@ public final class NotchViewModel {
             }
         } else {
             collapsedByClick = false
-            guard state > restingState else { return }
-            schedule(after: behavior.closeDelay) { $0.close() }
+            scheduleCloseIfIdle()
+        }
+    }
+
+    /// A drag from another app entered the notch: open right away, no hover delay (ADR-0011).
+    public func dragEntered() {
+        guard !isPinned else { return }
+        hoverTask?.cancel()
+        if state != .expanded { open() }
+    }
+
+    /// The drag left the notch without dropping: close like a hover exit.
+    public func dragExited() {
+        module?.dragEnded()
+        scheduleCloseIfIdle()
+    }
+
+    /// A drag over the notch finished (dropped or cancelled). The pointer may have left during it,
+    /// and AppKit sends no hover events while dragging, so check where it is now.
+    public func dragConcluded() {
+        module?.dragEnded()
+        closeIfPointerOutside()
+    }
+
+    /// The module stopped holding the notch open (menu dismissed, drag-out ended, prompt answered).
+    public func holdReleased() {
+        closeIfPointerOutside()
+    }
+
+    /// A key press while the notch has keyboard focus: the module first, then Escape closes.
+    public func handleKey(_ event: NSEvent) -> Bool {
+        if module?.handleKey(event) == true { return true }
+        if event.keyCode == 53 { // Escape
+            close()
+            return true
+        }
+        return false
+    }
+
+    /// True while the module needs the notch to stay open.
+    var isHeld: Bool { module?.holdsOpen ?? false }
+
+    private func closeIfPointerOutside() {
+        guard !layout.windowFrame(for: state).contains(pointerLocation()) else { return }
+        scheduleCloseIfIdle()
+    }
+
+    private func scheduleCloseIfIdle() {
+        guard !isPinned, state > restingState, !isHeld else { return }
+        schedule(after: behavior.closeDelay) { model in
+            guard !model.isHeld else { return }
+            model.close()
         }
     }
 
@@ -74,12 +140,16 @@ public final class NotchViewModel {
             open()
             return
         }
+        guard !isHeld else { return }
         hoverTask?.cancel()
         collapsedByClick = true
         transition(to: .compact)
         // The click was usually on the panel body, below the compact notch: let it linger, then rest.
         if !layout.windowFrame(for: .compact).contains(pointerLocation()) {
-            schedule(after: collapseLinger) { $0.close() }
+            schedule(after: collapseLinger) { model in
+                guard !model.isHeld else { return }
+                model.close()
+            }
         }
     }
 
@@ -113,6 +183,7 @@ public final class NotchViewModel {
     public func transition(to newState: NotchState) {
         guard newState != state else { return }
         let opening = newState == .expanded
+        let closing = state == .expanded
         transitionID += 1
         let id = transitionID
         fitWindow?(max(state, newState))
@@ -123,7 +194,16 @@ public final class NotchViewModel {
             guard let self, self.transitionID == id else { return }
             self.fitWindow?(self.state)
         }
-        if opening { onOpen?() }
+        if opening {
+            onOpen?()
+            module?.notchDidOpen()
+        }
+        if closing { leftExpanded() }
+    }
+
+    private func leftExpanded() {
+        releaseKeyFocus?()
+        module?.notchDidClose()
     }
 
     /// Returns to the resting state without animating (e.g. the display went away).
@@ -131,8 +211,11 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         transitionID += 1
         collapsedByClick = false
+        module?.dragEnded()
+        let wasExpanded = state == .expanded
         state = restingState
         fitWindow?(state)
+        if wasExpanded { leftExpanded() }
     }
 
     static func animation(opening: Bool) -> Animation {

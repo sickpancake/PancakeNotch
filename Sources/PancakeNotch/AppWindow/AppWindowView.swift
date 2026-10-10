@@ -1,3 +1,4 @@
+import ModuleShelf
 import SwiftUI
 
 /// The pages of the app window, in sidebar order.
@@ -40,15 +41,26 @@ struct AppWindowView: View {
     @Bindable var preferences: Preferences
     let shortcuts: ShortcutController
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
     @State private var section: AppSection
 
     static let defaultSize = CGSize(width: 1000, height: 780)
     static let minimumSize = CGSize(width: 860, height: 600)
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, section: AppSection = .home) {
+    init(
+        preferences: Preferences,
+        shortcuts: ShortcutController,
+        stats: UsageStats,
+        shelfSettings: ShelfSettings,
+        shelfStore: ShelfStore,
+        section: AppSection = .home
+    ) {
         self.preferences = preferences
         self.shortcuts = shortcuts
         self.stats = stats
+        self.shelfSettings = shelfSettings
+        self.shelfStore = shelfStore
         _section = State(initialValue: section)
     }
 
@@ -63,8 +75,16 @@ struct AppWindowView: View {
 
             Group {
                 switch section {
-                case .home: HomeView(preferences: preferences, shortcuts: shortcuts, stats: stats, section: $section)
-                case .modules: ModulesView()
+                case .home:
+                    HomeView(
+                        preferences: preferences,
+                        shortcuts: shortcuts,
+                        stats: stats,
+                        shelfSettings: shelfSettings,
+                        shelfStore: shelfStore,
+                        section: $section
+                    )
+                case .modules: ModulesView(shelfSettings: shelfSettings, shelfStore: shelfStore)
                 case .general: GeneralSettingsView(preferences: preferences)
                 case .notch: NotchSettingsView(preferences: preferences)
                 case .keyboard: KeyboardSettingsView(shortcuts: shortcuts)

@@ -60,3 +60,11 @@ struct NotchLayoutTests {
         #expect(content.width >= window.width && content.height >= window.height)
     }
 }
+
+@Test func expandedBodyIsTopCentredInTheContent() {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+    let origin = layout.bodyOrigin(for: .expanded)
+    let body = layout.bodySize(for: .expanded)
+    #expect(origin.y == 0)
+    #expect(abs(origin.x * 2 + body.width - layout.largestWindowSize.width) < 0.001)
+}

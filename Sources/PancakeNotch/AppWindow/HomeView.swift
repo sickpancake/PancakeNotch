@@ -1,3 +1,4 @@
+import ModuleShelf
 import NotchCore
 import SwiftUI
 
@@ -7,6 +8,8 @@ struct HomeView: View {
     @Bindable var preferences: Preferences
     let shortcuts: ShortcutController
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
     @Binding var section: AppSection
 
     var body: some View {
@@ -14,7 +17,7 @@ struct HomeView: View {
             HomeHeader()
             NotchHero(preferences: preferences)
                 .padding(.top, 26)
-            StatsRow(stats: stats)
+            StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 .padding(.top, 14)
             TipsCard(preferences: preferences, shortcuts: shortcuts) { section = .keyboard }
                 .padding(.top, 14)
@@ -126,9 +129,11 @@ private struct StatusBadge: View {
     }
 }
 
-/// Big-number tiles. Shelf has no numbers yet, so its tile only says it's coming.
+/// Big-number tiles: notch opens, days together, and what's on the Shelf.
 private struct StatsRow: View {
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
 
     var body: some View {
         HStack(spacing: 12) {
@@ -152,7 +157,14 @@ private struct StatsRow: View {
                     ? String(localized: "day, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
                     : String(localized: "days, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
             )
-            ComingStatTile()
+            StatTile(
+                label: String(localized: "Shelf"),
+                symbol: "tray",
+                value: shelfStore.items.count.formatted(),
+                caption: shelfSettings.isEnabled
+                    ? String(localized: "of \(ShelfStore.capacity) on the Shelf")
+                    : String(localized: "Shelf is off")
+            )
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -203,31 +215,6 @@ private struct StatTile: View {
         .glassPanel()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(label): \(value) \(caption)"))
-    }
-}
-
-private struct ComingStatTile: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TileLabel(label: String(localized: "Shelf"), symbol: "tray")
-            Spacer(minLength: 14)
-            Text("Coming soon")
-                .font(.app(size: 13, weight: .semibold))
-            Text("Files kept handy")
-                .font(.app(size: 12))
-                .foregroundStyle(AppPalette.secondaryText)
-                .padding(.top, 2)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .padding(.horizontal, AppMetrics.cardInset)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(AppPalette.hairlineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 

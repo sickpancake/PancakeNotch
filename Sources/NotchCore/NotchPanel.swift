@@ -22,6 +22,17 @@ final class NotchPanel: NSPanel {
         appearance = NSAppearance(named: .darkAqua)
     }
 
-    override var canBecomeKey: Bool { false }
+    /// Lets the panel take keyboard focus; only switched on after a click inside a module.
+    var allowsKey = false
+
+    /// Handles key presses while the panel has focus; returns `true` if handled.
+    var keyHandler: ((NSEvent) -> Bool)?
+
+    override var canBecomeKey: Bool { allowsKey }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, keyHandler?(event) == true { return }
+        super.sendEvent(event)
+    }
     override var canBecomeMain: Bool { false }
 }
