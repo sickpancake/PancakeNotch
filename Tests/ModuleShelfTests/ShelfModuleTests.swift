@@ -19,6 +19,32 @@ struct ShelfModuleTests {
         return (module, notch)
     }
 
+    /// From 15 items the notch rests with the Shelf in its ear, unless that's switched off.
+    @Test func restsInCompactFromFifteenItems() async throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(14))
+        #expect(notch.restingState == .closed)
+        #expect(module.accessibilityStatus == nil)
+        module.offer([.text("One more")])
+        #expect(notch.restingState == .compact)
+        #expect(module.accessibilityStatus == "Shelf, 15 items")
+
+        // The setting is observed: the change arrives on a later main-actor turn.
+        module.settings.showsInEars = false
+        for _ in 0..<100 where notch.restingState != .closed { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notch.restingState == .closed)
+        module.settings.showsInEars = true
+        for _ in 0..<100 where notch.restingState != .compact { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notch.restingState == .compact)
+    }
+
+    @Test func earLabels() {
+        #expect(ShelfModule.earLabel(count: 0) == "Shelf is empty")
+        #expect(ShelfModule.earLabel(count: 16) == "Shelf, 16 items")
+        #expect(ShelfModule.earLabel(count: 20) == "Shelf is full, 20 items")
+    }
+
     /// A drag that opened the notch early shows the drop zones (with AirDrop, also for text) before
     /// AppKit reports it over the window.
     @Test func approachingDragShowsDropZonesWithAirDrop() throws {
@@ -56,7 +82,8 @@ struct ShelfModuleTests {
         #expect(module.prompt == nil)
         #expect(module.store.items.count == 19)
         #expect(module.store.items.filter { $0.displayName == "f20.txt" }.count == 1)
-        #expect(notch.restingState == .closed)
+        // Still nearly full (19): the tray stays in the ear.
+        #expect(notch.restingState == .compact)
         #expect(!module.holdsOpen)
     }
 

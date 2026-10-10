@@ -12,8 +12,11 @@ public final class NotchViewModel {
 
     /// Where the notch rests when not expanded: `.compact` while a module has live info (M3+).
     public var restingState: NotchState = .closed {
-        didSet { if state != .expanded { transition(to: restingState) } }
+        didSet { if state != .expanded { transition(to: restingTarget) } }
     }
+
+    /// Where closing goes: the resting state, or Compact during a module's brief compact moment.
+    var restingTarget: NotchState { isShowingBriefly ? max(restingState, .compact) : restingState }
 
     /// Keeps the current state regardless of hover (used by `PANCAKENOTCH_DEBUG_STATE`).
     public var isPinned = false
@@ -52,6 +55,10 @@ public final class NotchViewModel {
     /// Set when a click shrinks the panel: hovering the compact notch then doesn't reopen it.
     @ObservationIgnored private var collapsedByClick = false
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    /// A module asked to close through Compact next time (the Shelf after a drop), for this long.
+    @ObservationIgnored private var briefCompactOnClose: Duration?
+    @ObservationIgnored private var isShowingBriefly = false
+    @ObservationIgnored private var briefTask: Task<Void, Never>?
     @ObservationIgnored private var transitionID = 0
 
     public init(
@@ -205,13 +212,43 @@ public final class NotchViewModel {
             return
         }
         collapsedByClick = false
+        briefTask?.cancel()
+        isShowingBriefly = false
         transition(to: .expanded)
     }
 
     public func close() {
         hoverTask?.cancel()
         collapsedByClick = false
-        transition(to: restingState)
+        if let duration = briefCompactOnClose {
+            briefCompactOnClose = nil
+            showBriefly(for: duration)
+        }
+        transition(to: restingTarget)
+    }
+
+    /// The next close goes through Compact and stays there for `duration` (e.g. the Shelf confirming a
+    /// drop with its count), then the notch goes back to its resting state.
+    public func closeThroughCompact(for duration: Duration) {
+        briefCompactOnClose = duration
+    }
+
+    private func showBriefly(for duration: Duration) {
+        isShowingBriefly = true
+        briefTask?.cancel()
+        briefTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, let self else { return }
+            self.endBriefCompact()
+        }
+    }
+
+    private func endBriefCompact() {
+        briefTask?.cancel()
+        briefTask = nil
+        guard isShowingBriefly else { return }
+        isShowingBriefly = false
+        if state != .expanded { transition(to: restingState) }
     }
 
     private func schedule(after delay: Duration, _ action: @escaping @MainActor (NotchViewModel) -> Void) {
@@ -255,6 +292,9 @@ public final class NotchViewModel {
     /// Returns to the resting state without animating (e.g. the display went away).
     public func reset() {
         hoverTask?.cancel()
+        briefTask?.cancel()
+        isShowingBriefly = false
+        briefCompactOnClose = nil
         transitionID += 1
         collapsedByClick = false
         module?.dragEnded()

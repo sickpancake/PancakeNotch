@@ -59,6 +59,8 @@ public final class ShelfModule: NotchModule {
         return false
     }
     var confirmingClear = false
+    /// The item count before the last drop: the compact ear counts up from it once, then clears it.
+    var countBeforeDrop: Int?
     /// The text/link item just copied, for a brief "Copied" flash.
     var copiedID: UUID?
     /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
@@ -110,20 +112,47 @@ public final class ShelfModule: NotchModule {
         guard notch != nil else { return }
         store.onChange = { [weak self] in self?.storeChanged() }
         updateRestingState()
+        observeSettings()
+    }
+
+    /// Re-checks the resting state when "Show in the notch" is switched.
+    private func observeSettings() {
+        withObservationTracking {
+            _ = settings.showsInEars
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.notch != nil else { return }
+                self.updateRestingState()
+                self.observeSettings()
+            }
+        }
     }
 
     public func expandedView(layout: NotchLayout) -> AnyView {
         AnyView(ShelfView(module: self, layout: ShelfLayout(layout)))
     }
 
+    /// The Shelf in the left ear (it's the only module, so #1; ADR-0011). Shown whenever the notch is
+    /// compact: from 15 items, after a drop, and in the short shrink after a click.
     public func compactView(layout: NotchLayout) -> AnyView? {
-        store.isFull ? AnyView(ShelfFullEars(layout: layout)) : nil
+        AnyView(ShelfEars(module: self, layout: layout))
     }
 
     public var holdsOpen: Bool { prompt != nil || detailID != nil || otherHolds }
 
     public var accessibilityStatus: String? {
-        store.isFull ? String(localized: "Shelf is full") : nil
+        showsNearlyFull ? Self.earLabel(count: store.items.count) : nil
+    }
+
+    /// The Shelf rests in the compact ear: nearly full and the setting is on.
+    var showsNearlyFull: Bool {
+        settings.showsInEars && store.items.count >= ShelfStore.nearlyFullCount
+    }
+
+    static func earLabel(count: Int) -> String {
+        if count >= ShelfStore.capacity { return String(localized: "Shelf is full, \(count) items") }
+        if count == 0 { return String(localized: "Shelf is empty") }
+        return String(localized: "Shelf, \(count) items", comment: "Compact notch; item count")
     }
 
     public func notchDidOpen() {
@@ -188,6 +217,11 @@ public final class ShelfModule: NotchModule {
 
         let drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
         guard !drop.isEmpty else { return false }
+        // When the notch closes, it shows the new count in the ear for a moment.
+        if settings.showsInEars {
+            countBeforeDrop = store.items.count
+            notch?.closeThroughCompact(for: .seconds(1.5))
+        }
         // Show the new items on the tiles (and any card about them).
         closeDetail()
         offer(drop.inputs)
@@ -467,9 +501,9 @@ public final class ShelfModule: NotchModule {
         updateRestingState()
     }
 
-    /// The notch rests with small "Full" ears while the shelf is full, invisible otherwise.
+    /// The notch rests in Compact, with the Shelf in its ear, from 15 items; invisible otherwise.
     private func updateRestingState() {
-        let resting: NotchState = store.isFull ? .compact : .closed
+        let resting: NotchState = showsNearlyFull ? .compact : .closed
         if notch?.restingState != resting { notch?.restingState = resting }
     }
 

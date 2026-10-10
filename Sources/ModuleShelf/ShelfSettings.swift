@@ -38,6 +38,8 @@ public final class ShelfSettings {
     public var duplicatePolicy: DuplicatePolicy { didSet { defaults.set(duplicatePolicy.rawValue, forKey: Keys.duplicatePolicy) } }
     public var autoClear: AutoClear { didSet { defaults.set(autoClear.rawValue, forKey: Keys.autoClear) } }
     public var showsAirDropZone: Bool { didSet { defaults.set(showsAirDropZone, forKey: Keys.airDropZone) } }
+    /// The compact ear from 15 items and the short pop-up after a drop.
+    public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -49,6 +51,7 @@ public final class ShelfSettings {
         duplicatePolicy = defaults.string(forKey: Keys.duplicatePolicy).flatMap(DuplicatePolicy.init(rawValue:)) ?? .ask
         autoClear = defaults.string(forKey: Keys.autoClear).flatMap(AutoClear.init(rawValue:)) ?? .never
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
+        showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
     }
 
     private enum Keys {
@@ -58,5 +61,6 @@ public final class ShelfSettings {
         static let duplicatePolicy = "shelf.duplicatePolicy"
         static let autoClear = "shelf.autoClear"
         static let airDropZone = "shelf.airDropZone"
+        static let showsInEars = "shelf.showsInEars"
     }
 }

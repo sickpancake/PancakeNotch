@@ -475,22 +475,83 @@ struct ShelfPromptCard: View {
 
 // MARK: Compact
 
-/// Ears shown while the shelf is full, the only time the Shelf shows on a closed notch.
-struct ShelfFullEars: View {
+/// The Shelf in the compact notch's left ear: a tray with a count badge, "!" when full (ADR-0013).
+/// The right ear stays free for another module.
+struct ShelfEars: View {
+    let module: ShelfModule
     let layout: NotchLayout
+    /// The number on the badge while it counts up after a drop; `nil` shows the real count.
+    @State private var shownCount: Int?
+    @State private var bounce = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let count = shownCount ?? module.store.items.count
         HStack(spacing: 0) {
-            Image(systemName: "tray.full.fill")
-                .font(.system(size: 11, weight: .medium))
-                .frame(width: layout.compactEarWidth)
+            ShelfTrayBadge(count: count, bounce: bounce, reduceMotion: reduceMotion)
+                .frame(width: layout.compactEarWidth, height: layout.geometry.notchRect.height)
             Spacer(minLength: 0)
-            Text("Full")
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: layout.compactEarWidth)
         }
-        .foregroundStyle(.white.opacity(0.85))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Shelf is full"))
+        .accessibilityLabel(Text(ShelfModule.earLabel(count: module.store.items.count)))
+        .task { await countUpAfterDrop() }
+    }
+
+    /// After a drop: start at the old count, then count up with a bounce once the ear has slid out.
+    private func countUpAfterDrop() async {
+        guard let from = module.countBeforeDrop else { return }
+        module.countBeforeDrop = nil
+        let to = module.store.items.count
+        guard from != to else { return }
+        shownCount = from
+        try? await Task.sleep(for: .milliseconds(300))
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.5)) {
+            shownCount = to
+            bounce = true
+        }
+        try? await Task.sleep(for: .milliseconds(180))
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { bounce = false }
+        shownCount = nil
+    }
+}
+
+/// A tray symbol with the item count in a white badge at its top-right; at capacity the full tray,
+/// "20" and a small "!" at its bottom-left. No badge while empty.
+struct ShelfTrayBadge: View {
+    let count: Int
+    var bounce = false
+    var reduceMotion = false
+
+    private var isFull: Bool { count >= ShelfStore.capacity }
+
+    var body: some View {
+        Image(systemName: isFull ? "tray.full.fill" : "tray.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.9))
+            .overlay(alignment: .topTrailing) {
+                if count > 0 {
+                    Text(verbatim: "\(count)")
+                        .font(.system(size: 9, weight: .bold))
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(count)))
+                        .foregroundStyle(.black)
+                        .fixedSize()
+                        .padding(.horizontal, 3)
+                        .frame(minWidth: 13, minHeight: 13)
+                        .background(.white, in: Capsule())
+                        .scaleEffect(bounce && !reduceMotion ? 1.3 : 1)
+                        .offset(x: 9, y: -8)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if isFull {
+                    Image(systemName: "exclamationmark")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.white)
+                        .offset(x: -4, y: 1)
+                }
+            }
+            // Leave room for the badge on the right; the ear's outer corner is rounded.
+            .offset(x: -1, y: 2)
     }
 }

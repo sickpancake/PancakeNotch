@@ -10,6 +10,8 @@ import os
 @Observable
 public final class ShelfStore {
     public static let capacity = 20
+    /// From this many items the notch shows the Shelf in its compact ear (ADR-0013).
+    public static let nearlyFullCount = 15
 
     public private(set) var items: [ShelfItem] = []
 

@@ -168,6 +168,47 @@ struct NotchMissionControlTests {
 }
 
 @MainActor
+struct NotchBriefCompactTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    func makeModel() -> NotchViewModel {
+        NotchViewModel(layout: layout, state: .expanded, isMissionControlActive: { false })
+    }
+
+    /// After a drop the Shelf shows its count: the next close stops at Compact for a moment.
+    @Test func nextCloseGoesThroughCompact() async throws {
+        let model = makeModel()
+        model.closeThroughCompact(for: .milliseconds(100))
+        model.close()
+        #expect(model.state == .compact)
+        try await settle(.milliseconds(300)) { model.state == .closed }
+        #expect(model.state == .closed)
+        // Only once.
+        model.open()
+        model.close()
+        #expect(model.state == .closed)
+    }
+
+    @Test func briefCompactKeepsANearlyFullRestingState() async throws {
+        let model = makeModel()
+        model.restingState = .compact
+        model.closeThroughCompact(for: .milliseconds(50))
+        model.close()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.state == .compact)
+    }
+
+    @Test func openingEndsTheBriefMoment() async throws {
+        let model = makeModel()
+        model.closeThroughCompact(for: .milliseconds(100))
+        model.close()
+        model.open()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.state == .expanded)
+    }
+}
+
+@MainActor
 struct NotchClickTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 

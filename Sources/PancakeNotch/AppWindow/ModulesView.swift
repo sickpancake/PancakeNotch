@@ -242,6 +242,13 @@ private struct ShelfSettingsCard: View {
                         .labelsHidden()
                 }
                 SettingsRow(
+                    title: String(localized: "Show in the notch when nearly full and after drops"),
+                    subtitle: String(localized: "From \(ShelfStore.nearlyFullCount) items the notch shows a small tray with the count, and it shows the new count for a moment after you drop something.")
+                ) {
+                    Toggle(String(localized: "Show in the notch when nearly full and after drops"), isOn: $settings.showsInEars)
+                        .labelsHidden()
+                }
+                SettingsRow(
                     title: String(localized: "Mission Control opens when dropping?"),
                     subtitle: String(localized: "macOS opens Mission Control when you drag to the very top of the screen. The notch opens before that, so drop a little lower, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
                 ) {

@@ -55,6 +55,9 @@ public enum ShelfSnapshot {
             module.selection = Set(module.store.items.prefix(3).map(\.id))
         }
         row(.compact, files: full)
+        row(.compact, files: Array(full.prefix(16)))
+        row(.compact, files: Array(full.prefix(3)))
+        row(.compact)
         row(files: files, extra: extras) { module in
             module.confirmingClear = true
             module.copiedID = module.store.items.first(where: { !$0.isFile })?.id
