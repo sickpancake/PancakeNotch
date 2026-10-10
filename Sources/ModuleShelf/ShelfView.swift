@@ -489,7 +489,7 @@ struct ShelfEars: View {
         let count = shownCount ?? module.store.items.count
         HStack(spacing: 0) {
             ShelfTrayBadge(count: count, bounce: bounce, reduceMotion: reduceMotion)
-                .frame(width: layout.compactEarWidth, height: layout.geometry.notchRect.height)
+                .frame(width: layout.compactEarWidth, height: layout.bodySize(for: .compact).height)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .ignore)

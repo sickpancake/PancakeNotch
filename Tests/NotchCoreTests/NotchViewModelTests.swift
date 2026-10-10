@@ -17,8 +17,14 @@ func settle(_ delay: Duration, until condition: () -> Bool) async throws {
 struct NotchViewModelTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 
+    /// The pointer sits away from the notch, so hover exits count.
     func makeModel(state: NotchState = .closed) -> NotchViewModel {
-        NotchViewModel(layout: layout, state: state, behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)))
+        NotchViewModel(
+            layout: layout,
+            state: state,
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
+            pointerLocation: { CGPoint(x: 5, y: 5) }
+        )
     }
 
     @Test func hoverOpensAfterDelay() async throws {
@@ -242,6 +248,17 @@ struct NotchClickTests {
         model.restingState = .compact
         model.tap()
         try await settle(.milliseconds(300)) { model.state == .compact }
+        #expect(model.state == .compact)
+    }
+
+    /// The window shrinking after a click makes AppKit report "left" then "entered" while the pointer
+    /// stays on the notch: that mustn't reopen it.
+    @Test func resizeHoverBounceAfterClickDoesNotReopen() async throws {
+        let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 975))
+        model.tap()
+        model.hoverChanged(false)
+        model.hoverChanged(true)
+        try await Task.sleep(for: .milliseconds(200))
         #expect(model.state == .compact)
     }
 

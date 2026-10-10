@@ -55,6 +55,7 @@ public final class NotchViewModel {
     /// Set when a click shrinks the panel: hovering the compact notch then doesn't reopen it.
     @ObservationIgnored private var collapsedByClick = false
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    private static let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
     /// A module asked to close through Compact next time (the Shelf after a drop), for this long.
     @ObservationIgnored private var briefCompactOnClose: Duration?
     @ObservationIgnored private var isShowingBriefly = false
@@ -79,6 +80,10 @@ public final class NotchViewModel {
 
     /// Called when the pointer enters or leaves the notch outline.
     public func hoverChanged(_ isHovering: Bool) {
+        // When the window shrinks (e.g. after a click shrinks the panel), AppKit reports the pointer
+        // leaving and coming straight back. A "left" while it's still on the notch isn't real: ignoring it
+        // keeps the click's "don't reopen" in place.
+        if !isHovering, layout.outlineFrame(for: state).contains(pointerLocation()) { return }
         hoverTask?.cancel()
         guard !isPinned else { return }
         if isHovering {
@@ -181,6 +186,7 @@ public final class NotchViewModel {
 
     /// A click opens the notch, or shrinks the open panel to the compact version (ADR-0011).
     public func tap() {
+        Self.logger.debug("Tap in \(self.state.rawValue, privacy: .public)")
         guard state == .expanded else {
             open()
             return
@@ -208,7 +214,7 @@ public final class NotchViewModel {
     public func open() {
         hoverTask?.cancel()
         guard !isMissionControlActive() else {
-            Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch").info("Not opening: Mission Control is up")
+            Self.logger.info("Not opening: Mission Control is up")
             return
         }
         collapsedByClick = false
@@ -263,6 +269,7 @@ public final class NotchViewModel {
     /// Moves to `newState` with the matching animation. Opening springs slightly; closing doesn't.
     public func transition(to newState: NotchState) {
         guard newState != state else { return }
+        Self.logger.debug("State \(self.state.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public)")
         let opening = newState == .expanded
         let closing = state == .expanded
         transitionID += 1

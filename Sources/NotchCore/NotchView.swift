@@ -58,7 +58,7 @@ struct NotchView: View {
             if let ears = model.module?.compactView(layout: layout) {
                 ears
                     .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
-                    .transition(.opacity)
+                    .transition(reduceMotion ? .opacity : .earsTuck)
             } else if model.isPinned {
                 CompactPlaceholderView(layout: layout)
                     .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
@@ -123,7 +123,7 @@ private struct CompactPlaceholderView: View {
 
     var body: some View {
         let ear = layout.compactEarWidth
-        let height = layout.geometry.notchRect.height
+        let height = layout.bodySize(for: .compact).height
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(.white.opacity(0.18))
@@ -149,6 +149,25 @@ private extension AnyTransition {
             active: BlurRevealModifier(progress: 0),
             identity: BlurRevealModifier(progress: 1)
         )
+    }
+}
+
+private extension AnyTransition {
+    /// The ears' content slides in toward the notch and blurs away as they shrink (and back out as they
+    /// grow), so closing reads even on a black background where the black ears themselves can't be seen.
+    static var earsTuck: AnyTransition {
+        .modifier(active: EarsTuckModifier(progress: 0), identity: EarsTuckModifier(progress: 1))
+    }
+}
+
+private struct EarsTuckModifier: ViewModifier {
+    let progress: Double
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(x: 0.3 + 0.7 * progress, y: 0.5 + 0.5 * progress, anchor: .center)
+            .blur(radius: (1 - progress) * 4)
+            .opacity(progress)
     }
 }
 

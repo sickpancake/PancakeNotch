@@ -49,7 +49,7 @@ public struct NotchLayout: Equatable, Sendable {
         case .closed:
             return notch
         case .compact:
-            return CGSize(width: notch.width + 2 * compactEarWidth, height: notch.height)
+            return CGSize(width: notch.width + 2 * compactEarWidth, height: geometry.compactHeight)
         case .expanded:
             let available = geometry.screenFrame.width - 2 * (Self.shadowPadding + radii(for: .expanded).top)
             let width = max(notch.width, min(Self.maxExpandedBodySize.width, available))
