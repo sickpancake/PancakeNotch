@@ -32,6 +32,9 @@ public protocol NotchModule: AnyObject {
     /// A drag from another app moved over the open notch. `point` is in notch-body coordinates
     /// (origin at the body's top-left, y down). Return `[]` to refuse it.
     func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation
+    /// A drag that opened the notch early moved inside the open panel's area, before AppKit reports it
+    /// over the window: show where it would land. `point` is in notch-body coordinates, as above.
+    func dragApproaching(_ pasteboard: NSPasteboard, at point: CGPoint)
     /// The drag was released over the notch. Return whether the module took it.
     func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool
     /// The drag left, ended, or the notch was hidden mid-drag: clear any drop highlight.
@@ -49,6 +52,7 @@ public extension NotchModule {
     func notchDidClose() {}
     func canAcceptDrag(_ pasteboard: NSPasteboard) -> Bool { false }
     func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation { [] }
+    func dragApproaching(_ pasteboard: NSPasteboard, at point: CGPoint) {}
     func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool { false }
     func dragEnded() {}
     func handleKey(_ event: NSEvent) -> Bool { false }

@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import SwiftUI
 
 /// Owns the notch state and the hover/click rules that move between states (ADR-0011).
@@ -46,6 +47,8 @@ public final class NotchViewModel {
     @ObservationIgnored private let collapseLinger: Duration
     /// Current pointer position in screen coordinates; injectable for tests.
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
+    /// Whether Mission Control is up; injectable for tests.
+    @ObservationIgnored private let isMissionControlActive: @MainActor () -> Bool
     /// Set when a click shrinks the panel: hovering the compact notch then doesn't reopen it.
     @ObservationIgnored private var collapsedByClick = false
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
@@ -56,13 +59,15 @@ public final class NotchViewModel {
         state: NotchState = .closed,
         behavior: NotchBehavior = NotchBehavior(),
         collapseLinger: Duration = .seconds(1),
-        pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation }
+        pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
+        isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
     ) {
         self.layout = layout
         self.state = state
         self.behavior = behavior
         self.collapseLinger = collapseLinger
         self.pointerLocation = pointerLocation
+        self.isMissionControlActive = isMissionControlActive
     }
 
     /// Called when the pointer enters or leaves the notch outline.
@@ -73,7 +78,7 @@ public final class NotchViewModel {
             guard state != .expanded, !collapsedByClick else { return }
             schedule(after: behavior.openDelay) { model in
                 model.open()
-                if model.behavior.hapticOnOpen {
+                if model.state == .expanded, model.behavior.hapticOnOpen {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
             }
@@ -191,8 +196,14 @@ public final class NotchViewModel {
         state == .expanded ? close() : open()
     }
 
+    /// Opens the panel, unless Mission Control is up: the notch is hidden there but still gets the
+    /// pointer, and opening it would cover the Spaces bar and steal its clicks.
     public func open() {
         hoverTask?.cancel()
+        guard !isMissionControlActive() else {
+            Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch").info("Not opening: Mission Control is up")
+            return
+        }
         collapsedByClick = false
         transition(to: .expanded)
     }

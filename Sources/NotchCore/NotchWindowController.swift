@@ -115,6 +115,10 @@ public final class NotchWindowController {
             self?.logger.info("File drag approaching the notch: opening early")
             model?.dragApproached()
         }
+        dragWatcher.onMove = { [weak self, weak model] pasteboard, location in
+            guard let self, let model, model.state == .expanded else { return }
+            model.module?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
+        }
         dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
         dragWatcher.start()
     }
@@ -172,6 +176,16 @@ extension NotchWindowController: NotchDropDelegate {
     private func bodyPoint(_ contentPoint: CGPoint, layout: NotchLayout) -> CGPoint {
         let origin = layout.bodyOrigin(for: .expanded)
         return CGPoint(x: contentPoint.x - origin.x, y: contentPoint.y - origin.y)
+    }
+
+    /// Converts a screen point (y up) to the expanded notch body: the body is centered on the notch
+    /// and hangs from the top of the screen.
+    private func bodyPoint(screen point: CGPoint, layout: NotchLayout) -> CGPoint {
+        let bodyWidth = layout.bodySize(for: .expanded).width
+        return CGPoint(
+            x: point.x - (layout.geometry.notchRect.midX - bodyWidth / 2),
+            y: layout.geometry.screenFrame.maxY - point.y
+        )
     }
 
     func dragEntered(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {

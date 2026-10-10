@@ -16,6 +16,8 @@ final class NotchDragWatcher {
     var accepts: (NSPasteboard) -> Bool = { _ in false }
     /// The drag came near: open the notch.
     var onApproach: () -> Void = {}
+    /// A drag that opened the notch moved within the area (screen coordinates).
+    var onMove: (NSPasteboard, CGPoint) -> Void = { _, _ in }
     /// A drag that opened the notch moved away again, or was released (anywhere).
     var onLeave: () -> Void = {}
 
@@ -24,6 +26,8 @@ final class NotchDragWatcher {
     /// What the current press is: not yet known, a drag of content we take, or anything else.
     private enum Press { case unknown, content, other }
     private var press = Press.other
+    /// The drag pasteboard, kept while a content drag is under way.
+    private var pasteboard: NSPasteboard?
     /// The notch is open because of this drag.
     private var didOpen = false
 
@@ -51,6 +55,7 @@ final class NotchDragWatcher {
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
         press = .other
+        pasteboard = nil
         didOpen = false
     }
 
@@ -64,21 +69,27 @@ final class NotchDragWatcher {
 
     private func dragged() {
         guard press != .other else { return }
-        let isNear = zone().contains(NSEvent.mouseLocation)
+        let location = NSEvent.mouseLocation
+        let isNear = zone().contains(location)
         if press == .unknown {
             guard isNear else { return }
             let pasteboard = NSPasteboard(name: .drag)
             guard pasteboard.changeCount != pressChangeCount else { return }
             press = accepts(pasteboard) ? .content : .other
+            if press == .content { self.pasteboard = pasteboard }
         }
-        guard press == .content, isNear != didOpen else { return }
-        // Entered or left the area: AppKit's own drag events only start once the pointer is over the window.
-        didOpen = isNear
-        isNear ? onApproach() : onLeave()
+        guard press == .content, let pasteboard else { return }
+        if isNear != didOpen {
+            // Entered or left the area: AppKit's own drag events only start once the pointer is over the window.
+            didOpen = isNear
+            isNear ? onApproach() : onLeave()
+        }
+        if isNear { onMove(pasteboard, location) }
     }
 
     private func released() {
         press = .other
+        pasteboard = nil
         guard didOpen else { return }
         didOpen = false
         onLeave()

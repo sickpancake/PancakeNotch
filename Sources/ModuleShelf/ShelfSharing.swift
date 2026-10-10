@@ -14,11 +14,11 @@ final class ShelfSharing: NSObject, NSSharingServiceDelegate, @preconcurrency NS
     private var temporaryFolders: [URL] = []
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
 
-    /// Whether a drag's content can be AirDropped (files, promised files, images or links).
+    /// Whether a drag's content can be AirDropped: files, promised files, images, links, or text (sent as `.txt`).
     static func canAirDrop(_ pasteboard: NSPasteboard) -> Bool {
         guard let types = pasteboard.types else { return false }
         let promises = Set(NSFilePromiseReceiver.readableDraggedTypes)
-        return types.contains { [.fileURL, .URL, .png, .tiff].contains($0) || promises.contains($0.rawValue) }
+        return types.contains { [.fileURL, .URL, .png, .tiff, .string].contains($0) || promises.contains($0.rawValue) }
     }
 
     private static var temporaryRoot: URL {

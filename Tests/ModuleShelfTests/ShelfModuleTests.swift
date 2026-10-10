@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import NotchCore
 import Testing
@@ -16,6 +17,27 @@ struct ShelfModuleTests {
         )
         notch.module = module
         return (module, notch)
+    }
+
+    /// A drag that opened the notch early shows the drop zones (with AirDrop, also for text) before
+    /// AppKit reports it over the window.
+    @Test func approachingDragShowsDropZonesWithAirDrop() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        notch.open()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("ShelfModuleTests-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setString("Pick up the cake", forType: .string)
+
+        let airDrop = ShelfLayout(notch.layout).airDropZone
+        module.dragApproaching(pasteboard, at: CGPoint(x: airDrop.midX, y: airDrop.midY))
+        #expect(module.dragCanAirDrop)
+        #expect(module.dropZone == .airDrop)
+        module.dragApproaching(pasteboard, at: CGPoint(x: airDrop.minX - 100, y: airDrop.midY))
+        #expect(module.dropZone == .shelf)
+        module.dragEnded()
+        #expect(module.dropZone == nil)
     }
 
     @Test func fullShelfHoldsTheRestAndAddsThemOnceThereIsRoom() throws {

@@ -148,17 +148,28 @@ public final class ShelfModule: NotchModule {
     }
 
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
-        let pasteboard = info.draggingPasteboard
+        showDropZones(for: info.draggingPasteboard, at: point) ? .copy : []
+    }
+
+    /// The notch opened early for a drag: show the drop zones (and AirDrop) straight away.
+    public func dragApproaching(_ pasteboard: NSPasteboard, at point: CGPoint) {
+        showDropZones(for: pasteboard, at: point)
+    }
+
+    /// Shows the Shelf and AirDrop drop zones, highlighting the one under `point`. Returns whether
+    /// the drag carries anything the Shelf takes.
+    @discardableResult
+    private func showDropZones(for pasteboard: NSPasteboard, at point: CGPoint) -> Bool {
         guard ShelfDropReader.canRead(pasteboard), let layout = notch?.layout else {
             dropZone = nil
-            return []
+            return false
         }
         if dropZone == nil {
             dragCanAirDrop = settings.showsAirDropZone && ShelfSharing.canAirDrop(pasteboard)
         }
         let zone: DropZone = dragCanAirDrop && ShelfLayout(layout).airDropZone.contains(point) ? .airDrop : .shelf
         if dropZone != zone { dropZone = zone }
-        return .copy
+        return true
     }
 
     public func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool {

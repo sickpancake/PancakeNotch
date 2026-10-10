@@ -132,6 +132,42 @@ struct NotchTallTests {
 }
 
 @MainActor
+struct NotchMissionControlTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    func makeModel(missionControl: Bool) -> NotchViewModel {
+        NotchViewModel(
+            layout: layout,
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
+            isMissionControlActive: { missionControl }
+        )
+    }
+
+    @Test func hoverDoesNothingInMissionControl() async throws {
+        let model = makeModel(missionControl: true)
+        model.hoverChanged(true)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.state == .closed)
+    }
+
+    @Test func clickAndDragDoNothingInMissionControl() {
+        let model = makeModel(missionControl: true)
+        model.tap()
+        #expect(model.state == .closed)
+        model.dragApproached()
+        #expect(model.state == .closed)
+        model.toggle()
+        #expect(model.state == .closed)
+    }
+
+    @Test func opensNormallyOtherwise() {
+        let model = makeModel(missionControl: false)
+        model.tap()
+        #expect(model.state == .expanded)
+    }
+}
+
+@MainActor
 struct NotchClickTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 
