@@ -10,6 +10,14 @@ struct ShelfView: View {
     let layout: ShelfLayout
 
     var body: some View {
+        if let item = module.detailItem, module.dropZone == nil {
+            ShelfDetailView(module: module, item: item, layout: layout)
+        } else {
+            tiles
+        }
+    }
+
+    private var tiles: some View {
         VStack(spacing: 0) {
             ShelfHeader(module: module, layout: layout)
                 .frame(height: layout.bandHeight)
@@ -226,13 +234,12 @@ struct ShelfTile: View {
     /// The right-click menu's actions, for VoiceOver.
     @ViewBuilder
     private var accessibilityActions: some View {
+        Button(String(localized: "Copy")) { module.copy([item]) }
         if item.isFile {
             Button(String(localized: "Open")) { module.open([item]) }
             Button(String(localized: "Quick Look")) { module.quickLook([item]) }
             Button(String(localized: "Show in Finder")) { module.reveal([item]) }
             Button(String(localized: "Copy Path")) { module.copyPaths([item]) }
-        } else {
-            Button(String(localized: "Copy")) { module.copy([item]) }
         }
         if case .link = item.kind {
             Button(String(localized: "Open Link")) { module.open([item]) }

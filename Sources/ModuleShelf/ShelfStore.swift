@@ -156,6 +156,27 @@ public final class ShelfStore {
         }
     }
 
+    // MARK: Editing
+
+    /// Replaces a text or link item's content (the editor). With `save: false` the change stays in memory
+    /// while typing; `saveEdits()` writes it.
+    public func update(_ id: UUID, kind: ShelfItem.Kind, save shouldSave: Bool = true) {
+        guard let index = items.firstIndex(where: { $0.id == id }), !items[index].isFile,
+              items[index].kind != kind else { return }
+        items[index].kind = kind
+        hasUnsavedEdits = !shouldSave
+        if shouldSave { save() }
+    }
+
+    /// Writes edits kept in memory by `update(_:kind:save:)`.
+    public func saveEdits() {
+        guard hasUnsavedEdits else { return }
+        hasUnsavedEdits = false
+        save()
+    }
+
+    @ObservationIgnored private var hasUnsavedEdits = false
+
     // MARK: Checking
 
     /// Follows moved and renamed files, removes items whose file is gone, and clears items older than
@@ -210,6 +231,7 @@ public final class ShelfStore {
     // MARK: Saving
 
     private func save() {
+        hasUnsavedEdits = false
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(items).write(to: indexURL, options: .atomic)

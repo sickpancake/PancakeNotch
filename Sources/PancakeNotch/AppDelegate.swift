@@ -85,6 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
     /// when the menu bar icon is hidden.
+    /// Writes text typed in the Shelf's editor that's still waiting to be saved.
+    func applicationWillTerminate(_ notification: Notification) {
+        shelfStore.saveEdits()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showAppWindow()
         return false

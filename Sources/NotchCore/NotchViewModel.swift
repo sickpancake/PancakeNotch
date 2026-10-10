@@ -90,6 +90,39 @@ public final class NotchViewModel {
         if state != .expanded { open() }
     }
 
+    /// A file drag elsewhere on screen came near the notch: open before it reaches the top edge, where
+    /// macOS would start Mission Control instead (ADR-0011).
+    public func dragApproached() {
+        dragEntered()
+    }
+
+    /// A drag that opened the notch early moved away or was released, maybe somewhere else (or Mission
+    /// Control took it). AppKit sends no hover events during a drag, so check where the pointer is now.
+    /// Over the notch, the window's own drag events handle the drop (and may not have arrived yet).
+    public func approachingDragEnded() {
+        guard !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
+        module?.dragEnded()
+        scheduleCloseIfIdle()
+    }
+
+    /// Grows the open panel to the taller version a module asked for (the Shelf's editor and preview),
+    /// or back. The panel goes back to normal on its own when the notch closes.
+    public func setTall(_ tall: Bool) {
+        guard layout.isTall != tall, !tall || state == .expanded else { return }
+        transitionID += 1
+        let id = transitionID
+        var target = layout
+        target.isTall = tall
+        withAnimation(Self.animation(opening: tall)) {
+            layout = target
+        } completion: { [weak self] in
+            guard let self, self.transitionID == id else { return }
+            self.fitWindow?(self.state)
+        }
+        // Grow the window now, shrink it once the animation settles.
+        if tall { fitWindow?(state) }
+    }
+
     /// The drag left the notch without dropping: close like a hover exit.
     public func dragExited() {
         module?.dragEnded()
@@ -189,6 +222,8 @@ public final class NotchViewModel {
         fitWindow?(max(state, newState))
         withAnimation(Self.animation(opening: opening)) {
             state = newState
+            // The tall panel shrinks along with the close.
+            if closing { layout.isTall = false }
         } completion: { [weak self] in
             // Shrink only after the latest animation, so an earlier one can't clip a newer one.
             guard let self, self.transitionID == id else { return }
@@ -214,6 +249,7 @@ public final class NotchViewModel {
         module?.dragEnded()
         let wasExpanded = state == .expanded
         state = restingState
+        layout.isTall = false
         fitWindow?(state)
         if wasExpanded { leftExpanded() }
     }

@@ -1,4 +1,5 @@
 import AppKit
+import os
 import Quartz
 
 /// AirDrop and the Share menu. Both run in system processes; we only hand over URLs and text.
@@ -11,6 +12,7 @@ final class ShelfSharing: NSObject, NSSharingServiceDelegate, @preconcurrency NS
     private var picker: NSSharingServicePicker?
     /// Temporary content sent from the AirDrop zone, deleted once it's sent.
     private var temporaryFolders: [URL] = []
+    private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
 
     /// Whether a drag's content can be AirDropped (files, promised files, images or links).
     static func canAirDrop(_ pasteboard: NSPasteboard) -> Bool {
@@ -41,15 +43,32 @@ final class ShelfSharing: NSObject, NSSharingServiceDelegate, @preconcurrency NS
     }
 
     func airDrop(_ items: [Any]) {
+        let items = items.compactMap(airDroppable)
         guard !items.isEmpty,
               let service = NSSharingService(named: .sendViaAirDrop),
               service.canPerform(withItems: items) else {
+            logger.error("AirDrop can't send these items")
+            NSSound.beep()
             finish()
             return
         }
         service.delegate = self
         self.service = service
-        service.perform(withItems: items)
+        // We're an accessory app that's rarely in front: without this the AirDrop window opens behind
+        // the active app, so nothing seems to happen. Wait for a closing menu to finish first.
+        NSApp.activate()
+        Task { @MainActor in
+            service.perform(withItems: items)
+        }
+    }
+
+    /// AirDrop takes files and links but not plain text: text goes as a `.txt` file.
+    private func airDroppable(_ item: Any) -> Any? {
+        guard let text = item as? String else { return item }
+        let name = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        guard let url = ShelfOpenWith.temporaryTextFile(text, name: name) else { return nil }
+        deleteWhenFinished([url.deletingLastPathComponent()])
+        return url
     }
 
     func share(_ items: [Any], from view: NSView) {

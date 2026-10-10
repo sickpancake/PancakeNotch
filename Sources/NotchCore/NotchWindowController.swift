@@ -44,7 +44,10 @@ public final class NotchWindowController {
 
     /// The module shown in the notch; `nil` shows the placeholder and refuses drops.
     public var module: (any NotchModule)? {
-        didSet { model?.module = module }
+        didSet {
+            model?.module = module
+            updateDragWatcher()
+        }
     }
 
     /// When true, taking keyboard focus also activates the app (fallback if a non-activating
@@ -52,6 +55,7 @@ public final class NotchWindowController {
     public var activatesForKeyFocus = false
 
     private var appToRestore: NSRunningApplication?
+    private let dragWatcher = NotchDragWatcher()
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
 
     /// Opens or closes the notch (keyboard shortcut).
@@ -69,9 +73,10 @@ public final class NotchWindowController {
             updateVisibility()
             return
         }
-        let layout = NotchLayout(geometry: geometry)
+        var layout = NotchLayout(geometry: geometry)
 
         if let panel, let model {
+            layout.isTall = model.layout.isTall
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
             panel.setFrame(layout.windowFrame(for: model.state), display: true)
@@ -88,6 +93,30 @@ public final class NotchWindowController {
             model?.reset()
             panel?.orderOut(nil)
         }
+        updateDragWatcher()
+    }
+
+    /// Watches for file drags heading to the notch while it's showing and a module takes drops.
+    private func updateDragWatcher() {
+        guard let model, module != nil, !model.isPinned, hasGeometry, !isSuppressed, isEnabled else {
+            dragWatcher.stop()
+            return
+        }
+        guard !dragWatcher.isRunning else { return }
+        dragWatcher.zone = { [weak model] in
+            guard let model else { return .zero }
+            // The area the normal open panel covers, so the drop lands inside it.
+            return NotchLayout(geometry: model.layout.geometry).outlineFrame(for: .expanded)
+        }
+        dragWatcher.accepts = { [weak model] pasteboard in
+            model?.module?.canAcceptDrag(pasteboard) ?? false
+        }
+        dragWatcher.onApproach = { [weak self, weak model] in
+            self?.logger.info("File drag approaching the notch: opening early")
+            model?.dragApproached()
+        }
+        dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
+        dragWatcher.start()
     }
 
     private func createPanel(layout: NotchLayout) {
@@ -111,6 +140,7 @@ public final class NotchWindowController {
         self.model = model
         self.panel = panel
         self.container = container
+        updateDragWatcher()
     }
 
     private func takeKeyFocus() {

@@ -241,6 +241,16 @@ private struct ShelfSettingsCard: View {
                     Toggle(String(localized: "Show AirDrop while dragging"), isOn: $settings.showsAirDropZone)
                         .labelsHidden()
                 }
+                SettingsRow(
+                    title: String(localized: "Mission Control opens when dropping?"),
+                    subtitle: String(localized: "macOS opens Mission Control when you drag to the very top of the screen. The notch opens before that, so drop a little lower, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
+                ) {
+                    Button(String(localized: "Open Desktop & Dock")) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
             }
             .disabled(!settings.isEnabled)
         }

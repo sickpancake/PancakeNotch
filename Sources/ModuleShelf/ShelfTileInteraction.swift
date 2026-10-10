@@ -4,6 +4,8 @@ import SwiftUI
 
 /// Invisible AppKit layer over a tile (or the drag-all handle, `itemID == nil`) that handles clicks,
 /// the right-click menu, Quick Look and dragging items out. SwiftUI draws the tile underneath.
+///
+/// Clicks: one click shows the item in the tall notch, a double-click copies it, ⌘/⇧-click selects.
 struct ShelfTileInteraction: NSViewRepresentable {
     let module: ShelfModule
     let itemID: UUID?
@@ -26,6 +28,8 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
     /// A plain click on an already-selected tile only narrows the selection on mouse-up,
     /// so dragging a multi-selection doesn't drop it.
     private var narrowSelectionOnMouseUp = false
+    /// A plain single click shows the item once the button comes up without a drag.
+    private var expandOnMouseUp = false
 
     init(module: ShelfModule, itemID: UUID?) {
         self.module = module
@@ -43,22 +47,30 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
     override func mouseDown(with event: NSEvent) {
         mouseDownEvent = event
         narrowSelectionOnMouseUp = false
+        expandOnMouseUp = false
+        module.cancelPendingExpand()
         module.requestFocus()
         window?.makeFirstResponder(self)
         guard let itemID else { return }
         let modifiers = event.modifierFlags.intersection([.command, .shift])
-        if event.clickCount == 2, !module.isChoosing {
-            module.activate(itemID)
-        } else if modifiers.isEmpty, module.selection.contains(itemID), module.selection.count > 1 {
-            narrowSelectionOnMouseUp = true
-        } else {
+        if event.clickCount >= 2, !module.isChoosing, modifiers.isEmpty {
+            module.copy(module.targets(for: itemID))
+        } else if !modifiers.isEmpty || module.isChoosing {
             module.click(itemID, modifiers: modifiers)
+        } else if module.selection.contains(itemID), module.selection.count > 1 {
+            narrowSelectionOnMouseUp = true
+            expandOnMouseUp = true
+        } else {
+            module.click(itemID, modifiers: [])
+            expandOnMouseUp = true
         }
     }
 
     override func mouseUp(with event: NSEvent) {
         if narrowSelectionOnMouseUp, let itemID { module.click(itemID, modifiers: []) }
+        if expandOnMouseUp, let itemID { module.scheduleExpand(itemID) }
         narrowSelectionOnMouseUp = false
+        expandOnMouseUp = false
         mouseDownEvent = nil
     }
 
@@ -68,18 +80,17 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
         guard distance > 3 else { return }
         mouseDownEvent = nil
         narrowSelectionOnMouseUp = false
+        expandOnMouseUp = false
         beginDragOut(with: start)
     }
 
     override func rightMouseDown(with event: NSEvent) {
         guard let itemID else { return }
+        module.cancelPendingExpand()
         module.requestFocus()
         window?.makeFirstResponder(self)
         if !module.selection.contains(itemID) { module.click(itemID, modifiers: []) }
-        let menu = ShelfMenu.make(for: module.targets(for: itemID), module: module, anchor: self)
-        module.setMenuOpen(true)
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-        module.setMenuOpen(false)
+        module.showMenu(ShelfMenu.entries(for: module.targets(for: itemID), module: module, anchor: self))
     }
 
     // MARK: Dragging out
@@ -135,56 +146,39 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
     }
 }
 
-/// The right-click menu for one or more shelf items.
+/// The right-click menu for one or more shelf items (shown by `ShelfMenuPanel`).
 @MainActor
 enum ShelfMenu {
-    static func make(for items: [ShelfItem], module: ShelfModule, anchor: NSView) -> NSMenu {
-        let menu = NSMenu()
+    static func entries(for items: [ShelfItem], module: ShelfModule, anchor: NSView) -> [ShelfMenuEntry] {
+        var entries: [ShelfMenuEntry] = []
         let files = items.filter(\.isFile)
         let single = items.count == 1 ? items.first : nil
+        var group = false
 
-        func add(_ title: String, _ action: @escaping @MainActor () -> Void) {
-            menu.addItem(ShelfMenuItem(title: title, action: action))
+        func add(_ title: String, _ symbol: String, destructive: Bool = false, _ action: @escaping @MainActor () -> Void) {
+            entries.append(ShelfMenuEntry(title: title, symbol: symbol, isDestructive: destructive, startsGroup: group && !entries.isEmpty, action: action))
+            group = false
         }
 
         if !files.isEmpty {
-            add(String(localized: "Open")) { module.open(files) }
-            add(String(localized: "Quick Look")) { module.quickLook(files) }
-            add(String(localized: "Show in Finder")) { module.reveal(files) }
-            add(String(localized: "Copy Path")) { module.copyPaths(files) }
+            add(String(localized: "Open"), "arrow.up.forward.app") { module.open(files) }
+            add(String(localized: "Quick Look"), "eye") { module.quickLook(files) }
+            add(String(localized: "Show in Finder"), "folder") { module.reveal(files) }
+            add(String(localized: "Copy Path"), "link") { module.copyPaths(files) }
         }
         if let single, case .link = single.kind {
-            add(String(localized: "Open Link")) { module.open([single]) }
+            add(String(localized: "Open Link"), "safari") { module.open([single]) }
         }
         if items.contains(where: { !$0.isFile }) {
-            add(String(localized: "Copy")) { module.copy(items.filter { !$0.isFile }) }
+            add(String(localized: "Copy"), "doc.on.doc") { module.copy(items.filter { !$0.isFile }) }
         }
-        menu.addItem(.separator())
-        add(String(localized: "AirDrop")) { module.airDrop(items) }
-        add(String(localized: "Share…")) { module.share(items, from: anchor) }
-        menu.addItem(.separator())
+        group = true
+        add(String(localized: "AirDrop"), "dot.radiowaves.left.and.right") { module.airDrop(items) }
+        add(String(localized: "Share…"), "square.and.arrow.up") { module.share(items, from: anchor) }
+        group = true
         add(items.count > 1
             ? String(localized: "Remove \(items.count) Items", comment: "Context menu; several shelf items")
-            : String(localized: "Remove")) { module.remove(items.map(\.id)) }
-        return menu
-    }
-}
-
-/// A menu item that runs a closure.
-@MainActor
-private final class ShelfMenuItem: NSMenuItem {
-    private let handler: @MainActor () -> Void
-
-    init(title: String, action handler: @escaping @MainActor () -> Void) {
-        self.handler = handler
-        super.init(title: title, action: #selector(run), keyEquivalent: "")
-        target = self
-    }
-
-    @available(*, unavailable)
-    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    @objc private func run() {
-        handler()
+            : String(localized: "Remove"), "trash", destructive: true) { module.remove(items.map(\.id)) }
+        return entries
     }
 }

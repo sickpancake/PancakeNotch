@@ -85,6 +85,42 @@ struct NotchWindowFittingTests {
 }
 
 @MainActor
+struct NotchTallTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    @Test func tallOnlyWhileOpenAndClosingShrinksIt() {
+        let model = NotchViewModel(layout: layout)
+        var fitted: [NotchState] = []
+        model.fitWindow = { fitted.append($0) }
+        model.setTall(true)
+        #expect(!model.layout.isTall)
+
+        model.open()
+        fitted = []
+        model.setTall(true)
+        #expect(model.layout.isTall)
+        #expect(fitted.first == .expanded)
+
+        model.close()
+        #expect(!model.layout.isTall)
+        #expect(model.state == .closed)
+    }
+
+    @Test func approachingDragOpensAndClosesAgainWhenReleasedElsewhere() async throws {
+        let model = NotchViewModel(
+            layout: layout,
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
+            pointerLocation: { CGPoint(x: 100, y: 100) }
+        )
+        model.dragApproached()
+        #expect(model.state == .expanded)
+        model.approachingDragEnded()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.state == .closed)
+    }
+}
+
+@MainActor
 struct NotchClickTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 

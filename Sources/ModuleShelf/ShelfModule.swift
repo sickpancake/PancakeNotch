@@ -11,6 +11,7 @@ public final class ShelfModule: NotchModule {
     public let store: ShelfStore
     public let settings: ShelfSettings
     let thumbnails = ShelfThumbnails()
+    let largePreview = ShelfLargePreview()
     @ObservationIgnored let sharing = ShelfSharing()
     @ObservationIgnored let quickLook = ShelfQuickLook()
 
@@ -45,6 +46,8 @@ public final class ShelfModule: NotchModule {
     var dragCanAirDrop = false
     var prompt: Prompt? {
         didSet {
+            // A card (e.g. a late promised file made the Shelf full) shows on the tiles: leave the item view.
+            if prompt != nil, detailID != nil { detailID = nil }
             holdChanged(from: oldValue != nil || otherHolds)
             // A late promised file can raise a card after the notch closed: show it.
             if oldValue == nil, prompt != nil, let notch, notch.state != .expanded { notch.open() }
@@ -58,6 +61,16 @@ public final class ShelfModule: NotchModule {
     var confirmingClear = false
     /// The text/link item just copied, for a brief "Copied" flash.
     var copiedID: UUID?
+    /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
+    var detailID: UUID? {
+        didSet { if detailID != oldValue { detailChanged(from: oldValue) } }
+    }
+    var detailInfo: ShelfDetailInfo?
+    @ObservationIgnored var pendingExpand: Task<Void, Never>?
+    @ObservationIgnored var saveTask: Task<Void, Never>?
+    @ObservationIgnored var clickAwayMonitor: Any?
+    @ObservationIgnored var appSwitchObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var menu: ShelfMenuPanel?
 
     /// Rendering off-screen: no scroll view or AppKit overlays, which `ImageRenderer` can't draw.
     @ObservationIgnored var isSnapshot = false
@@ -86,6 +99,10 @@ public final class ShelfModule: NotchModule {
         if notch == nil {
             // Switched off: answer any open card (waiting files are discarded) and let go of the notch.
             if prompt != nil { dismissPrompt() }
+            cancelPendingExpand()
+            menu?.close()
+            detailID = nil
+            self.notch?.setTall(false)
             self.notch?.releaseKeyFocus?()
             self.notch?.restingState = .closed
             store.onChange = nil
@@ -105,7 +122,7 @@ public final class ShelfModule: NotchModule {
         store.isFull ? AnyView(ShelfFullEars(layout: layout)) : nil
     }
 
-    public var holdsOpen: Bool { prompt != nil || otherHolds }
+    public var holdsOpen: Bool { prompt != nil || detailID != nil || otherHolds }
 
     public var accessibilityStatus: String? {
         store.isFull ? String(localized: "Shelf is full") : nil
@@ -119,11 +136,18 @@ public final class ShelfModule: NotchModule {
     }
 
     public func notchDidClose() {
+        cancelPendingExpand()
+        menu?.close()
+        detailID = nil
         thumbnails.clear()
         selection = []
         confirmingClear = false
         dropZone = nil
         if prompt != nil { dismissPrompt() }
+    }
+
+    public func canAcceptDrag(_ pasteboard: NSPasteboard) -> Bool {
+        ShelfDropReader.canRead(pasteboard)
     }
 
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
@@ -156,6 +180,8 @@ public final class ShelfModule: NotchModule {
 
         let drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
         guard !drop.isEmpty else { return false }
+        // Show the new items on the tiles (and any card about them).
+        closeDetail()
         offer(drop.inputs)
         receive(drop.promises)
         return true
@@ -166,18 +192,32 @@ public final class ShelfModule: NotchModule {
     }
 
     public func handleKey(_ event: NSEvent) -> Bool {
+        // An open menu takes every key, like a system menu.
+        if let menu, menu.isOpen {
+            // ⌘ shortcuts (⌘Q…) still go through.
+            return menu.handleKey(event) || !event.modifierFlags.contains(.command)
+        }
+        // The tall view: Esc goes back to the tiles (Space too, for a file); other keys belong to the editor.
+        if let item = detailItem {
+            // The app usually isn't active, so the Edit menu may not see ⌘Z/⌘C/…: pass them to the editor.
+            if let action = Self.editAction(for: event) { return NSApp.sendAction(action, to: nil, from: nil) }
+            let closes = event.keyCode == 53 || (event.keyCode == 49 && item.isFile)
+            if closes { closeDetail() }
+            return closes
+        }
         let command = event.modifierFlags.contains(.command)
         switch event.keyCode {
-        case 49: // Space
-            quickLookSelection()
+        case 49: // Space, like a click: show the item in the tall notch
+            guard prompt == nil else { return false }
+            if let id = orderedSelection.first ?? store.items.first?.id { openDetail(id) }
             return true
         case 51, 117: // Delete, Forward Delete
             guard prompt == nil else { return false }
             remove(Array(selection))
             return true
-        case 36, 76: // Return, Enter
+        case 36, 76: // Return, Enter: same as Space
             guard prompt == nil else { return false }
-            for id in orderedSelection { activate(id) }
+            if let id = orderedSelection.first { openDetail(id) }
             return true
         case 123, 124: // ← →: move the selection along the row
             guard prompt == nil || isChoosing else { return false }
@@ -202,6 +242,21 @@ public final class ShelfModule: NotchModule {
         }
     }
 
+    /// ⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A as the standard edit actions.
+    static func editAction(for event: NSEvent) -> Selector? {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard modifiers == .command || modifiers == [.command, .shift] else { return nil }
+        let shift = modifiers.contains(.shift)
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "z": return shift ? Selector(("redo:")) : Selector(("undo:"))
+        case "x" where !shift: return #selector(NSText.cut(_:))
+        case "c" where !shift: return #selector(NSText.copy(_:))
+        case "v" where !shift: return #selector(NSText.paste(_:))
+        case "a" where !shift: return #selector(NSText.selectAll(_:))
+        default: return nil
+        }
+    }
+
     // MARK: Holding the notch open
 
     /// Changes a hold and tells the notch if it was the last one.
@@ -216,6 +271,17 @@ public final class ShelfModule: NotchModule {
     }
 
     func setMenuOpen(_ open: Bool) { setHold { $0.isMenuOpen = open } }
+
+    /// Shows the Shelf's own pop-up menu at the pointer; it holds the notch open while it's up.
+    func showMenu(_ entries: [ShelfMenuEntry]) {
+        menu?.close()
+        guard !entries.isEmpty else { return }
+        setMenuOpen(true)
+        menu = ShelfMenuPanel(entries: entries, at: NSEvent.mouseLocation) { [weak self] in
+            self?.menu = nil
+            self?.setMenuOpen(false)
+        }
+    }
     func setDraggingOut(_ dragging: Bool) { setHold { $0.isDraggingOut = dragging } }
 
     /// Takes keyboard focus after a click, so Space, Delete and ⌘A work.
@@ -385,6 +451,7 @@ public final class ShelfModule: NotchModule {
     private func storeChanged() {
         let ids = Set(store.items.map(\.id))
         selection.formIntersection(ids)
+        if let detailID, !ids.contains(detailID) { setHold { $0.detailID = nil } }
         thumbnails.keepOnly(ids)
         if notch?.state == .expanded { thumbnails.load(store.items, scale: 2) }
         if store.items.isEmpty { confirmingClear = false }
@@ -458,18 +525,13 @@ public final class ShelfModule: NotchModule {
 
     // MARK: Actions
 
-    /// Double-click or Return: open a file, copy a text or link item.
+    /// VoiceOver's default action: toggle while choosing, otherwise show the item in the tall notch.
     func activate(_ id: UUID) {
         if case .choosing = prompt {
             click(id, modifiers: [])
             return
         }
-        guard let item = store.items.first(where: { $0.id == id }) else { return }
-        if item.isFile {
-            open([item])
-        } else {
-            copy([item])
-        }
+        openDetail(id)
     }
 
     func open(_ items: [ShelfItem]) {
@@ -528,11 +590,6 @@ public final class ShelfModule: NotchModule {
         } else {
             confirmingClear = true
         }
-    }
-
-    func quickLookSelection() {
-        let items = store.items.filter { selection.contains($0.id) && $0.isFile }
-        quickLook(items.isEmpty ? Array(store.items.filter(\.isFile).prefix(1)) : items)
     }
 
     func quickLook(_ items: [ShelfItem]) {

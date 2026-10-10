@@ -20,8 +20,8 @@ public struct NotchPreview: View {
         ))
     }
 
-    /// Size the preview needs: room for the expanded panel and its shadow.
-    public var size: CGSize { model.layout.largestWindowSize }
+    /// Size the preview needs: room for the expanded panel and its shadow (the preview never grows tall).
+    public var size: CGSize { model.layout.windowFrame(for: .expanded).size }
 
     public var body: some View {
         NotchView(model: model)

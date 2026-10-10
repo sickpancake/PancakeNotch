@@ -69,9 +69,59 @@ final class ShelfThumbnails {
     }
 
     /// `nonisolated` so Quick Look's completion runs on its own queue, not the main actor.
-    private nonisolated static func generate(_ request: QLThumbnailGenerator.Request, done: @escaping @Sendable (CGImage?) -> Void) {
+    nonisolated static func generate(_ request: QLThumbnailGenerator.Request, done: @escaping @Sendable (CGImage?) -> Void) {
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
             done(representation?.cgImage)
         }
+    }
+}
+
+/// The big preview in the tall notch, for the one file being shown. Made by Quick Look out of process,
+/// like the tiles, and dropped as soon as the file is closed (ADR-0006): at most one ~0.6 MB image.
+@MainActor
+@Observable
+final class ShelfLargePreview {
+    static let pointSize = CGSize(width: 200, height: 200)
+
+    private(set) var image: NSImage?
+    @ObservationIgnored private var request: QLThumbnailGenerator.Request?
+    @ObservationIgnored private var generation = 0
+
+    func load(_ id: UUID, url: URL, scale: CGFloat) {
+        clear()
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: Self.pointSize, scale: scale, representationTypes: .all)
+        self.request = request
+        let current = generation
+        ShelfThumbnails.generate(request) { [weak self] cgImage in
+            Task { @MainActor in
+                guard let self, self.generation == current else { return }
+                self.request = nil
+                self.image = cgImage.map { NSImage(cgImage: $0, size: CGSize(width: CGFloat($0.width) / scale, height: CGFloat($0.height) / scale)) }
+                    ?? Self.icon(forFile: url.path)
+            }
+        }
+    }
+
+    /// The Finder icon at preview size only.
+    private static func icon(forFile path: String) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        let image = NSImage(size: pointSize)
+        var rect = CGRect(origin: .zero, size: CGSize(width: pointSize.width * 2, height: pointSize.height * 2))
+        if let cgImage = icon.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
+            image.addRepresentation(NSBitmapImageRep(cgImage: cgImage))
+        }
+        return image
+    }
+
+    func clear() {
+        generation += 1
+        if let request { QLThumbnailGenerator.shared.cancel(request) }
+        request = nil
+        image = nil
+    }
+
+    /// Sets the image directly (off-screen snapshots).
+    func preload(_ image: NSImage) {
+        self.image = image
     }
 }

@@ -26,6 +26,9 @@ public protocol NotchModule: AnyObject {
     func notchDidOpen()
     func notchDidClose()
 
+    /// A drag elsewhere on screen came near the notch carrying this content. Return `true` to open the
+    /// notch early, before the drag reaches the top edge where macOS starts Mission Control.
+    func canAcceptDrag(_ pasteboard: NSPasteboard) -> Bool
     /// A drag from another app moved over the open notch. `point` is in notch-body coordinates
     /// (origin at the body's top-left, y down). Return `[]` to refuse it.
     func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation
@@ -44,6 +47,7 @@ public extension NotchModule {
     var accessibilityStatus: String? { nil }
     func notchDidOpen() {}
     func notchDidClose() {}
+    func canAcceptDrag(_ pasteboard: NSPasteboard) -> Bool { false }
     func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation { [] }
     func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool { false }
     func dragEnded() {}

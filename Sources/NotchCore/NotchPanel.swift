@@ -11,7 +11,9 @@ final class NotchPanel: NSPanel {
         )
         isFloatingPanel = true
         level = .mainMenu + 3
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // `.transient`: Mission Control hides the notch instead of leaving it drawn over its window
+        // thumbnails (a drag touching the top edge can start Mission Control mid-drop).
+        collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false

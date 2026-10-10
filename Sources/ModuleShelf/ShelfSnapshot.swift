@@ -60,6 +60,18 @@ public enum ShelfSnapshot {
             module.copiedID = module.store.items.first(where: { !$0.isFile })?.id
         }
 
+        // The tall notch: text editor, link editor, file preview.
+        let note = "Pick up the cake at 5, and don't forget the candles.\n\nAlso: call the bakery about the gluten-free one, and check if the shop on the corner still sells the sparkly number candles."
+        for input: ShelfInput in [.text(note), .link(URL(string: "https://github.com/sickpancake/PancakeNotch")!)] {
+            row(extra: [input]) { module in
+                module.detailID = module.store.items.first?.id
+            }
+        }
+        row(files: ["Quarterly Report.pdf"]) { module in
+            module.detailID = module.store.items.first?.id
+            module.largePreview.preload(NSWorkspace.shared.icon(for: .pdf))
+        }
+
         try? FileManager.default.removeItem(at: root)
         return rows
     }

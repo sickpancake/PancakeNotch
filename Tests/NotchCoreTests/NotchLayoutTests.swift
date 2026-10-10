@@ -39,6 +39,16 @@ struct NotchLayoutTests {
         #expect(shape.height <= frame.height)
     }
 
+    @Test func tallPanelIsTallerAndFitsTheContent() {
+        let layout = NotchLayout(geometry: geometry)
+        let tall = NotchLayout(geometry: geometry, isTall: true)
+        #expect(tall.bodySize(for: .expanded).height > layout.bodySize(for: .expanded).height)
+        #expect(tall.bodySize(for: .expanded).width == layout.bodySize(for: .expanded).width)
+        #expect(tall.bodySize(for: .compact) == layout.bodySize(for: .compact))
+        #expect(layout.largestWindowSize.height >= tall.windowFrame(for: .expanded).height)
+        #expect(tall.windowFrame(for: .expanded).height < geometry.screenFrame.height)
+    }
+
     @Test func expandedPanelFitsNarrowScreens() {
         let narrow = NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: 500, height: 400))
         let layout = NotchLayout(geometry: narrow)
