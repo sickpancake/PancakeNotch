@@ -48,6 +48,7 @@ public final class ShelfModule: NotchModule {
 
     /// Rendering off-screen: no scroll view or AppKit overlays, which `ImageRenderer` can't draw.
     @ObservationIgnored var isSnapshot = false
+    @ObservationIgnored private var isRefilling = false
     @ObservationIgnored private var isDraggingOut = false
     @ObservationIgnored private var isMenuOpen = false
     @ObservationIgnored private var isSharing = false
@@ -263,12 +264,16 @@ public final class ShelfModule: NotchModule {
 
     /// Room was made while items were waiting: add as many as now fit.
     private func refill() {
+        // Adding changes the store, which calls back into here: don't add the same items twice.
+        guard !isRefilling else { return }
         let pending: [ShelfInput]
         switch prompt {
         case .full(let waiting), .choosing(let waiting): pending = waiting
         default: return
         }
         guard !store.isFull else { return }
+        isRefilling = true
+        defer { isRefilling = false }
         switch store.add(pending, duplicates: .addAgain) {
         case .overflow(_, let rest):
             prompt = .full(pending: rest)
