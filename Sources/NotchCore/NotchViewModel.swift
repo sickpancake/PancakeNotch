@@ -113,7 +113,7 @@ public final class NotchViewModel {
         let id = transitionID
         var target = layout
         target.isTall = tall
-        withAnimation(Self.animation(opening: tall)) {
+        withAnimation(Self.tallAnimation) {
             layout = target
         } completion: { [weak self] in
             guard let self, self.transitionID == id else { return }
@@ -252,6 +252,13 @@ public final class NotchViewModel {
         layout.isTall = false
         fitWindow?(state)
         if wasExpanded { leftExpanded() }
+    }
+
+    /// Growing to the tall panel and back: quicker than opening, it follows a click.
+    static var tallAnimation: Animation {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? .easeInOut(duration: 0.15)
+            : .spring(response: 0.28, dampingFraction: 0.88)
     }
 
     static func animation(opening: Bool) -> Animation {

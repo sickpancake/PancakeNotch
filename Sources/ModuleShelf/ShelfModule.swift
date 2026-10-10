@@ -66,7 +66,9 @@ public final class ShelfModule: NotchModule {
         didSet { if detailID != oldValue { detailChanged(from: oldValue) } }
     }
     var detailInfo: ShelfDetailInfo?
-    @ObservationIgnored var pendingExpand: Task<Void, Never>?
+    /// Right after a click opens an item, a second click (double-click) copies it.
+    @ObservationIgnored var secondClickMonitor: Any?
+    @ObservationIgnored var secondClickTimeout: Task<Void, Never>?
     @ObservationIgnored var saveTask: Task<Void, Never>?
     @ObservationIgnored var clickAwayMonitor: Any?
     @ObservationIgnored var appSwitchObserver: (any NSObjectProtocol)?
@@ -99,7 +101,7 @@ public final class ShelfModule: NotchModule {
         if notch == nil {
             // Switched off: answer any open card (waiting files are discarded) and let go of the notch.
             if prompt != nil { dismissPrompt() }
-            cancelPendingExpand()
+            endSecondClickWatch()
             menu?.close()
             detailID = nil
             self.notch?.setTall(false)
@@ -136,7 +138,7 @@ public final class ShelfModule: NotchModule {
     }
 
     public func notchDidClose() {
-        cancelPendingExpand()
+        endSecondClickWatch()
         menu?.close()
         detailID = nil
         thumbnails.clear()

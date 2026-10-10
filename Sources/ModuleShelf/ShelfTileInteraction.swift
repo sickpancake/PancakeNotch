@@ -28,7 +28,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
     /// A plain click on an already-selected tile only narrows the selection on mouse-up,
     /// so dragging a multi-selection doesn't drop it.
     private var narrowSelectionOnMouseUp = false
-    /// A plain single click shows the item once the button comes up without a drag.
+    /// A plain single click shows the item as soon as the button comes up without a drag.
     private var expandOnMouseUp = false
 
     init(module: ShelfModule, itemID: UUID?) {
@@ -48,7 +48,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
         mouseDownEvent = event
         narrowSelectionOnMouseUp = false
         expandOnMouseUp = false
-        module.cancelPendingExpand()
+        module.endSecondClickWatch()
         module.requestFocus()
         window?.makeFirstResponder(self)
         guard let itemID else { return }
@@ -68,7 +68,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
 
     override func mouseUp(with event: NSEvent) {
         if narrowSelectionOnMouseUp, let itemID { module.click(itemID, modifiers: []) }
-        if expandOnMouseUp, let itemID { module.scheduleExpand(itemID) }
+        if expandOnMouseUp, let itemID { module.expandFromClick(itemID) }
         narrowSelectionOnMouseUp = false
         expandOnMouseUp = false
         mouseDownEvent = nil
@@ -86,7 +86,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
 
     override func rightMouseDown(with event: NSEvent) {
         guard let itemID else { return }
-        module.cancelPendingExpand()
+        module.endSecondClickWatch()
         module.requestFocus()
         window?.makeFirstResponder(self)
         if !module.selection.contains(itemID) { module.click(itemID, modifiers: []) }
