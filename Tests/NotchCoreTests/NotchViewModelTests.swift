@@ -2,6 +2,17 @@ import CoreGraphics
 import Testing
 @testable import NotchCore
 
+/// Waits `delay` (long enough on a normal machine), then up to 2 s more for `condition`, so slow CI
+/// machines don't fail timing tests. Tests that expect nothing to change still wait the full `delay`.
+@MainActor
+func settle(_ delay: Duration, until condition: () -> Bool) async throws {
+    try await Task.sleep(for: delay)
+    let deadline = ContinuousClock.now + .seconds(2)
+    while !condition(), ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
 @MainActor
 struct NotchViewModelTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
@@ -14,7 +25,7 @@ struct NotchViewModelTests {
         let model = makeModel()
         model.hoverChanged(true)
         #expect(model.state == .closed)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
     }
 
@@ -22,7 +33,7 @@ struct NotchViewModelTests {
         let model = makeModel()
         model.hoverChanged(true)
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .closed }
         #expect(model.state == .closed)
     }
 
@@ -30,7 +41,7 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.restingState = .compact
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .compact }
         #expect(model.state == .compact)
     }
 
@@ -38,7 +49,7 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.hoverChanged(false)
         model.hoverChanged(true)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
     }
 
@@ -63,7 +74,7 @@ struct NotchViewModelTests {
         let model = makeModel(state: .expanded)
         model.isPinned = true
         model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
     }
 }
@@ -115,7 +126,7 @@ struct NotchTallTests {
         model.dragApproached()
         #expect(model.state == .expanded)
         model.approachingDragEnded()
-        try await Task.sleep(for: .milliseconds(200))
+        try await settle(.milliseconds(200)) { model.state == .closed }
         #expect(model.state == .closed)
     }
 }
@@ -145,7 +156,7 @@ struct NotchClickTests {
         let model = makeModel(state: .expanded)
         model.tap()
         #expect(model.state == .compact)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .closed }
         #expect(model.state == .closed)
     }
 
@@ -153,7 +164,7 @@ struct NotchClickTests {
         let model = makeModel(state: .expanded)
         model.restingState = .compact
         model.tap()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .compact }
         #expect(model.state == .compact)
     }
 
@@ -161,7 +172,7 @@ struct NotchClickTests {
         let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 975))
         model.tap()
         model.hoverChanged(true)
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .compact }
         #expect(model.state == .compact)
         model.tap()
         #expect(model.state == .expanded)

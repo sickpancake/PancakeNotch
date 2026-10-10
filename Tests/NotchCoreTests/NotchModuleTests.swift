@@ -59,7 +59,7 @@ struct NotchModuleTests {
         let (model, module) = makeModel()
         model.dragEntered()
         model.dragExited()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .closed }
         #expect(model.state == .closed)
         #expect(module.dragEnds == 1)
         #expect(module.closes == 1)
@@ -69,7 +69,7 @@ struct NotchModuleTests {
         let (model, _) = makeModel(pointer: Self.inside)
         model.dragEntered()
         model.dragConcluded()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
     }
 
@@ -78,12 +78,12 @@ struct NotchModuleTests {
         module.holdsOpen = true
         model.hoverChanged(false)
         model.tap()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
 
         module.holdsOpen = false
         model.holdReleased()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .closed }
         #expect(model.state == .closed)
     }
 
@@ -91,7 +91,7 @@ struct NotchModuleTests {
         let (model, module) = makeModel(state: .expanded, pointer: Self.inside)
         module.holdsOpen = false
         model.holdReleased()
-        try await Task.sleep(for: .milliseconds(300))
+        try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(model.state == .expanded)
     }
 
