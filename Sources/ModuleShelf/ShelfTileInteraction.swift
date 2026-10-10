@@ -5,7 +5,7 @@ import SwiftUI
 /// Invisible AppKit layer over a tile (or the drag-all handle, `itemID == nil`) that handles clicks,
 /// the right-click menu, Quick Look and dragging items out. SwiftUI draws the tile underneath.
 ///
-/// Clicks: one click shows the item in the tall notch, a double-click copies it, ⌘/⇧-click selects.
+/// Clicks: one click shows the item in the tall notch, ⌘/⇧-click selects.
 struct ShelfTileInteraction: NSViewRepresentable {
     let module: ShelfModule
     let itemID: UUID?
@@ -48,14 +48,11 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
         mouseDownEvent = event
         narrowSelectionOnMouseUp = false
         expandOnMouseUp = false
-        module.endSecondClickWatch()
         module.requestFocus()
         window?.makeFirstResponder(self)
         guard let itemID else { return }
         let modifiers = event.modifierFlags.intersection([.command, .shift])
-        if event.clickCount >= 2, !module.isChoosing, modifiers.isEmpty {
-            module.copy(module.targets(for: itemID))
-        } else if !modifiers.isEmpty || module.isChoosing {
+        if !modifiers.isEmpty || module.isChoosing {
             module.click(itemID, modifiers: modifiers)
         } else if module.selection.contains(itemID), module.selection.count > 1 {
             narrowSelectionOnMouseUp = true
@@ -68,7 +65,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
 
     override func mouseUp(with event: NSEvent) {
         if narrowSelectionOnMouseUp, let itemID { module.click(itemID, modifiers: []) }
-        if expandOnMouseUp, let itemID { module.expandFromClick(itemID) }
+        if expandOnMouseUp, let itemID { module.openDetail(itemID) }
         narrowSelectionOnMouseUp = false
         expandOnMouseUp = false
         mouseDownEvent = nil
@@ -86,7 +83,6 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
 
     override func rightMouseDown(with event: NSEvent) {
         guard let itemID else { return }
-        module.endSecondClickWatch()
         module.requestFocus()
         window?.makeFirstResponder(self)
         if !module.selection.contains(itemID) { module.click(itemID, modifiers: []) }
@@ -169,9 +165,7 @@ enum ShelfMenu {
         if let single, case .link = single.kind {
             add(String(localized: "Open Link"), "safari") { module.open([single]) }
         }
-        if items.contains(where: { !$0.isFile }) {
-            add(String(localized: "Copy"), "doc.on.doc") { module.copy(items.filter { !$0.isFile }) }
-        }
+        add(String(localized: "Copy"), "doc.on.doc") { module.copy(items) }
         group = true
         add(String(localized: "AirDrop"), "dot.radiowaves.left.and.right") { module.airDrop(items) }
         add(String(localized: "Share…"), "square.and.arrow.up") { module.share(items, from: anchor) }

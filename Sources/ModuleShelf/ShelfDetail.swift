@@ -69,7 +69,6 @@ extension ShelfModule {
 
     /// One click, Space or Return: show the item in the tall notch.
     func openDetail(_ id: UUID) {
-        endSecondClickWatch()
         guard !isChoosing, prompt == nil, store.items.contains(where: { $0.id == id }) else { return }
         selection = [id]
         detailID = id
@@ -79,37 +78,6 @@ extension ShelfModule {
     func closeDetail() {
         guard detailID != nil else { return }
         setHold { $0.detailID = nil }
-    }
-
-    /// A click on a tile opens the item right away. If a second click follows within the double-click
-    /// time, it lands on the item view: it copies the item instead of reaching the editor.
-    func expandFromClick(_ id: UUID) {
-        openDetail(id)
-        guard detailID == id else { return }
-        secondClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            let copied = event.clickCount >= 2 && MainActor.assumeIsolated { self?.copyShownItem(id) ?? false }
-            return copied ? nil : event
-        }
-        let interval = NSEvent.doubleClickInterval
-        secondClickTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(interval))
-            guard !Task.isCancelled else { return }
-            self?.endSecondClickWatch()
-        }
-    }
-
-    private func copyShownItem(_ id: UUID) -> Bool {
-        endSecondClickWatch()
-        guard detailID == id, let item = detailItem else { return false }
-        copy([item])
-        return true
-    }
-
-    func endSecondClickWatch() {
-        secondClickTimeout?.cancel()
-        secondClickTimeout = nil
-        if let secondClickMonitor { NSEvent.removeMonitor(secondClickMonitor) }
-        secondClickMonitor = nil
     }
 
     /// Called when `detailID` changes: grow or shrink the notch and load or drop the preview.
