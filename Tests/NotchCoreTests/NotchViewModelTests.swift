@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Testing
 @testable import NotchCore
@@ -234,21 +235,46 @@ struct NotchClickTests {
         #expect(model.state == .expanded)
     }
 
-    /// After a click shrinks it, the notch stays Compact (whatever the pointer does) until the next click.
+    /// A click shrinks the open panel to Compact, which then stays: hovering opens it (once the pointer
+    /// has left after the click), leaving shrinks it back. The next click on the open panel closes it fully.
     @Test func clickShrinksToCompactUntilClickedAgain() async throws {
         let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 300))
         model.tap()
         #expect(model.state == .compact)
-        model.hoverChanged(false)
+        // Still under the pointer from the click: no reopening yet.
         model.hoverChanged(true)
-        model.hoverChanged(false)
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(100))
         #expect(model.state == .compact)
-        model.tap()
-        #expect(model.state == .expanded)
-        // Leaving the reopened panel closes it as usual.
+        // Away, and nothing closes it.
         model.hoverChanged(false)
-        try await settle(.milliseconds(300)) { model.state == .closed }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.state == .compact)
+        // Back on it: it opens; leaving shrinks it to Compact again.
+        model.hoverChanged(true)
+        try await settle(.milliseconds(100)) { model.state == .expanded }
+        #expect(model.state == .expanded)
+        model.hoverChanged(false)
+        try await settle(.milliseconds(100)) { model.state == .compact }
+        #expect(model.state == .compact)
+        // Clicking the open panel again: it closes all the way when left.
+        model.hoverChanged(true)
+        try await settle(.milliseconds(100)) { model.state == .expanded }
+        model.tap()
+        #expect(model.state == .closed)
+        model.open()
+        model.hoverChanged(false)
+        try await settle(.milliseconds(100)) { model.state == .closed }
+        #expect(model.state == .closed)
+    }
+
+    @Test func escapeClosesAllTheWay() {
+        let model = makeModel(state: .expanded)
+        model.tap()
+        model.open()
+        model.close()
+        #expect(model.state == .compact)
+        model.open()
+        _ = model.handleKey(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!)
         #expect(model.state == .closed)
     }
 

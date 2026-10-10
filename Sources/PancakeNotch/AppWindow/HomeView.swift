@@ -305,8 +305,8 @@ private struct TipsCard: View {
         return [
             ("cursorarrow.rays", String(localized: "Hover to open"),
              String(localized: "Rest the pointer on the notch and it slides open.")),
-            ("hand.tap", String(localized: "Click to shrink"),
-             String(localized: "Click the open notch to shrink it. It stays small until you click it again.")),
+            ("hand.tap", String(localized: "Click to keep it small"),
+             String(localized: "Click the open notch and it stays small: hover to open it, click again to close it fully.")),
         ] + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
