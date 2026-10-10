@@ -31,8 +31,8 @@ final class ShelfMenuPanel {
         self.onClose = onClose
         model = Model(entries: entries)
         panel = Panel()
+        // Default sizing options: with none, `fittingSize` is zero and the menu is invisible.
         let hosting = FirstClickHostingView(rootView: ShelfMenuView(model: model))
-        hosting.sizingOptions = []
         let size = hosting.fittingSize
         hosting.frame = CGRect(origin: .zero, size: size)
         panel.contentView = hosting
