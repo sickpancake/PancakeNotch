@@ -76,6 +76,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Closing the window during the welcome counts as having seen it: it shows once (ADR-0020).
+        progress.onboardingDone = true
         NSApp.setActivationPolicy(.accessory)
         // Release after AppKit finishes closing, so the SwiftUI view tree is freed.
         DispatchQueue.main.async { [weak self] in

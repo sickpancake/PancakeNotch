@@ -181,11 +181,15 @@ struct PracticeShelfTests {
         #expect(FileManager.default.fileExists(atPath: other.path))
     }
 
-    @Test func removeLeftoversKeepsOpenPracticeShelves() {
+    /// Works in its own folder: cleaning the real temporary folder would delete the practice files
+    /// of a PancakeNotch that's running while the tests do.
+    @Test func removeLeftoversKeepsOpenPracticeShelves() throws {
+        let fixture = try ShelfFixture()
         let practice = PracticeShelf(seeded: true)
         defer { practice.close() }
-        PracticeShelf.removeLeftovers()
-        #expect(FileManager.default.fileExists(atPath: practice.folder.path))
-        #expect(practice.module.store.items.allSatisfy { $0.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? true })
+        let open = fixture.root.appending(path: practice.folder.lastPathComponent)
+        try FileManager.default.createDirectory(at: open, withIntermediateDirectories: true)
+        PracticeShelf.removeLeftovers(in: fixture.root)
+        #expect(FileManager.default.fileExists(atPath: open.path))
     }
 }
