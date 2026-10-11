@@ -31,6 +31,11 @@ public final class LessonRunner {
 
     public var isFinished: Bool { stepIndex >= lesson.steps.count }
 
+    /// Finished with every step done, apart from optional ones: only then does the lesson get its checkmark.
+    public var isComplete: Bool {
+        isFinished && lesson.steps.allSatisfy { $0.isOptional || !skipped.contains($0.id) }
+    }
+
     /// Ticks the current step if `signal` is the one it waits for; anything else is ignored.
     public func receive(_ signal: LessonSignal) {
         guard justTicked == nil, let step = currentStep, step.signal == signal else { return }

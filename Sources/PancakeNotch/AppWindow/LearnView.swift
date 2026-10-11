@@ -219,11 +219,11 @@ struct LessonPlayer: View {
                 .background(.white, in: .rect(cornerRadius: 11, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Lesson done")
+                Text(runner.isComplete ? String(localized: "Lesson done") : String(localized: "End of the lesson"))
                     .font(.app(size: 17, weight: .bold))
-                Text(runner.skipped.isEmpty
+                Text(runner.isComplete
                     ? String(localized: "Nicely done. You can do it again any time.")
-                    : String(localized: "You skipped a step or two: do it again whenever you like."))
+                    : String(localized: "You skipped a step, so this lesson isn't checked off yet. Do it again whenever you like."))
                     .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
             }
@@ -241,7 +241,8 @@ struct LessonPlayer: View {
     // MARK: Lesson logic
 
     private func start() {
-        runner.onFinish = onFinish
+        // Only a lesson done without skipping (optional steps aside) gets its checkmark.
+        runner.onFinish = { [runner] in if runner.isComplete { onFinish() } }
         if practice == nil { makePractice() }
         stepChanged()
     }

@@ -24,13 +24,16 @@ public struct LessonStep: Identifiable, Sendable {
     /// SF Symbol name.
     public let symbol: String
     public let signal: LessonSignal
+    /// Skipping it still lets the lesson count as done (e.g. picking a shortcut is up to you).
+    public let isOptional: Bool
 
-    public init(id: String, title: String, detail: String, symbol: String, signal: LessonSignal) {
+    public init(id: String, title: String, detail: String, symbol: String, signal: LessonSignal, isOptional: Bool = false) {
         self.id = id
         self.title = title
         self.detail = detail
         self.symbol = symbol
         self.signal = signal
+        self.isOptional = isOptional
     }
 }
 
@@ -94,7 +97,8 @@ public struct Lesson: Identifiable, Sendable {
                 title: String(localized: "Pick a shortcut", comment: "Lesson step title"),
                 detail: String(localized: "A key combination opens and closes the notch from any app. Set one below, or skip this step.", comment: "Lesson step detail"),
                 symbol: "command",
-                signal: .shortcutSet
+                signal: .shortcutSet,
+                isOptional: true
             ),
         ]
     )

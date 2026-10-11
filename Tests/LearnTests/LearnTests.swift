@@ -32,6 +32,27 @@ struct LessonRunnerTests {
         #expect(runner.stepIndex == 1)
     }
 
+    @Test func completeOnlyWithoutSkippingRequiredSteps() {
+        // Basics: every step done but the optional shortcut, which is skipped.
+        let skippedShortcut = runner()
+        for signal in [LessonSignal.notchOpened, .notchShrunk, .notchClosed] { skippedShortcut.receive(signal) }
+        skippedShortcut.skip()
+        #expect(skippedShortcut.isFinished)
+        #expect(skippedShortcut.isComplete)
+
+        // Skipping a required step: finished, but not complete.
+        let skippedRequired = runner()
+        skippedRequired.skip()
+        for signal in [LessonSignal.notchShrunk, .notchClosed, .shortcutSet] { skippedRequired.receive(signal) }
+        #expect(skippedRequired.isFinished)
+        #expect(!skippedRequired.isComplete)
+
+        // Going back over a skipped step and doing it makes it complete again.
+        skippedRequired.restart()
+        for signal in [LessonSignal.notchOpened, .notchShrunk, .notchClosed, .shortcutSet] { skippedRequired.receive(signal) }
+        #expect(skippedRequired.isComplete)
+    }
+
     @Test func skipMarksSkippedNotTicked() {
         let runner = runner()
         runner.skip()
