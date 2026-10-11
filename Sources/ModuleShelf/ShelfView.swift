@@ -513,8 +513,8 @@ struct ShelfEar: View {
     }
 }
 
-/// A tray symbol with the item count in a white badge at its top-right; at capacity the full tray,
-/// "20" and a small "!" at its bottom-left. No badge while empty.
+/// A tray symbol, centred in the ear, with the item count in a white badge hanging off its top-right
+/// corner; at capacity the full tray, "20" and a small "!" at its bottom-left. No badge while empty.
 struct ShelfTrayBadge: View {
     let count: Int
     var bounce = false
@@ -549,7 +549,7 @@ struct ShelfTrayBadge: View {
                         .offset(x: -4, y: 1)
                 }
             }
-            // Leave room for the badge on the right; the ear's outer corner is rounded.
-            .offset(x: -1, y: 2)
+            // The tray's ink sits a point right of and above its frame's centre: centre what you see.
+            .offset(x: -1, y: 1)
     }
 }

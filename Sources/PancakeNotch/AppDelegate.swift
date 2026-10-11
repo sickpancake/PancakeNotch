@@ -64,13 +64,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateGeometry() }
         }
-        // Entering or leaving a full-screen app switches Spaces.
+        // Entering or leaving a full-screen app switches Spaces. macOS hides the notch during the swipe,
+        // so a pointer that left meanwhile sent no hover exit: check it now.
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateFullScreen() }
+            MainActor.assumeIsolated {
+                self?.updateFullScreen()
+                self?.notchController.model?.pointerMayHaveLeft()
+            }
         }
         // Switching apps can bring a listed app to the front within the same Space.
         appObserver = NSWorkspace.shared.notificationCenter.addObserver(

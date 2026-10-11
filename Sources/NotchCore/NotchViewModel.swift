@@ -160,6 +160,16 @@ public final class NotchViewModel {
         closeIfPointerOutside()
     }
 
+    /// Something may have moved the pointer away without a hover exit, e.g. a swipe to another Space
+    /// (macOS hides the notch during it). Closes like a hover exit if the pointer isn't on the notch.
+    public func pointerMayHaveLeft() {
+        guard !isPinned, !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
+        // A hover-open still waiting for its delay would otherwise open it with the pointer gone.
+        hoverTask?.cancel()
+        waitsForPointerToLeave = false
+        scheduleCloseIfIdle()
+    }
+
     /// A key press while the notch has keyboard focus: the module first, then Escape closes.
     public func handleKey(_ event: NSEvent) -> Bool {
         if module?.handleKey(event) == true { return true }

@@ -267,6 +267,48 @@ struct NotchClickTests {
         #expect(model.state == .closed)
     }
 
+    /// A swipe to another Space hides the notch, so leaving sends no hover exit: the Space change checks.
+    @Test func spaceSwitchClosesWhenThePointerLeftDuringIt() async throws {
+        let away = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 300))
+        away.pointerMayHaveLeft()
+        try await settle(.milliseconds(100)) { away.state == .closed }
+        #expect(away.state == .closed)
+
+        let still = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 900))
+        still.pointerMayHaveLeft()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(still.state == .expanded)
+
+        // A hover-open still waiting for its delay doesn't fire once the pointer is gone.
+        let pending = makeModel(state: .closed, pointer: CGPoint(x: 756, y: 300))
+        pending.hoverChanged(true)
+        pending.pointerMayHaveLeft()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(pending.state == .closed)
+    }
+
+    /// After a click shrinks it, a Space change with the pointer gone counts as it having left: hovering
+    /// the compact notch opens it again.
+    @Test func spaceSwitchCountsAsLeavingAfterAClick() async throws {
+        let pointer = PointerBox(CGPoint(x: 756, y: 975))
+        let model = NotchViewModel(
+            layout: layout,
+            state: .expanded,
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
+            pointerLocation: { pointer.location }
+        )
+        model.tap()
+        #expect(model.state == .compact)
+        pointer.location = CGPoint(x: 756, y: 300)
+        model.pointerMayHaveLeft()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(model.state == .compact)
+        pointer.location = CGPoint(x: 756, y: 975)
+        model.hoverChanged(true)
+        try await settle(.milliseconds(100)) { model.state == .expanded }
+        #expect(model.state == .expanded)
+    }
+
     @Test func escapeClosesAllTheWay() {
         let model = makeModel(state: .expanded)
         model.tap()
@@ -317,4 +359,11 @@ struct NotchToggleTests {
         model.toggle()
         #expect(model.state == .closed)
     }
+}
+
+/// A pointer position a test can move.
+@MainActor
+final class PointerBox {
+    var location: CGPoint
+    init(_ location: CGPoint) { self.location = location }
 }

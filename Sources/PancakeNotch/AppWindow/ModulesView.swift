@@ -71,9 +71,15 @@ private struct ShelfModuleCard: View {
                 }
             }
         }
+        // While the dropdown closes, the card shrinks over the rows instead of them spilling out.
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .glassPanel()
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: settings.isEnabled)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: showsSettings)
+    }
+
+    /// Opening or closing animates the whole page, so the card below moves along with this one.
+    /// Reduce Motion keeps it short, so it reads as a fade rather than a slide.
+    private var animation: Animation {
+        .easeInOut(duration: reduceMotion ? 0.15 : 0.25)
     }
 
     private var about: some View {
@@ -88,7 +94,7 @@ private struct ShelfModuleCard: View {
                     .font(.app(size: 18, weight: .bold))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Toggle(String(localized: "Shelf"), isOn: $settings.isEnabled)
+                Toggle(String(localized: "Shelf"), isOn: $settings.isEnabled.animation(animation))
                     .toggleStyle(MonochromeSwitchStyle())
                     .labelsHidden()
             }
@@ -117,7 +123,7 @@ private struct ShelfModuleCard: View {
     /// The dropdown's header: "Settings" with a chevron that turns when open.
     private var settingsToggle: some View {
         Button {
-            showsSettings.toggle()
+            withAnimation(animation) { showsSettings.toggle() }
         } label: {
             HStack {
                 Text("Settings")
