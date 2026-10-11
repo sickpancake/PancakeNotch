@@ -46,6 +46,11 @@ public final class NotchViewModel {
     /// Called each time the notch opens.
     @ObservationIgnored public var onOpen: (() -> Void)?
 
+    /// The latest state change came from a click on the notch (or Esc), not hover, a drag or a timer.
+    /// Lessons count only those for "click to keep it small" and "click again to close".
+    @ObservationIgnored public private(set) var lastChangeWasClick = false
+    @ObservationIgnored private var isHandlingClick = false
+
     /// Hover delays and haptics from Settings.
     @ObservationIgnored public var behavior: NotchBehavior
     /// Current pointer position in screen coordinates; injectable for tests.
@@ -175,6 +180,8 @@ public final class NotchViewModel {
         if module?.handleKey(event) == true { return true }
         if event.keyCode == 53 { // Escape: close all the way
             staysCompact = false
+            isHandlingClick = true
+            defer { isHandlingClick = false }
             close()
             return true
         }
@@ -202,6 +209,8 @@ public final class NotchViewModel {
     /// the way (ADR-0011).
     public func tap() {
         Self.logger.debug("Tap in \(self.state.rawValue, privacy: .public)")
+        isHandlingClick = true
+        defer { isHandlingClick = false }
         guard state == .expanded else {
             open()
             return
@@ -290,6 +299,7 @@ public final class NotchViewModel {
     /// Moves to `newState` with the matching animation. Opening springs slightly; closing doesn't.
     public func transition(to newState: NotchState) {
         guard newState != state else { return }
+        lastChangeWasClick = isHandlingClick
         Self.logger.debug("State \(self.state.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public)")
         let opening = newState == .expanded
         let closing = state == .expanded

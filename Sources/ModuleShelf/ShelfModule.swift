@@ -4,6 +4,25 @@ import Observation
 import os
 import SwiftUI
 
+/// What the user just did on this Shelf, for the app window's lessons.
+public enum ShelfEvent: Equatable, Sendable {
+    /// The items changed (added, removed, edited); `count` is the new number of items.
+    case itemsChanged(count: Int)
+    /// An item opened in the tall notch (text editor, link editor or file preview).
+    case detailOpened
+    /// Back to the tiles from the tall notch.
+    case detailClosed
+    /// The number of selected items changed.
+    case selectionChanged(count: Int)
+    /// The right-click menu opened.
+    case menuOpened
+    case menuClosed
+    /// Clear all was confirmed.
+    case cleared
+    /// A drag out of the Shelf ended; `accepted` is whether something took it.
+    case dragOutEnded(accepted: Bool)
+}
+
 /// The Shelf: a drop zone in the notch for files, images, text and links (ADR-0013).
 @MainActor
 @Observable
@@ -37,7 +56,9 @@ public final class ShelfModule: NotchModule {
         case choosing(pending: [ShelfInput])
     }
 
-    var selection: Set<UUID> = []
+    var selection: Set<UUID> = [] {
+        didSet { if selection.count != oldValue.count { onEvent?(.selectionChanged(count: selection.count)) } }
+    }
     @ObservationIgnored private var selectionAnchor: UUID?
     /// The far end of a keyboard-extended selection.
     @ObservationIgnored private var selectionCursor: UUID?
@@ -65,7 +86,11 @@ public final class ShelfModule: NotchModule {
     var copiedID: UUID?
     /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
     var detailID: UUID? {
-        didSet { if detailID != oldValue { detailChanged(from: oldValue) } }
+        didSet {
+            guard detailID != oldValue else { return }
+            detailChanged(from: oldValue)
+            if oldValue == nil { onEvent?(.detailOpened) } else if detailID == nil { onEvent?(.detailClosed) }
+        }
     }
     var detailInfo: ShelfDetailInfo?
     @ObservationIgnored var saveTask: Task<Void, Never>?
@@ -77,10 +102,22 @@ public final class ShelfModule: NotchModule {
     @ObservationIgnored var isSnapshot = false
     @ObservationIgnored private var isRefilling = false
     @ObservationIgnored private var isDraggingOut = false
+    /// Items are being dragged out of this Shelf right now (a drop target can refuse its own items).
+    public var isDraggingOutItems: Bool { isDraggingOut }
     @ObservationIgnored private var isMenuOpen = false
     @ObservationIgnored private var isSharing = false
     @ObservationIgnored private var isQuickLooking = false
     private var otherHolds: Bool { isDraggingOut || isMenuOpen || isSharing || isQuickLooking }
+
+    /// Told about what the user does (opening an item, the menu, dragging out…), for the app
+    /// window's lessons. Called from the existing state changes only: nothing is polled.
+    @ObservationIgnored public var onEvent: (@MainActor (ShelfEvent) -> Void)?
+
+    /// Whether a drag's source (`NSDraggingInfo.draggingSource`) is a Shelf tile or the
+    /// "drag all" handle, so a drop target can refuse the Shelf's own items.
+    public nonisolated static func isOwnDragSource(_ source: Any?) -> Bool {
+        source is ShelfTileNSView
+    }
 
     public init(store: ShelfStore, settings: ShelfSettings) {
         self.store = store
@@ -233,6 +270,12 @@ public final class ShelfModule: NotchModule {
         dropZone = nil
     }
 
+    /// A click elsewhere in the app window closes an open item in a practice Shelf, the way a click in
+    /// another app closes one in the real notch.
+    public func clickedOutsidePreview() {
+        closeDetail()
+    }
+
     public func handleKey(_ event: NSEvent) -> Bool {
         // An open menu takes every key, like a system menu.
         if let menu, menu.isOpen {
@@ -312,7 +355,11 @@ public final class ShelfModule: NotchModule {
         if wasHeld && !holdsOpen { notch?.holdReleased() }
     }
 
-    func setMenuOpen(_ open: Bool) { setHold { $0.isMenuOpen = open } }
+    func setMenuOpen(_ open: Bool) {
+        let changed = isMenuOpen != open
+        setHold { $0.isMenuOpen = open }
+        if changed { onEvent?(open ? .menuOpened : .menuClosed) }
+    }
 
     /// Shows the Shelf's own pop-up menu at the pointer; it holds the notch open while it's up.
     func showMenu(_ entries: [ShelfMenuEntry]) {
@@ -499,6 +546,7 @@ public final class ShelfModule: NotchModule {
         if store.items.isEmpty { confirmingClear = false }
         refill()
         updateRestingState()
+        onEvent?(.itemsChanged(count: store.items.count))
     }
 
     /// The notch rests in Compact, with the Shelf in its ear, from 15 items; invisible otherwise.
@@ -635,6 +683,7 @@ public final class ShelfModule: NotchModule {
         if confirmingClear {
             confirmingClear = false
             store.clear()
+            onEvent?(.cleared)
         } else {
             confirmingClear = true
         }
@@ -696,6 +745,7 @@ public final class ShelfModule: NotchModule {
             store.remove(ids)
         }
         setDraggingOut(false)
+        onEvent?(.dragOutEnded(accepted: !operation.isEmpty))
     }
 }
 

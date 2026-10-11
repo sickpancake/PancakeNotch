@@ -7,10 +7,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "PancakeNotch",
-            dependencies: ["NotchCore", "HotKey", "ModuleShelf"]
+            dependencies: ["NotchCore", "HotKey", "ModuleShelf", "Learn"]
         ),
         .target(name: "NotchCore"),
         .target(name: "HotKey"),
+        .target(name: "Learn"),
         .target(
             name: "ModuleShelf",
             dependencies: ["NotchCore"]
@@ -26,6 +27,10 @@ let package = Package(
         .testTarget(
             name: "ModuleShelfTests",
             dependencies: ["ModuleShelf"]
+        ),
+        .testTarget(
+            name: "LearnTests",
+            dependencies: ["Learn"]
         ),
     ]
 )

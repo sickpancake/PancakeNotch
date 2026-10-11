@@ -43,6 +43,10 @@ public protocol NotchModule: AnyObject {
 
     /// A key press while the notch has keyboard focus. Return `true` if handled.
     func handleKey(_ event: NSEvent) -> Bool
+
+    /// A click landed elsewhere in the window hosting a preview of the notch (the app window). The real
+    /// notch watches clicks in other apps itself; a preview's window is this app's, so it's told here.
+    func clickedOutsidePreview()
 }
 
 public extension NotchModule {
@@ -57,6 +61,7 @@ public extension NotchModule {
     func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool { false }
     func dragEnded() {}
     func handleKey(_ event: NSEvent) -> Bool { false }
+    func clickedOutsidePreview() {}
 }
 
 /// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.

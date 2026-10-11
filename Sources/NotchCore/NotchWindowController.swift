@@ -56,6 +56,8 @@ public final class NotchWindowController {
 
     private var appToRestore: NSRunningApplication?
     private let dragWatcher = NotchDragWatcher()
+    /// Hands drags over the notch to the module.
+    private let dropRouter = NotchDropRouter()
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
 
     /// Opens or closes the notch (keyboard shortcut).
@@ -134,7 +136,8 @@ public final class NotchWindowController {
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
         let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
-        container.dropDelegate = self
+        dropRouter.model = model
+        container.dropDelegate = dropRouter
         panel.contentView = container
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak panel, weak model] state in
@@ -171,13 +174,7 @@ public final class NotchWindowController {
     }
 }
 
-extension NotchWindowController: NotchDropDelegate {
-    /// Converts a point in the hosted content to the expanded notch body, where modules lay out their drop zones.
-    private func bodyPoint(_ contentPoint: CGPoint, layout: NotchLayout) -> CGPoint {
-        let origin = layout.bodyOrigin(for: .expanded)
-        return CGPoint(x: contentPoint.x - origin.x, y: contentPoint.y - origin.y)
-    }
-
+extension NotchWindowController {
     /// Converts a screen point (y up) to the expanded notch body: the body is centered on the notch
     /// and hangs from the top of the screen.
     private func bodyPoint(screen point: CGPoint, layout: NotchLayout) -> CGPoint {
@@ -186,36 +183,5 @@ extension NotchWindowController: NotchDropDelegate {
             x: point.x - (layout.geometry.notchRect.midX - bodyWidth / 2),
             y: layout.geometry.screenFrame.maxY - point.y
         )
-    }
-
-    func dragEntered(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
-        // Our own drags (an item being dragged out of the Shelf) never drop back in.
-        guard let model, let module = model.module, info.draggingSource == nil else { return [] }
-        logger.info("Drag entered notch: \(info.draggingPasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
-        let operation = module.dragUpdated(info, at: bodyPoint(contentPoint, layout: model.layout))
-        if !operation.isEmpty { model.dragEntered() }
-        return operation
-    }
-
-    func dragUpdated(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
-        guard let model, let module = model.module, info.draggingSource == nil else { return [] }
-        let operation = module.dragUpdated(info, at: bodyPoint(contentPoint, layout: model.layout))
-        if !operation.isEmpty, model.state != .expanded { model.dragEntered() }
-        return operation
-    }
-
-    func dragExited() {
-        model?.dragExited()
-    }
-
-    func performDrop(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> Bool {
-        guard let model, let module = model.module, info.draggingSource == nil else { return false }
-        let accepted = module.performDrop(info, at: bodyPoint(contentPoint, layout: model.layout))
-        logger.info("Drop on notch accepted=\(accepted)")
-        return accepted
-    }
-
-    func dragConcluded() {
-        model?.dragConcluded()
     }
 }

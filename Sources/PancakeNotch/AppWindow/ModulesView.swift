@@ -7,13 +7,15 @@ struct ModulesView: View {
     let preferences: Preferences
     @Bindable var shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
+    /// Opens the Shelf lesson on Learn.
+    let learnShelf: () -> Void
 
     var body: some View {
         AppPage(
             title: String(localized: "Modules"),
             subtitle: String(localized: "Small tools that live inside the notch.")
         ) {
-            ShelfModuleCard(preferences: preferences, settings: shelfSettings, store: shelfStore)
+            ShelfModuleCard(preferences: preferences, settings: shelfSettings, store: shelfStore, learn: learnShelf)
             ModuleCard(
                 title: String(localized: "Now Playing"),
                 symbol: "music.note",
@@ -35,6 +37,7 @@ private struct ShelfModuleCard: View {
     let preferences: Preferences
     @Bindable var settings: ShelfSettings
     let store: ShelfStore
+    let learn: () -> Void
     @State private var showsSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -51,7 +54,8 @@ private struct ShelfModuleCard: View {
                 behavior: preferences.notchBehavior,
                 isActive: settings.isEnabled,
                 showsShelf: true,
-                inactiveHint: String(localized: "Turn on the Shelf to try it here.")
+                inactiveHint: String(localized: "Turn on the Shelf to try it here."),
+                activeHint: String(localized: "Hover the notch, then click an item to open it. These are example items.")
             )
             .background(Color.black)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous))
@@ -117,6 +121,11 @@ private struct ShelfModuleCard: View {
                 }
             }
             .padding(.top, 14)
+            Button(action: learn) {
+                Label(String(localized: "Learn the Shelf"), systemImage: "graduationcap")
+            }
+            .padding(.top, 18)
+            .accessibilityHint(Text("Opens a hands-on Shelf lesson on the Learn page."))
         }
     }
 

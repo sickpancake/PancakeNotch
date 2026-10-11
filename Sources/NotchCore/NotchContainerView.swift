@@ -9,6 +9,8 @@ import AppKit
 /// It's also the notch's only drop target: drags are handled here in AppKit (file promises need
 /// `NSDraggingInfo`), so nothing in the SwiftUI tree may use `.onDrop` or `.dropDestination`,
 /// or the hosting view would claim the drag first.
+///
+/// The app window's working previews (`NotchPreview`) use it too, inside an ordinary window.
 final class NotchContainerView: NSView {
     let content: NSView
 
@@ -19,6 +21,13 @@ final class NotchContainerView: NSView {
 
     /// Receives drags from other apps. Set by `NotchWindowController`.
     weak var dropDelegate: NotchDropDelegate?
+
+    /// Previews take keyboard focus themselves (the real notch's panel handles keys instead).
+    var acceptsKeyFocus = false
+    override var acceptsFirstResponder: Bool { acceptsKeyFocus }
+
+    /// Called when the view joins or leaves a window (previews watch clicks and keys in their window).
+    var onWindowChange: (() -> Void)?
 
     init(content: NSView, contentSize: CGSize) {
         self.content = content
@@ -36,6 +45,11 @@ final class NotchContainerView: NSView {
     static var draggedTypes: [NSPasteboard.PasteboardType] {
         [.fileURL, .URL, .string, .png, .tiff]
             + NSFilePromiseReceiver.readableDraggedTypes.map(NSPasteboard.PasteboardType.init(rawValue:))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?()
     }
 
     override func layout() {

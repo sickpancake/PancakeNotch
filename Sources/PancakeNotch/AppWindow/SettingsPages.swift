@@ -38,12 +38,7 @@ struct GeneralSettingsView: View {
             }
             .onChange(of: launchAtLogin) { _, enabled in
                 guard enabled != LaunchAtLogin.isEnabled else { return }
-                do {
-                    try LaunchAtLogin.set(enabled)
-                    launchError = nil
-                } catch {
-                    launchError = error.localizedDescription
-                }
+                launchError = LaunchAtLogin.apply(enabled)
                 launchAtLogin = LaunchAtLogin.isEnabled
                 needsApproval = LaunchAtLogin.needsApproval
             }
@@ -204,9 +199,9 @@ struct KeyboardSettingsView: View {
             SettingsCard(header: String(localized: "In this window")) {
                 SettingsRow(
                     title: String(localized: "Jump to a page"),
-                    subtitle: String(localized: "Home, Modules, General, Notch, Keyboard, About, in sidebar order.")
+                    subtitle: String(localized: "Home, Modules, Learn, General, Notch, Keyboard, About, in sidebar order.")
                 ) {
-                    KeyCombo(keys: ["⌘", "1 – 6"])
+                    KeyCombo(keys: ["⌘", "1 – 7"])
                 }
                 SettingsRow(
                     title: String(localized: "Close the window"),

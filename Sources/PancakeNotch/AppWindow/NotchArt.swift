@@ -3,49 +3,83 @@ import NotchCore
 import SwiftUI
 
 /// The top edge of a pretend screen with a working notch in it: a sketched menu bar, a soft glow
-/// behind the notch and the live `NotchPreview`, so people can try their hover settings right in
-/// the window. Off, the notch dims and stops reacting.
+/// behind the notch and a live `NotchPreview`, so people can try their hover settings right in the
+/// window. With the Shelf on it holds a practice Shelf with example items: click one to open it,
+/// right-click it, drop files on it. Nothing in it touches the real Shelf. Off, the notch dims and
+/// stops reacting.
 struct NotchStage: View {
     let behavior: NotchBehavior
     var isActive = true
-    /// Shows a sample Shelf inside the preview (when the Shelf is on).
+    /// Shows a practice Shelf with example items inside the preview (when the Shelf is on).
     var showsShelf = false
+    /// A practice Shelf from outside (a lesson's); otherwise the stage keeps its own while it shows.
+    var practice: PracticeShelf?
     /// What the hint says while inactive; by default, that the notch is off.
     var inactiveHint: String?
+    /// What the hint says while active; by default, how to open and shrink it.
+    var activeHint: String?
     /// Width of the pretend screen the preview lays itself out for.
     var screenWidth: CGFloat = 560
-    /// The preview is drawn a little smaller than life so the whole page fits.
-    var scale: CGFloat = 0.85
+    /// Told when the preview opens, shrinks or closes (lessons).
+    var onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
+    /// Opens the preview on appearing (off-screen snapshots).
+    var startState: NotchState?
+    @State private var ownShelf: PracticeShelf?
 
     var body: some View {
-        let preview = NotchPreview(behavior: behavior, screenWidth: screenWidth, module: showsShelf ? Self.sampleShelf : nil)
-        let size = CGSize(width: preview.size.width * scale, height: preview.size.height * scale)
-        ZStack(alignment: .top) {
-            DotGrid()
-                .mask {
-                    EllipticalGradient(colors: [.black, .clear], center: .top, startRadiusFraction: 0, endRadiusFraction: 0.75)
-                }
-                .opacity(isActive ? 1 : 0.5)
-            NotchGlow(scale: scale)
-                .opacity(isActive ? 1 : 0.3)
-            MenuBarSketch(height: NotchGeometry.simulatedSize.height * scale)
-                .accessibilityHidden(true)
-            hint
-                .padding(.top, size.height * 0.52)
-            preview
-                .scaleEffect(scale, anchor: .top)
-                .frame(width: size.width, height: size.height, alignment: .top)
-                .opacity(isActive ? 1 : 0.4)
-                .allowsHitTesting(isActive)
-                .accessibilityHidden(!isActive)
-        }
+        let size = NotchPreview.restingSize(screenWidth: screenWidth)
+        // The preview sets the height (it grows while an item is open); the screen is drawn behind it.
+        NotchPreview(
+            behavior: behavior,
+            screenWidth: screenWidth,
+            module: module,
+            acceptsDragSource: { !ShelfModule.isOwnDragSource($0) },
+            onStateChange: onStateChange,
+            startState: startState
+        )
+        .opacity(isActive ? 1 : 0.4)
+        .allowsHitTesting(isActive)
+        .accessibilityHidden(!isActive)
+        .padding(.bottom, 10)
         .frame(minWidth: size.width, maxWidth: .infinity)
-        .frame(height: size.height + 10, alignment: .top)
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                DotGrid()
+                    .mask {
+                        EllipticalGradient(colors: [.black, .clear], center: .top, startRadiusFraction: 0, endRadiusFraction: 0.75)
+                    }
+                    .opacity(isActive ? 1 : 0.5)
+                NotchGlow()
+                    .opacity(isActive ? 1 : 0.3)
+                MenuBarSketch(height: NotchGeometry.simulatedSize.height)
+                    .accessibilityHidden(true)
+                hint
+                    .padding(.top, size.height * 0.5)
+            }
+        }
         .clipped()
+        .onAppear(perform: updateOwnShelf)
+        .onChange(of: showsShelf) { updateOwnShelf() }
+        .onDisappear {
+            ownShelf?.close()
+            ownShelf = nil
+        }
     }
 
-    /// Example items, shared by every preview (it holds nothing real).
-    private static let sampleShelf = ShelfPreviewModule()
+    private var module: (any NotchModule)? {
+        if let practice { return practice.module }
+        return showsShelf ? ownShelf?.module : nil
+    }
+
+    /// The stage's own practice Shelf exists only while it's shown, and starts fresh each time.
+    private func updateOwnShelf() {
+        if practice == nil, showsShelf {
+            if ownShelf == nil { ownShelf = PracticeShelf(seeded: true) }
+        } else {
+            ownShelf?.close()
+            ownShelf = nil
+        }
+    }
 
     /// Sits under the notch, so the opening panel covers it.
     private var hint: some View {
@@ -53,12 +87,13 @@ struct NotchStage: View {
             Image(systemName: isActive ? "cursorarrow.rays" : "power")
                 .font(.app(size: 12, weight: .semibold))
             Text(isActive
-                ? String(localized: "Hover the notch to try it. Click it to keep it small, and again to close it.")
+                ? activeHint ?? String(localized: "Hover the notch to try it. Click it to keep it small, and again to close it.")
                 : inactiveHint ?? String(localized: "Turn the notch on to try it here."))
                 .font(.app(size: 12.5, weight: .medium))
         }
         .foregroundStyle(AppPalette.secondaryText)
-        .accessibilityHidden(true)
+        // The default hint repeats what the page says; a custom one (e.g. "this is a practice Shelf") is read.
+        .accessibilityHidden(isActive ? activeHint == nil : inactiveHint == nil)
     }
 }
 

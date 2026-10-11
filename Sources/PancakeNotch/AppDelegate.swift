@@ -1,4 +1,5 @@
 import AppKit
+import Learn
 import ModuleShelf
 import NotchCore
 import os
@@ -23,12 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Exists only while the Shelf is switched on.
     private var shelf: ShelfModule?
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
+    /// Finished lessons and whether the welcome has been seen.
+    private let learnProgress = LearnProgress()
     private lazy var appWindow = AppWindowController(
         preferences: preferences,
         shortcuts: shortcuts,
         stats: stats,
         shelfSettings: shelfSettings,
-        shelfStore: shelfStore
+        shelfStore: shelfStore,
+        progress: learnProgress
     )
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
@@ -53,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
         ShelfModule.removeTemporaryFiles()
+        PracticeShelf.removeLeftovers()
         shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
         observeShelf()
@@ -85,6 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updateFullScreen() }
         }
         updateGeometry()
+        showWelcomeIfNeeded()
+    }
+
+    /// The first launch (or the first since the welcome was added) opens the window on the welcome.
+    /// `PANCAKENOTCH_SKIP_ONBOARDING=1` keeps it closed, e.g. for the idle memory check.
+    private func showWelcomeIfNeeded() {
+        guard !learnProgress.onboardingDone,
+              ProcessInfo.processInfo.environment["PANCAKENOTCH_SKIP_ONBOARDING"] == nil else { return }
+        showAppWindow()
     }
 
     /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back

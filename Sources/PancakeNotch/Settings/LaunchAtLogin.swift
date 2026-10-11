@@ -16,6 +16,17 @@ enum LaunchAtLogin {
         }
     }
 
+    /// Switches it on or off; returns why it failed, if it did.
+    static func apply(_ enabled: Bool) -> String? {
+        guard enabled != isEnabled else { return nil }
+        do {
+            try set(enabled)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     static func openSystemSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }

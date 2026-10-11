@@ -1,3 +1,4 @@
+import Learn
 import ModuleShelf
 import NotchCore
 import SwiftUI
@@ -10,11 +11,18 @@ struct HomeView: View {
     let stats: UsageStats
     let shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
+    let progress: LearnProgress
     @Binding var section: AppSection
+    let openLesson: (LessonID) -> Void
 
     var body: some View {
         PageScroll {
             HomeHeader()
+            if !progress.homeBoxHidden {
+                LearnBox(progress: progress, openLesson: openLesson)
+                    .padding(.top, 26)
+                    .transition(.opacity)
+            }
             NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled)
                 .padding(.top, 26)
             StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
@@ -50,6 +58,85 @@ private struct HomeHeader: View {
         case 17..<22: String(localized: "Good evening")
         default: String(localized: "Hello, night owl")
         }
+    }
+}
+
+/// Points new people at the lessons: how many are done, a way to carry on, and a way to hide it.
+/// When everything is done it shows a checkmark and offers to go away.
+private struct LearnBox: View {
+    let progress: LearnProgress
+    let openLesson: (LessonID) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let total = LessonID.allCases.count
+        let done = progress.doneCount
+        HStack(spacing: 14) {
+            Image(systemName: progress.allDone ? "checkmark" : "graduationcap")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(progress.allDone ? Color.black : AppPalette.primaryText)
+                .frame(width: 42, height: 42)
+                .background(progress.allDone ? Color.white : AppPalette.selection, in: .rect(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(progress.allDone ? String(localized: "You've learned the basics") : String(localized: "Learn PancakeNotch"))
+                    .font(.app(size: 15, weight: .bold))
+                Text(progress.allDone
+                    ? String(localized: "Every lesson done. They stay in Learn if you want a refresher.")
+                    : String(localized: "\(done) of \(total) lessons done. Each takes about a minute, hands on."))
+                    .font(.app(size: 12.5))
+                    .foregroundStyle(AppPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                ProgressSegments(done: done, total: total)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            if progress.allDone {
+                Button(String(localized: "Hide"), action: hide)
+                    .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+            } else {
+                Button(done == 0 ? String(localized: "Start") : String(localized: "Continue")) {
+                    openLesson(LessonID.allCases.first { !progress.isDone($0) } ?? .basics)
+                }
+                .buttonStyle(ProminentPillButtonStyle())
+                Button(action: hide) {
+                    Image(systemName: "xmark")
+                        .font(.app(size: 11, weight: .bold))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .frame(width: 26, height: 26)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .help(Text("Hide"))
+                .accessibilityLabel(Text("Hide"))
+                .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+            }
+        }
+        .padding(.horizontal, AppMetrics.cardInset)
+        .padding(.vertical, 16)
+        .glassPanel()
+    }
+
+    private func hide() {
+        withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.25)) { progress.homeBoxHidden = true }
+    }
+}
+
+/// A short bar split into one piece per lesson, done pieces filled.
+private struct ProgressSegments: View {
+    let done: Int
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<total, id: \.self) { index in
+                Capsule()
+                    .fill(index < done ? AppPalette.ink : AppPalette.rail)
+                    .frame(width: 28, height: 4)
+            }
+        }
+        .padding(.top, 2)
+        .accessibilityHidden(true)
     }
 }
 

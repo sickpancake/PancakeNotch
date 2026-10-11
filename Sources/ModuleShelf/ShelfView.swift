@@ -309,7 +309,7 @@ private struct ShelfEmptyView: View {
             Text("Drop files here")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
-            Text("Files, images, text and links stay here until you drag them out.")
+            Text("Files, images, text and links wait here until you need them.")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.45))
         }

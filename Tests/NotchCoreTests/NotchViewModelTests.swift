@@ -28,6 +28,18 @@ struct NotchViewModelTests {
         )
     }
 
+    @Test func knowsWhetherAClickChangedTheState() async throws {
+        let model = makeModel()
+        model.hoverChanged(true)
+        try await settle(.milliseconds(300)) { model.state == .expanded }
+        #expect(!model.lastChangeWasClick)
+        model.tap()
+        #expect(model.state == .compact)
+        #expect(model.lastChangeWasClick)
+        model.open()
+        #expect(!model.lastChangeWasClick)
+    }
+
     @Test func hoverOpensAfterDelay() async throws {
         let model = makeModel()
         model.hoverChanged(true)

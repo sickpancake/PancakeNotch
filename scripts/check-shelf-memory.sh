@@ -18,7 +18,7 @@ mkdir -p "$WORK/seed" "$WORK/shelf"
 sips -s format png -z 4000 6000 "$ROOT/Resources/AppIcon.icns" --out "$WORK/seed/photo-01.png" >/dev/null
 for i in $(seq -w 2 20); do cp "$WORK/seed/photo-01.png" "$WORK/seed/photo-$i.png"; done
 
-PANCAKENOTCH_SIMULATE_NOTCH=1 \
+PANCAKENOTCH_SIMULATE_NOTCH=1 PANCAKENOTCH_SKIP_ONBOARDING=1 \
 PANCAKENOTCH_DEBUG_STATE=expanded \
 PANCAKENOTCH_SHELF_DIR="$WORK/shelf" \
 PANCAKENOTCH_SHELF_SEED="$WORK/seed" \
