@@ -31,6 +31,9 @@ public final class ShelfStore {
 
     /// Called after every change (the module updates its "Full" ears).
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// Also told after every change: each Shelf showing this store (the real notch, and the live
+    /// preview on the app window's Home), keyed by the Shelf.
+    @ObservationIgnored private var observers: [ObjectIdentifier: () -> Void] = [:]
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
 
@@ -241,6 +244,16 @@ public final class ShelfStore {
             logger.error("Couldn't save the Shelf: \(error.localizedDescription, privacy: .private)")
         }
         onChange?()
+        for observer in observers.values { observer() }
+    }
+
+    /// Tells `action` about every change until `stopObserving(by:)` with the same `owner`.
+    func observe(by owner: AnyObject, _ action: @escaping () -> Void) {
+        observers[ObjectIdentifier(owner)] = action
+    }
+
+    func stopObserving(by owner: AnyObject) {
+        observers[ObjectIdentifier(owner)] = nil
     }
 
     /// A new, empty folder inside `Files` for one owned item.

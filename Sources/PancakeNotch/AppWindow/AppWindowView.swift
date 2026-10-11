@@ -1,5 +1,6 @@
 import Learn
 import ModuleShelf
+import NotchCore
 import SwiftUI
 
 /// The pages of the app window, in sidebar order.
@@ -48,6 +49,8 @@ struct AppWindowView: View {
     let shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
     let progress: LearnProgress
+    /// The notch's modules on the user's real data, for the live notch on Home.
+    let makeLiveModule: () -> (any NotchModule)?
     @State private var section: AppSection
     /// The lesson shown on Learn; other pages pick one before switching there.
     @State private var lesson: LessonID
@@ -63,6 +66,7 @@ struct AppWindowView: View {
         shelfSettings: ShelfSettings,
         shelfStore: ShelfStore,
         progress: LearnProgress,
+        makeLiveModule: @escaping () -> (any NotchModule)?,
         section: AppSection = .home,
         lesson: LessonID = .basics
     ) {
@@ -72,6 +76,7 @@ struct AppWindowView: View {
         self.shelfSettings = shelfSettings
         self.shelfStore = shelfStore
         self.progress = progress
+        self.makeLiveModule = makeLiveModule
         _section = State(initialValue: section)
         _lesson = State(initialValue: lesson)
     }
@@ -120,7 +125,8 @@ struct AppWindowView: View {
                         shelfStore: shelfStore,
                         progress: progress,
                         section: $section,
-                        openLesson: openLesson
+                        openLesson: openLesson,
+                        makeLiveModule: makeLiveModule
                     )
                 case .modules:
                     ModulesView(preferences: preferences, shelfSettings: shelfSettings, shelfStore: shelfStore) {

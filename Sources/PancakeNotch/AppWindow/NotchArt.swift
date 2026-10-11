@@ -14,6 +14,10 @@ struct NotchStage: View {
     var showsShelf = false
     /// A practice Shelf from outside (a lesson's); otherwise the stage keeps its own while it shows.
     var practice: PracticeShelf?
+    /// The user's real modules on their real data (Home): shown instead of any practice Shelf.
+    var liveModule: (any NotchModule)?
+    /// A small label in the corner, e.g. that this is the real notch.
+    var badge: String?
     /// What the hint says while inactive; by default, that the notch is off.
     var inactiveHint: String?
     /// What the hint says while active; by default, how to open and shrink it.
@@ -57,6 +61,13 @@ struct NotchStage: View {
                     .padding(.top, size.height * 0.5)
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            if let badge {
+                Label(badge, systemImage: "circle.fill")
+                    .labelStyle(BadgeLabelStyle())
+                    .padding(14)
+            }
+        }
         .clipped()
         .onAppear(perform: updateOwnShelf)
         .onChange(of: showsShelf) { updateOwnShelf() }
@@ -67,13 +78,14 @@ struct NotchStage: View {
     }
 
     private var module: (any NotchModule)? {
+        if let liveModule { return liveModule }
         if let practice { return practice.module }
         return showsShelf ? ownShelf?.module : nil
     }
 
     /// The stage's own practice Shelf exists only while it's shown, and starts fresh each time.
     private func updateOwnShelf() {
-        if practice == nil, showsShelf {
+        if practice == nil, liveModule == nil, showsShelf {
             if ownShelf == nil { ownShelf = PracticeShelf(seeded: true) }
         } else {
             ownShelf?.close()
@@ -94,6 +106,25 @@ struct NotchStage: View {
         .foregroundStyle(AppPalette.secondaryText)
         // The default hint repeats what the page says; a custom one (e.g. "this is a practice Shelf") is read.
         .accessibilityHidden(isActive ? activeHint == nil : inactiveHint == nil)
+    }
+}
+
+/// A small dot and a few words, on a dark pill.
+private struct BadgeLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon
+                .font(.system(size: 6))
+                .foregroundStyle(.white)
+                .accessibilityHidden(true)
+            configuration.title
+                .font(.app(size: 11, weight: .semibold))
+                .foregroundStyle(AppPalette.secondaryText)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background(Color.white.opacity(0.06), in: Capsule())
+        .overlay(PillOutline(color: AppPalette.hairline))
     }
 }
 

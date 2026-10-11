@@ -2,6 +2,7 @@ import AppKit
 import HotKey
 import Learn
 import ModuleShelf
+import NotchCore
 import SwiftUI
 
 /// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
@@ -15,15 +16,18 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     private let shelfSettings: ShelfSettings
     private let shelfStore: ShelfStore
     private let progress: LearnProgress
+    private let makeLiveModule: () -> (any NotchModule)?
     private var window: NSWindow?
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, shelfSettings: ShelfSettings, shelfStore: ShelfStore, progress: LearnProgress) {
+    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, shelfSettings: ShelfSettings, shelfStore: ShelfStore, progress: LearnProgress,
+         makeLiveModule: @escaping () -> (any NotchModule)?) {
         self.preferences = preferences
         self.shortcuts = shortcuts
         self.stats = stats
         self.shelfSettings = shelfSettings
         self.shelfStore = shelfStore
         self.progress = progress
+        self.makeLiveModule = makeLiveModule
     }
 
     func show() {
@@ -42,7 +46,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
                 stats: stats,
                 shelfSettings: shelfSettings,
                 shelfStore: shelfStore,
-                progress: progress
+                progress: progress,
+                makeLiveModule: makeLiveModule
             ),
             windowClass: NSWindow.self,
             size: AppWindowView.defaultSize
@@ -121,6 +126,7 @@ extension AppWindowController {
                 shelfSettings: shelfSettings,
                 shelfStore: shelfStore,
                 progress: progress,
+                makeLiveModule: { shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil },
                 section: section,
                 lesson: lesson
             ), size: size)
@@ -166,6 +172,16 @@ extension AppWindowController {
         try render("stage-item", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2) {
             practice.openItem(at: 1)
         }
+
+        // Home's live notch, open, showing the (sample) real Shelf.
+        let live = NotchStage(
+            behavior: preferences.notchBehavior,
+            liveModule: ShelfModule(store: shelfStore, settings: shelfSettings),
+            badge: String(localized: "Your real notch"),
+            startState: .expanded
+        )
+        .background(AppPalette.background)
+        try render("stage-live", rootView: live.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
 
         progress.markDone(.basics)
         progress.markDone(.shelf)

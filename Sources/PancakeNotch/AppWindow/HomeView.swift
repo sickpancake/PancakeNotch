@@ -14,6 +14,8 @@ struct HomeView: View {
     let progress: LearnProgress
     @Binding var section: AppSection
     let openLesson: (LessonID) -> Void
+    /// The notch's modules on the user's real data, for the live notch on Home.
+    let makeLiveModule: () -> (any NotchModule)?
 
     var body: some View {
         PageScroll {
@@ -23,7 +25,7 @@ struct HomeView: View {
                     .padding(.top, 26)
                     .transition(.opacity)
             }
-            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled)
+            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled, makeLiveModule: makeLiveModule)
                 .padding(.top, 26)
             StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 .padding(.top, 14)
@@ -144,6 +146,9 @@ private struct ProgressSegments: View {
 private struct NotchHero: View {
     @Bindable var preferences: Preferences
     let showsShelf: Bool
+    let makeLiveModule: () -> (any NotchModule)?
+    /// What the real notch shows (the Shelf, later more), on the user's real data, while Home is up.
+    @State private var liveModule: (any NotchModule)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -151,7 +156,16 @@ private struct NotchHero: View {
     var body: some View {
         let isOn = preferences.notchEnabled
         VStack(spacing: 0) {
-            NotchStage(behavior: preferences.notchBehavior, isActive: isOn, showsShelf: showsShelf)
+            NotchStage(
+                behavior: preferences.notchBehavior,
+                isActive: isOn,
+                liveModule: liveModule,
+                badge: String(localized: "Your real notch"),
+                activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too.")
+            )
+            .onAppear { liveModule = makeLiveModule() }
+            .onChange(of: showsShelf) { liveModule = makeLiveModule() }
+            .onDisappear { liveModule = nil }
 
             HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)

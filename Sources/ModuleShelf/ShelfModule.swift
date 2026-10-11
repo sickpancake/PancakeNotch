@@ -142,12 +142,13 @@ public final class ShelfModule: NotchModule {
             self.notch?.setTall(false)
             self.notch?.releaseKeyFocus?()
             self.notch?.restingState = .closed
-            store.onChange = nil
+            store.stopObserving(by: self)
             quickLook.closeIfShowing()
         }
         self.notch = notch
         guard notch != nil else { return }
-        store.onChange = { [weak self] in self?.storeChanged() }
+        // Several Shelves can show one store (the real notch and Home's live preview): each listens.
+        store.observe(by: self) { [weak self] in self?.storeChanged() }
         updateRestingState()
         observeSettings()
     }

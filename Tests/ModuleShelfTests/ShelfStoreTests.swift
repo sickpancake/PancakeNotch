@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Testing
 @testable import ModuleShelf
 
@@ -155,6 +156,22 @@ struct ShelfStoreTests {
 
         await store.prune(maxAge: 86_400)
         #expect(store.items.map(\.displayName) == ["fresh"])
+    }
+
+    /// The real notch's Shelf and the app window's live one both hear about every change.
+    @Test func twoShelvesOnOneStoreBothHearChanges() throws {
+        let fixture = try ShelfFixture()
+        let store = fixture.makeStore()
+        let first = NSObject(), second = NSObject()
+        var heard: [String] = []
+        store.observe(by: first) { heard.append("first") }
+        store.observe(by: second) { heard.append("second") }
+        store.add([.text("a")], duplicates: .ask)
+        #expect(heard.sorted() == ["first", "second"])
+        store.stopObserving(by: second)
+        heard = []
+        store.clear()
+        #expect(heard == ["first"])
     }
 
     @Test func notifiesOnChange() throws {

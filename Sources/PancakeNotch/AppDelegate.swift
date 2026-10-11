@@ -32,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stats: stats,
         shelfSettings: shelfSettings,
         shelfStore: shelfStore,
-        progress: learnProgress
+        progress: learnProgress,
+        makeLiveModule: { [weak self] in self?.makeLiveModule() }
     )
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
@@ -136,6 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else { return }
         let inputs = files.sorted { $0.path < $1.path }.map { ShelfInput.file($0, owned: false) }
         shelfStore.add(inputs, duplicates: .addAgain)
+    }
+
+    /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.
+    /// Each copy has its own open/selected state; items and settings are shared. Later modules join here.
+    private func makeLiveModule() -> (any NotchModule)? {
+        shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
     }
 
     /// Creates the Shelf when it's switched on and drops it when it's off (no drops are accepted then).
