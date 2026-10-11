@@ -18,3 +18,5 @@ jobs:
         run: ./scripts/build-app.sh release
       - name: Idle memory budget (ADR-0006)
         run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
+      - name: Shelf peak memory budget (ADR-0006)
+        run: ./scripts/check-shelf-memory.sh build/PancakeNotch.app 20 100

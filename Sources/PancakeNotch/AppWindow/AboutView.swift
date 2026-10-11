@@ -1,7 +1,9 @@
 import AppKit
+import Learn
 import SwiftUI
 
 struct AboutView: View {
+    let progress: LearnProgress
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -51,6 +53,12 @@ struct AboutView: View {
                         .font(.app(size: 14, weight: .semibold))
                         .foregroundStyle(AppPalette.secondaryText)
                         .accessibilityHidden(true)
+                }
+                SettingsRow(
+                    title: String(localized: "Welcome"),
+                    subtitle: String(localized: "The short first-run tour of the notch basics.")
+                ) {
+                    Button(String(localized: "Show Welcome Again")) { progress.onboardingDone = false }
                 }
                 SettingsRow(
                     title: String(localized: "License"),

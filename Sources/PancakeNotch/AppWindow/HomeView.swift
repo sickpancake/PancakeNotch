@@ -1,3 +1,5 @@
+import Learn
+import ModuleShelf
 import NotchCore
 import SwiftUI
 
@@ -7,16 +9,27 @@ struct HomeView: View {
     @Bindable var preferences: Preferences
     let shortcuts: ShortcutController
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
+    let progress: LearnProgress
     @Binding var section: AppSection
+    let openLesson: (LessonID) -> Void
+    /// The notch's modules on the user's real data, for the live notch on Home.
+    let makeLiveModule: () -> (any NotchModule)?
 
     var body: some View {
         PageScroll {
             HomeHeader()
-            NotchHero(preferences: preferences)
+            if !progress.homeBoxHidden {
+                LearnBox(progress: progress, openLesson: openLesson)
+                    .padding(.top, 26)
+                    .transition(.opacity)
+            }
+            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled, makeLiveModule: makeLiveModule)
                 .padding(.top, 26)
-            StatsRow(stats: stats)
+            StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
                 .padding(.top, 14)
-            TipsCard(preferences: preferences, shortcuts: shortcuts) { section = .keyboard }
+            TipsCard(preferences: preferences, shortcuts: shortcuts, showsShelfTips: shelfSettings.isEnabled) { section = .keyboard }
                 .padding(.top, 14)
         }
     }
@@ -50,9 +63,92 @@ private struct HomeHeader: View {
     }
 }
 
+/// Points new people at the lessons: how many are done, a way to carry on, and a way to hide it.
+/// When everything is done it shows a checkmark and offers to go away.
+private struct LearnBox: View {
+    let progress: LearnProgress
+    let openLesson: (LessonID) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let total = LessonID.allCases.count
+        let done = progress.doneCount
+        HStack(spacing: 14) {
+            Image(systemName: progress.allDone ? "checkmark" : "graduationcap")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(progress.allDone ? Color.black : AppPalette.primaryText)
+                .frame(width: 42, height: 42)
+                .background(progress.allDone ? Color.white : AppPalette.selection, in: .rect(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(progress.allDone ? String(localized: "You've learned the basics") : String(localized: "Learn PancakeNotch"))
+                    .font(.app(size: 15, weight: .bold))
+                Text(progress.allDone
+                    ? String(localized: "Every lesson done. They stay in Learn if you want a refresher.")
+                    : String(localized: "\(done) of \(total) lessons done. Each takes about a minute, hands on."))
+                    .font(.app(size: 12.5))
+                    .foregroundStyle(AppPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                ProgressSegments(done: done, total: total)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            if progress.allDone {
+                Button(String(localized: "Hide"), action: hide)
+                    .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+            } else {
+                Button(done == 0 ? String(localized: "Start") : String(localized: "Continue")) {
+                    openLesson(LessonID.allCases.first { !progress.isDone($0) } ?? .basics)
+                }
+                .buttonStyle(ProminentPillButtonStyle())
+                Button(action: hide) {
+                    Image(systemName: "xmark")
+                        .font(.app(size: 11, weight: .bold))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .frame(width: 26, height: 26)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .help(Text("Hide"))
+                .accessibilityLabel(Text("Hide"))
+                .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+            }
+        }
+        .padding(.horizontal, AppMetrics.cardInset)
+        .padding(.vertical, 16)
+        .glassPanel()
+    }
+
+    private func hide() {
+        withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.25)) { progress.homeBoxHidden = true }
+    }
+}
+
+/// A short bar split into one piece per lesson, done pieces filled.
+private struct ProgressSegments: View {
+    let done: Int
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<total, id: \.self) { index in
+                Capsule()
+                    .fill(index < done ? AppPalette.ink : AppPalette.rail)
+                    .frame(width: 28, height: 4)
+            }
+        }
+        .padding(.top, 2)
+        .accessibilityHidden(true)
+    }
+}
+
 /// The big switch: a pretend screen with the live notch on top, its state and the toggle below.
 private struct NotchHero: View {
     @Bindable var preferences: Preferences
+    let showsShelf: Bool
+    let makeLiveModule: () -> (any NotchModule)?
+    /// What the real notch shows (the Shelf, later more), on the user's real data, while Home is up.
+    @State private var liveModule: (any NotchModule)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -60,7 +156,15 @@ private struct NotchHero: View {
     var body: some View {
         let isOn = preferences.notchEnabled
         VStack(spacing: 0) {
-            NotchStage(behavior: preferences.notchBehavior, isActive: isOn)
+            NotchStage(
+                behavior: preferences.notchBehavior,
+                isActive: isOn,
+                liveModule: liveModule,
+                activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too.")
+            )
+            .onAppear { liveModule = makeLiveModule() }
+            .onChange(of: showsShelf) { liveModule = makeLiveModule() }
+            .onDisappear { liveModule = nil }
 
             HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)
@@ -126,9 +230,11 @@ private struct StatusBadge: View {
     }
 }
 
-/// Big-number tiles. Shelf has no numbers yet, so its tile only says it's coming.
+/// Big-number tiles: notch opens, days together, and what's on the Shelf.
 private struct StatsRow: View {
     let stats: UsageStats
+    let shelfSettings: ShelfSettings
+    let shelfStore: ShelfStore
 
     var body: some View {
         HStack(spacing: 12) {
@@ -152,7 +258,14 @@ private struct StatsRow: View {
                     ? String(localized: "day, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
                     : String(localized: "days, since \(stats.firstLaunch.formatted(.dateTime.month(.abbreviated).day()))")
             )
-            ComingStatTile()
+            StatTile(
+                label: String(localized: "Shelf"),
+                symbol: "tray",
+                value: shelfStore.items.count.formatted(),
+                caption: shelfSettings.isEnabled
+                    ? String(localized: "of \(ShelfStore.capacity) on the Shelf")
+                    : String(localized: "Shelf is off")
+            )
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -206,31 +319,6 @@ private struct StatTile: View {
     }
 }
 
-private struct ComingStatTile: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TileLabel(label: String(localized: "Shelf"), symbol: "tray")
-            Spacer(minLength: 14)
-            Text("Coming soon")
-                .font(.app(size: 13, weight: .semibold))
-            Text("Files kept handy")
-                .font(.app(size: 12))
-                .foregroundStyle(AppPalette.secondaryText)
-                .padding(.top, 2)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .padding(.horizontal, AppMetrics.cardInset)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(AppPalette.hairlineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
 private struct TileLabel: View {
     let label: String
     let symbol: String
@@ -251,6 +339,7 @@ private struct TileLabel: View {
 private struct TipsCard: View {
     let preferences: Preferences
     let shortcuts: ShortcutController
+    let showsShelfTips: Bool
     let openKeyboardSettings: () -> Void
 
     var body: some View {
@@ -307,11 +396,18 @@ private struct TipsCard: View {
     }
 
     private var tips: [(symbol: String, title: String, detail: String)] {
-        [
+        let shelf: [(symbol: String, title: String, detail: String)] = showsShelfTips ? [
+            ("tray.and.arrow.down", String(localized: "Drop things on the notch"),
+             String(localized: "Drag files, images, text or links to the notch to keep them on the Shelf.")),
+            ("hand.point.up.left", String(localized: "Click an item to open it"),
+             String(localized: "See a big preview or edit a note or link. Right-click for Copy, AirDrop and more.")),
+        ] : []
+        return [
             ("cursorarrow.rays", String(localized: "Hover to open"),
              String(localized: "Rest the pointer on the notch and it slides open.")),
-            ("hand.tap", String(localized: "Click to shrink"),
-             String(localized: "Click the open notch to tuck it away again.")),
+            ("hand.tap", String(localized: "Click to keep it small"),
+             String(localized: "Click the open notch and it stays small: hover to open it, click again to close it fully.")),
+        ] + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
                    String(localized: "The PancakeNotch menu bar icon turns the notch on or off."))

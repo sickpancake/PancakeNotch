@@ -39,6 +39,16 @@ struct NotchLayoutTests {
         #expect(shape.height <= frame.height)
     }
 
+    @Test func tallPanelIsTallerAndFitsTheContent() {
+        let layout = NotchLayout(geometry: geometry)
+        let tall = NotchLayout(geometry: geometry, isTall: true)
+        #expect(tall.bodySize(for: .expanded).height > layout.bodySize(for: .expanded).height)
+        #expect(tall.bodySize(for: .expanded).width == layout.bodySize(for: .expanded).width)
+        #expect(tall.bodySize(for: .compact) == layout.bodySize(for: .compact))
+        #expect(layout.largestWindowSize.height >= tall.windowFrame(for: .expanded).height)
+        #expect(tall.windowFrame(for: .expanded).height < geometry.screenFrame.height)
+    }
+
     @Test func expandedPanelFitsNarrowScreens() {
         let narrow = NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: 500, height: 400))
         let layout = NotchLayout(geometry: narrow)
@@ -59,4 +69,12 @@ struct NotchLayoutTests {
         #expect(onScreen.maxY == largest.maxY)
         #expect(content.width >= window.width && content.height >= window.height)
     }
+}
+
+@Test func expandedBodyIsTopCentredInTheContent() {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+    let origin = layout.bodyOrigin(for: .expanded)
+    let body = layout.bodySize(for: .expanded)
+    #expect(origin.y == 0)
+    #expect(abs(origin.x * 2 + body.width - layout.largestWindowSize.width) < 0.001)
 }

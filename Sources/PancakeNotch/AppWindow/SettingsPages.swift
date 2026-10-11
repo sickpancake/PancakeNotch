@@ -1,3 +1,4 @@
+import ModuleShelf
 import SwiftUI
 
 struct GeneralSettingsView: View {
@@ -37,12 +38,7 @@ struct GeneralSettingsView: View {
             }
             .onChange(of: launchAtLogin) { _, enabled in
                 guard enabled != LaunchAtLogin.isEnabled else { return }
-                do {
-                    try LaunchAtLogin.set(enabled)
-                    launchError = nil
-                } catch {
-                    launchError = error.localizedDescription
-                }
+                launchError = LaunchAtLogin.apply(enabled)
                 launchAtLogin = LaunchAtLogin.isEnabled
                 needsApproval = LaunchAtLogin.needsApproval
             }
@@ -61,13 +57,14 @@ struct GeneralSettingsView: View {
 
 struct NotchSettingsView: View {
     @Bindable var preferences: Preferences
+    let shelfSettings: ShelfSettings
 
     var body: some View {
         AppPage(
             title: String(localized: "Notch"),
             subtitle: String(localized: "How the notch reacts to your pointer. Try your changes right here.")
         ) {
-            NotchStage(behavior: preferences.notchBehavior)
+            NotchStage(behavior: preferences.notchBehavior, showsShelf: shelfSettings.isEnabled)
                 .background(Color.black)
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))
                 .overlay {
@@ -149,7 +146,7 @@ struct KeyboardSettingsView: View {
     var body: some View {
         AppPage(
             title: String(localized: "Keyboard"),
-            subtitle: String(localized: "Shortcuts that work from any app.")
+            subtitle: String(localized: "Your shortcut for the notch, and the keys in the Shelf and this window.")
         ) {
             SettingsCard(
                 header: String(localized: "Shortcuts"),
@@ -163,12 +160,48 @@ struct KeyboardSettingsView: View {
                 }
             }
 
+            SettingsCard(
+                header: String(localized: "In the Shelf"),
+                footer: String(localized: "These work after you click inside the open notch.")
+            ) {
+                SettingsRow(
+                    title: String(localized: "Open the selected item"),
+                    subtitle: String(localized: "A big preview, or an editor for notes and links. Space works too.")
+                ) {
+                    KeyCombo(keys: ["Return"])
+                }
+                SettingsRow(
+                    title: String(localized: "Move the selection"),
+                    subtitle: String(localized: "Hold Shift to select more than one.")
+                ) {
+                    KeyCombo(keys: ["←", "→"])
+                }
+                SettingsRow(
+                    title: String(localized: "Select everything"),
+                    subtitle: String(localized: "Then drag them out together, or remove them.")
+                ) {
+                    KeyCombo(keys: ["⌘", "A"])
+                }
+                SettingsRow(
+                    title: String(localized: "Remove from the Shelf"),
+                    subtitle: String(localized: "The files themselves stay where they are.")
+                ) {
+                    KeyCombo(keys: ["Delete"])
+                }
+                SettingsRow(
+                    title: String(localized: "Go back, then close"),
+                    subtitle: String(localized: "Leaves an open item, then closes the notch.")
+                ) {
+                    KeyCombo(keys: ["Esc"])
+                }
+            }
+
             SettingsCard(header: String(localized: "In this window")) {
                 SettingsRow(
                     title: String(localized: "Jump to a page"),
-                    subtitle: String(localized: "Home, Modules, General, Notch, Keyboard, About, in sidebar order.")
+                    subtitle: String(localized: "Home, Modules, Learn, General, Notch, Keyboard, About, in sidebar order.")
                 ) {
-                    KeyCombo(keys: ["⌘", "1 – 6"])
+                    KeyCombo(keys: ["⌘", "1 – 7"])
                 }
                 SettingsRow(
                     title: String(localized: "Close the window"),

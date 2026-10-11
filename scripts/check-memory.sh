@@ -7,7 +7,7 @@ APP="${1:-build/PancakeNotch.app}"
 SETTLE="${2:-30}"
 LIMIT_MIB="${3:-50}"   # ADR-0006: < 50 MB idle
 
-PANCAKENOTCH_SIMULATE_NOTCH=1 "$APP/Contents/MacOS/PancakeNotch" &
+PANCAKENOTCH_SIMULATE_NOTCH=1 PANCAKENOTCH_SKIP_ONBOARDING=1 "$APP/Contents/MacOS/PancakeNotch" &
 PID=$!
 trap 'kill "$PID" 2>/dev/null || true' EXIT
 

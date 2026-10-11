@@ -1,4 +1,6 @@
 import AppKit
+import Learn
+import ModuleShelf
 import NotchCore
 import os
 
@@ -16,8 +18,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let preferences = Preferences()
     private let stats = UsageStats()
+    private let shelfSettings = ShelfSettings()
+    /// Loads only the saved item list; files are checked when the notch opens.
+    private lazy var shelfStore = ShelfStore()
+    /// Exists only while the Shelf is switched on.
+    private var shelf: ShelfModule?
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
-    private lazy var appWindow = AppWindowController(preferences: preferences, shortcuts: shortcuts, stats: stats)
+    /// Finished lessons and whether the welcome has been seen.
+    private let learnProgress = LearnProgress()
+    private lazy var appWindow = AppWindowController(
+        preferences: preferences,
+        shortcuts: shortcuts,
+        stats: stats,
+        shelfSettings: shelfSettings,
+        shelfStore: shelfStore,
+        progress: learnProgress,
+        makeLiveModule: { [weak self] in self?.makeLiveModule() }
+    )
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
         openApp: { [weak self] in self?.showAppWindow() }
@@ -40,6 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
         notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
         observePreferences()
+        ShelfModule.removeTemporaryFiles()
+        PracticeShelf.removeLeftovers()
+        shelfStore.removeOrphanedFiles()
+        seedShelfIfRequested()
+        observeShelf()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -48,13 +70,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateGeometry() }
         }
-        // Entering or leaving a full-screen app switches Spaces.
+        // Entering or leaving a full-screen app switches Spaces. macOS hides the notch during the swipe,
+        // so a pointer that left meanwhile sent no hover exit: check it now.
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateFullScreen() }
+            MainActor.assumeIsolated {
+                self?.updateFullScreen()
+                self?.notchController.model?.pointerMayHaveLeft()
+            }
         }
         // Switching apps can bring a listed app to the front within the same Space.
         appObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -65,10 +91,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updateFullScreen() }
         }
         updateGeometry()
+        showWelcomeIfNeeded()
+    }
+
+    /// The first launch (or the first since the welcome was added) opens the window on the welcome.
+    /// `PANCAKENOTCH_SKIP_ONBOARDING=1` keeps it closed, e.g. for the idle memory check.
+    private func showWelcomeIfNeeded() {
+        guard !learnProgress.onboardingDone,
+              ProcessInfo.processInfo.environment["PANCAKENOTCH_SKIP_ONBOARDING"] == nil else { return }
+        showAppWindow()
     }
 
     /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
     /// when the menu bar icon is hidden.
+    /// Writes text typed in the Shelf's editor that's still waiting to be saved.
+    func applicationWillTerminate(_ notification: Notification) {
+        shelfStore.saveEdits()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showAppWindow()
         return false
@@ -86,6 +126,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBar.isVisible = preferences.showMenuBarIcon
         } onChange: { [weak self] in
             Task { @MainActor in self?.observePreferences() }
+        }
+    }
+
+    /// `PANCAKENOTCH_SHELF_SEED=/folder` fills an empty Shelf with that folder's files (memory checks;
+    /// pair it with `PANCAKENOTCH_SHELF_DIR` so the real Shelf isn't touched).
+    private func seedShelfIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SHELF_SEED"], shelfStore.items.isEmpty,
+              let files = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: path), includingPropertiesForKeys: nil)
+        else { return }
+        let inputs = files.sorted { $0.path < $1.path }.map { ShelfInput.file($0, owned: false) }
+        shelfStore.add(inputs, duplicates: .addAgain)
+    }
+
+    /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.
+    /// Each copy has its own open/selected state; items and settings are shared. Later modules join here.
+    private func makeLiveModule() -> (any NotchModule)? {
+        shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
+    }
+
+    /// Creates the Shelf when it's switched on and drops it when it's off (no drops are accepted then).
+    private func observeShelf() {
+        withObservationTracking {
+            if shelfSettings.isEnabled {
+                if shelf == nil { shelf = ShelfModule(store: shelfStore, settings: shelfSettings) }
+            } else {
+                shelf = nil
+            }
+            notchController.module = shelf
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeShelf() }
         }
     }
 
@@ -120,7 +190,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func writeSnapshot(to path: String) {
         let geometry = currentGeometry() ?? .simulated(in: NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1512, height: 982))
         do {
-            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path))
+            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
+                ShelfSnapshot.models(layout: layout)
+            }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }

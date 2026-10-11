@@ -1,5 +1,8 @@
 import AppKit
 import HotKey
+import Learn
+import ModuleShelf
+import NotchCore
 import SwiftUI
 
 /// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
@@ -10,12 +13,21 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     private let preferences: Preferences
     private let shortcuts: ShortcutController
     private let stats: UsageStats
+    private let shelfSettings: ShelfSettings
+    private let shelfStore: ShelfStore
+    private let progress: LearnProgress
+    private let makeLiveModule: () -> (any NotchModule)?
     private var window: NSWindow?
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats) {
+    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, shelfSettings: ShelfSettings, shelfStore: ShelfStore, progress: LearnProgress,
+         makeLiveModule: @escaping () -> (any NotchModule)?) {
         self.preferences = preferences
         self.shortcuts = shortcuts
         self.stats = stats
+        self.shelfSettings = shelfSettings
+        self.shelfStore = shelfStore
+        self.progress = progress
+        self.makeLiveModule = makeLiveModule
     }
 
     func show() {
@@ -28,7 +40,15 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = Self.makeWindow(
-            rootView: AppWindowView(preferences: preferences, shortcuts: shortcuts, stats: stats),
+            rootView: AppWindowView(
+                preferences: preferences,
+                shortcuts: shortcuts,
+                stats: stats,
+                shelfSettings: shelfSettings,
+                shelfStore: shelfStore,
+                progress: progress,
+                makeLiveModule: makeLiveModule
+            ),
             windowClass: NSWindow.self,
             size: AppWindowView.defaultSize
         )
@@ -40,7 +60,7 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     }
 
     /// A dark window whose sidebar runs up under the traffic lights, with no visible title bar.
-    private static func makeWindow(rootView: AppWindowView, windowClass: NSWindow.Type, size: CGSize) -> NSWindow {
+    private static func makeWindow(rootView: some View, windowClass: NSWindow.Type, size: CGSize) -> NSWindow {
         let window = windowClass.init(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -61,6 +81,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Closing the window during the welcome counts as having seen it: it shows once (ADR-0020).
+        progress.onboardingDone = true
         NSApp.setActivationPolicy(.accessory)
         // Release after AppKit finishes closing, so the SwiftUI view tree is freed.
         DispatchQueue.main.async { [weak self] in
@@ -84,18 +106,44 @@ extension AppWindowController {
         let preferences = Preferences(defaults: defaults)
         let stats = sampleStats(defaults: defaults)
         let noShortcut = ShortcutController(defaults: defaults) {}
+        let shelfSettings = ShelfSettings(defaults: defaults)
+        let shelfFolder = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-snapshot-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: shelfFolder) }
+        let shelfStore = ShelfStore(directory: shelfFolder)
+        let progress = LearnProgress(defaults: defaults)
+        progress.onboardingDone = true
+        shelfStore.add(
+            [.text("Meeting notes"), .link(URL(string: "https://github.com")!), .text("Call back at 4"), .text("Address")],
+            duplicates: .addAgain
+        )
 
-        func render(_ name: String, section: AppSection, shortcuts: ShortcutController = noShortcut,
+        func render(_ name: String, section: AppSection, lesson: LessonID = .basics, shortcuts: ShortcutController = noShortcut,
                     size: CGSize = AppWindowView.defaultSize) throws {
-            let window = makeWindow(
-                rootView: AppWindowView(preferences: preferences, shortcuts: shortcuts, stats: stats, section: section),
-                windowClass: SnapshotWindow.self,
-                size: size
-            )
+            try render(name, rootView: AppWindowView(
+                preferences: preferences,
+                shortcuts: shortcuts,
+                stats: stats,
+                shelfSettings: shelfSettings,
+                shelfStore: shelfStore,
+                progress: progress,
+                makeLiveModule: { shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil },
+                section: section,
+                lesson: lesson
+            ), size: size)
+        }
+
+        /// `then` runs once the page has settled, before a second wait (e.g. to open an item).
+        func render(_ name: String, rootView: some View, size: CGSize = AppWindowView.defaultSize, settle: TimeInterval = 0.3,
+                    then: (() -> Void)? = nil) throws {
+            let window = makeWindow(rootView: rootView, windowClass: SnapshotWindow.self, size: size)
             // The frame view also draws the traffic lights, so the image looks like the real window.
             guard let view = window.contentView?.superview ?? window.contentView else { return }
             view.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            RunLoop.main.run(until: Date().addingTimeInterval(settle))
+            if let then {
+                then()
+                RunLoop.main.run(until: Date().addingTimeInterval(settle))
+            }
             guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: bitmap)
             try bitmap.representation(using: .png, properties: [:])?
@@ -106,6 +154,39 @@ extension AppWindowController {
             try render(section.rawValue, section: section)
         }
         try render("home-small", section: .home, size: AppWindowView.minimumSize)
+        try render("learn-shelf", section: .learn, lesson: .shelf)
+
+        // The welcome, one image per step, the way a first launch shows it.
+        for step in OnboardingView.Step.allCases {
+            try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(
+                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, step: step
+            ).appWindowStyle())
+        }
+
+        // The practice Shelf working: open with the example items, then with one item opened.
+        let practice = PracticeShelf(seeded: true)
+        defer { practice.close() }
+        let stage = NotchStage(behavior: preferences.notchBehavior, practice: practice, startState: .expanded)
+            .background(AppPalette.background)
+        try render("stage-open", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
+        try render("stage-item", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2) {
+            practice.openItem(at: 1)
+        }
+
+        // Home's live notch, open, showing the (sample) real Shelf.
+        let live = NotchStage(
+            behavior: preferences.notchBehavior,
+            liveModule: ShelfModule(store: shelfStore, settings: shelfSettings),
+            startState: .expanded
+        )
+        .background(AppPalette.background)
+        try render("stage-live", rootView: live.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
+
+        progress.markDone(.basics)
+        progress.markDone(.shelf)
+        try render("home-learned", section: .home)
+        progress.reset(.basics)
+        progress.reset(.shelf)
 
         preferences.notchEnabled = false
         try render("home-off", section: .home)

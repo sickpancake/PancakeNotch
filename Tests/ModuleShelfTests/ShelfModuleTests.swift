@@ -1,0 +1,242 @@
+import AppKit
+import Foundation
+import NotchCore
+import Testing
+@testable import ModuleShelf
+
+@MainActor
+struct ShelfModuleTests {
+    func makeModule(_ fixture: ShelfFixture, policy: ShelfSettings.DuplicatePolicy = .ask) -> (ShelfModule, NotchViewModel) {
+        let defaults = UserDefaults(suiteName: "ShelfModuleTests-\(UUID().uuidString)")!
+        let settings = ShelfSettings(defaults: defaults)
+        settings.duplicatePolicy = policy
+        let module = ShelfModule(store: fixture.makeStore(), settings: settings)
+        let notch = NotchViewModel(
+            layout: NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982))),
+            pointerLocation: { CGPoint(x: 756, y: 300) }
+        )
+        notch.module = module
+        return (module, notch)
+    }
+
+    /// From 15 items the notch rests with the Shelf in its ear, unless that's switched off.
+    @Test func restsInCompactFromFifteenItems() async throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(14))
+        #expect(notch.restingState == .closed)
+        #expect(module.accessibilityStatus == nil)
+        module.offer([.text("One more")])
+        #expect(notch.restingState == .compact)
+        #expect(module.accessibilityStatus == "Shelf, 15 items")
+
+        // The setting is observed: the change arrives on a later main-actor turn.
+        module.settings.showsInEars = false
+        for _ in 0..<100 where notch.restingState != .closed { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notch.restingState == .closed)
+        module.settings.showsInEars = true
+        for _ in 0..<100 where notch.restingState != .compact { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notch.restingState == .compact)
+    }
+
+    /// A click on empty space clears the selection first; with nothing selected it shrinks the notch.
+    @Test func emptySpaceClickDeselectsThenShrinks() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(2))
+        notch.open()
+        module.selection = [module.store.items[0].id]
+        module.backgroundClicked()
+        #expect(module.selection.isEmpty)
+        #expect(notch.state == .expanded)
+        module.backgroundClicked()
+        #expect(notch.state == .compact)
+    }
+
+    @Test func earLabels() {
+        #expect(ShelfModule.earLabel(count: 0) == "Shelf is empty")
+        #expect(ShelfModule.earLabel(count: 16) == "Shelf, 16 items")
+        #expect(ShelfModule.earLabel(count: 20) == "Shelf is full, 20 items")
+    }
+
+    /// A drag that opened the notch early shows the drop zones (with AirDrop, also for text) before
+    /// AppKit reports it over the window.
+    @Test func approachingDragShowsDropZonesWithAirDrop() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        notch.open()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("ShelfModuleTests-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setString("Pick up the cake", forType: .string)
+
+        let airDrop = ShelfLayout(notch.layout).airDropZone
+        module.dragApproaching(pasteboard, at: CGPoint(x: airDrop.midX, y: airDrop.midY))
+        #expect(module.dragCanAirDrop)
+        #expect(module.dropZone == .airDrop)
+        module.dragApproaching(pasteboard, at: CGPoint(x: airDrop.minX - 100, y: airDrop.midY))
+        #expect(module.dropZone == .shelf)
+        module.dragEnded()
+        #expect(module.dropZone == nil)
+    }
+
+    @Test func fullShelfHoldsTheRestAndAddsThemOnceThereIsRoom() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        let inputs = try fixture.files(22)
+        module.offer(inputs)
+        #expect(module.prompt == .full(pending: Array(inputs.suffix(2))))
+        #expect(notch.restingState == .compact)
+        #expect(module.holdsOpen)
+
+        module.startChoosing()
+        module.selection = Set(module.store.items.prefix(3).map(\.id))
+        module.removeChosen()
+
+        #expect(module.prompt == nil)
+        #expect(module.store.items.count == 19)
+        #expect(module.store.items.filter { $0.displayName == "f20.txt" }.count == 1)
+        // Still nearly full (19): the tray stays in the ear.
+        #expect(notch.restingState == .compact)
+        #expect(!module.holdsOpen)
+    }
+
+    @Test func clearingForPendingAddsEverythingWaiting() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer(try fixture.files(25))
+        module.clearForPending()
+        #expect(module.prompt == nil)
+        #expect(module.store.items.count == 5)
+    }
+
+    @Test func duplicatePromptAndRememberedAnswer() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a"), .text("b")])
+        module.offer([.text("a"), .text("c")])
+        #expect(module.prompt == .duplicates(inputs: [.text("a"), .text("c")], count: 1))
+
+        module.answerDuplicates(.moveToFront, remember: true)
+        #expect(module.prompt == nil)
+        #expect(module.store.items.map(\.displayName) == ["c", "a", "b"])
+        #expect(module.settings.duplicatePolicy == .moveToFront)
+    }
+
+    @Test func dismissingDuplicatesAddsOnlyTheNewOnes() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a")])
+        module.offer([.text("a"), .text("new")])
+        module.dismissPrompt()
+        #expect(module.store.items.map(\.displayName) == ["new", "a"])
+    }
+
+    @Test func closingTheNotchDiscardsHeldItems() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        notch.open()
+        module.offer(try fixture.files(21))
+        notch.close()
+        #expect(module.prompt == nil)
+        #expect(module.store.items.count == 20)
+    }
+
+    @Test func shiftClickSelectsARange() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a"), .text("b"), .text("c"), .text("d")])
+        let ids = module.store.items.map(\.id)
+        module.click(ids[0], modifiers: [])
+        module.click(ids[2], modifiers: .shift)
+        #expect(module.selection == Set(ids[0...2]))
+        module.click(ids[3], modifiers: .command)
+        #expect(module.selection.count == 4)
+        #expect(module.targets(for: ids[1]).count == 4)
+    }
+
+    @Test func clearAllNeedsASecondClick() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a")])
+        module.clearAll()
+        #expect(module.store.items.count == 1)
+        #expect(module.confirmingClear)
+        module.clearAll()
+        #expect(module.store.items.isEmpty)
+    }
+
+    @Test func dragOutRemovesOnlyWhenAskedTo() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a")])
+        let id = try #require(module.store.items.first?.id)
+        module.setDraggingOut(true)
+        module.dragOutEnded([id], operation: .copy)
+        #expect(module.store.items.count == 1)
+        #expect(!module.holdsOpen)
+
+        module.settings.removeAfterDragOut = true
+        module.dragOutEnded([id], operation: .copy)
+        #expect(module.store.items.isEmpty)
+    }
+
+    @Test func dragOutIsCopyUnlessMoveIsChosen() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        #expect(module.dragOperations(outside: true) == .copy)
+        #expect(module.dragOperations(outside: false) == [])
+        module.settings.dragOutMode = .move
+        #expect(module.dragOperations(outside: true).contains(.move))
+    }
+}
+
+@MainActor
+struct ShelfModuleReviewTests {
+    func makeModule(_ fixture: ShelfFixture) -> (ShelfModule, NotchViewModel) {
+        let settings = ShelfSettings(defaults: UserDefaults(suiteName: "ShelfModuleReviewTests-\(UUID().uuidString)")!)
+        let module = ShelfModule(store: fixture.makeStore(), settings: settings)
+        let notch = NotchViewModel(layout: NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982))))
+        notch.module = module
+        return (module, notch)
+    }
+
+    @Test func duplicatesDroppedWhileFullAreNotQueued() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        let inputs = try fixture.files(21)
+        module.offer(inputs)
+        module.offer([inputs[0], inputs[20]])
+        #expect(module.prompt == .full(pending: [inputs[20]]))
+    }
+
+    @Test func switchingTheShelfOffDiscardsWaitingItems() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(21))
+        notch.module = nil
+        #expect(module.prompt == nil)
+        #expect(notch.restingState == .closed)
+    }
+
+    @Test func shiftArrowGrowsAndShrinksFromTheAnchor() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer([.text("a"), .text("b"), .text("c")])
+        let ids = module.store.items.map(\.id)
+        module.click(ids[0], modifiers: [])
+        module.moveSelection(by: 1, extending: true)
+        module.moveSelection(by: 1, extending: true)
+        #expect(module.selection == Set(ids))
+        module.moveSelection(by: -1, extending: true)
+        #expect(module.selection == Set(ids[0...1]))
+    }
+
+    @Test func aCardRaisedWhileClosedOpensTheNotch() throws {
+        let fixture = try ShelfFixture()
+        let (module, notch) = makeModule(fixture)
+        module.offer([.text("a")])
+        module.offer([.text("a")])
+        #expect(notch.state == .expanded)
+    }
+}
