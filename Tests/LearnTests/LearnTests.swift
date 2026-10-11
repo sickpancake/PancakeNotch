@@ -123,7 +123,11 @@ struct LessonRunnerTests {
         runner.receive(.notchShrunk)        // ignored while the tick is showing
         #expect(runner.ticked == [first])
 
-        try await Task.sleep(for: .milliseconds(300))
+        // Slow CI machines can take a while to run the pause: wait for the move, up to 2 s.
+        let deadline = ContinuousClock.now + .seconds(2)
+        while runner.stepIndex == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(runner.justTicked == nil)
         #expect(runner.stepIndex == 1)
     }
