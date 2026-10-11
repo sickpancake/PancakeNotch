@@ -160,7 +160,6 @@ private struct NotchHero: View {
                 behavior: preferences.notchBehavior,
                 isActive: isOn,
                 liveModule: liveModule,
-                badge: String(localized: "Your real notch"),
                 activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too.")
             )
             .onAppear { liveModule = makeLiveModule() }

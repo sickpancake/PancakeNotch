@@ -177,7 +177,6 @@ extension AppWindowController {
         let live = NotchStage(
             behavior: preferences.notchBehavior,
             liveModule: ShelfModule(store: shelfStore, settings: shelfSettings),
-            badge: String(localized: "Your real notch"),
             startState: .expanded
         )
         .background(AppPalette.background)
