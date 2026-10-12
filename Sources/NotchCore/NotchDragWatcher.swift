@@ -15,7 +15,7 @@ final class NotchDragWatcher {
     /// Whether a drag carrying this pasteboard should open the notch.
     var accepts: (NSPasteboard) -> Bool = { _ in false }
     /// The drag came near: open the notch.
-    var onApproach: () -> Void = {}
+    var onApproach: (NSPasteboard) -> Void = { _ in }
     /// A drag that opened the notch moved within the area (screen coordinates).
     var onMove: (NSPasteboard, CGPoint) -> Void = { _, _ in }
     /// A drag that opened the notch moved away again, or was released (anywhere).
@@ -82,7 +82,7 @@ final class NotchDragWatcher {
         if isNear != didOpen {
             // Entered or left the area: AppKit's own drag events only start once the pointer is over the window.
             didOpen = isNear
-            isNear ? onApproach() : onLeave()
+            isNear ? onApproach(pasteboard) : onLeave()
         }
         if isNear { onMove(pasteboard, location) }
     }

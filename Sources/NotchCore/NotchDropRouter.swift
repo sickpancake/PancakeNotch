@@ -22,9 +22,10 @@ final class NotchDropRouter: NotchDropDelegate {
         return CGPoint(x: contentPoint.x - origin.x, y: contentPoint.y - origin.y)
     }
 
-    /// The model and module, if this drag may drop here.
+    /// The model and the module that takes this drag (switching the open notch to it), if it may drop here.
     private func target(_ info: any NSDraggingInfo) -> (NotchViewModel, any NotchModule)? {
-        guard let model, let module = model.module, acceptsSource(info.draggingSource) else { return nil }
+        guard let model, acceptsSource(info.draggingSource),
+              let module = model.module(accepting: info.draggingPasteboard) else { return nil }
         return (model, module)
     }
 
@@ -32,14 +33,16 @@ final class NotchDropRouter: NotchDropDelegate {
         guard let (model, module) = target(info) else { return [] }
         logger.info("Drag entered notch: \(info.draggingPasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
         let operation = module.dragUpdated(info, at: Self.bodyPoint(contentPoint, layout: model.layout))
-        if !operation.isEmpty { model.dragEntered() }
+        if !operation.isEmpty { model.dragEntered(focusing: module.moduleID) }
         return operation
     }
 
     func dragUpdated(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
         guard let (model, module) = target(info) else { return [] }
         let operation = module.dragUpdated(info, at: Self.bodyPoint(contentPoint, layout: model.layout))
-        if !operation.isEmpty, model.state != .expanded { model.dragEntered() }
+        if !operation.isEmpty, model.state != .expanded || model.selectedModule !== module || model.showsMenu {
+            model.dragEntered(focusing: module.moduleID)
+        }
         return operation
     }
 

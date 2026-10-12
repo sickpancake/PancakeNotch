@@ -31,6 +31,12 @@ kill -0 "$PID" 2>/dev/null || { echo "App exited early"; exit 1; }
 BYTES="$(footprint --pid "$PID" --format bytes --noCategories | awk '/phys_footprint:/ { print $2; exit }')"
 [[ -n "$BYTES" ]] || { echo "Could not read footprint"; footprint --pid "$PID" --noCategories; exit 1; }
 
+# The Now Playing helper (a perl child process) counts towards the budget too (AGENTS.md rule 1).
+for CHILD in $(pgrep -P "$PID" || true); do
+    CHILD_BYTES="$(footprint --pid "$CHILD" --format bytes --noCategories 2>/dev/null | awk '/phys_footprint:/ { print $2; exit }' || true)"
+    BYTES=$(( BYTES + ${CHILD_BYTES:-0} ))
+done
+
 MIB=$(( BYTES / 1024 / 1024 ))
 echo "Shelf peak footprint (20 large images, notch open): ${MIB} MiB (limit ${LIMIT_MIB} MiB)"
 (( MIB < LIMIT_MIB )) || { echo "Memory budget exceeded"; exit 1; }

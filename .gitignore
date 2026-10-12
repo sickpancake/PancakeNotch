@@ -13,6 +13,11 @@
 xcuserdata/
 DerivedData/
 
+# Rendered logo PNGs: made locally by design/logo/render-logo.swift, not kept in git
+design/logo/*.png
+# App icon PNGs: made locally by design/icon/render.swift, not kept in git
+design/icon/*.png
+
 # Editors
 .vscode/
 .idea/
@@ -31,3 +36,6 @@ docs/adr/
 *.cer
 *.key
 .env
+
+# Extra build folders (parallel builds)
+/.build-*/

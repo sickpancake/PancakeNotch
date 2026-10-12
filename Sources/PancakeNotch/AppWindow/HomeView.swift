@@ -6,30 +6,28 @@ import SwiftUI
 /// The window's first page: a greeting, the notch's on/off switch with a live preview, a few
 /// usage numbers and tips.
 struct HomeView: View {
-    @Bindable var preferences: Preferences
-    let shortcuts: ShortcutController
-    let stats: UsageStats
-    let shelfSettings: ShelfSettings
-    let shelfStore: ShelfStore
-    let progress: LearnProgress
+    let context: AppContext
     @Binding var section: AppSection
     let openLesson: (LessonID) -> Void
-    /// The notch's modules on the user's real data, for the live notch on Home.
-    let makeLiveModule: () -> (any NotchModule)?
 
     var body: some View {
         PageScroll {
             HomeHeader()
-            if !progress.homeBoxHidden {
-                LearnBox(progress: progress, openLesson: openLesson)
+            if !context.progress.homeBoxHidden {
+                LearnBox(progress: context.progress, openLesson: openLesson)
                     .padding(.top, 26)
                     .transition(.opacity)
             }
-            NotchHero(preferences: preferences, showsShelf: shelfSettings.isEnabled, makeLiveModule: makeLiveModule)
+            NotchHero(context: context)
                 .padding(.top, 26)
-            StatsRow(stats: stats, shelfSettings: shelfSettings, shelfStore: shelfStore)
+            StatsRow(stats: context.stats, shelfSettings: context.shelfSettings, shelfStore: context.shelfStore)
                 .padding(.top, 14)
-            TipsCard(preferences: preferences, shortcuts: shortcuts, showsShelfTips: shelfSettings.isEnabled) { section = .keyboard }
+            TipsCard(
+                preferences: context.preferences,
+                shortcuts: context.shortcuts,
+                showsNowPlayingTips: context.nowPlayingSettings.isEnabled,
+                showsShelfTips: context.shelfSettings.isEnabled
+            ) { section = .keyboard }
                 .padding(.top, 14)
         }
     }
@@ -144,29 +142,34 @@ private struct ProgressSegments: View {
 
 /// The big switch: a pretend screen with the live notch on top, its state and the toggle below.
 private struct NotchHero: View {
-    @Bindable var preferences: Preferences
-    let showsShelf: Bool
-    let makeLiveModule: () -> (any NotchModule)?
-    /// What the real notch shows (the Shelf, later more), on the user's real data, while Home is up.
-    @State private var liveModule: (any NotchModule)?
+    let context: AppContext
+    /// What the real notch shows (Now Playing, the Shelf), on the user's real data, while Home is up.
+    @State private var liveModules: [any NotchModule] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+    private var preferences: Preferences { context.preferences }
+
+    /// Which modules are on: the live notch follows the switches.
+    private var enabledModules: [Bool] {
+        [context.nowPlayingSettings.isEnabled, context.shelfSettings.isEnabled]
+    }
 
     var body: some View {
         let isOn = preferences.notchEnabled
         VStack(spacing: 0) {
             NotchStage(
                 behavior: preferences.notchBehavior,
+                arrangement: context.arrangement,
                 isActive: isOn,
-                liveModule: liveModule,
+                modules: liveModules,
                 activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too.")
             )
-            .onAppear { liveModule = makeLiveModule() }
-            .onChange(of: showsShelf) { liveModule = makeLiveModule() }
-            .onDisappear { liveModule = nil }
+            .onAppear { liveModules = context.makeLiveModules() }
+            .onChange(of: enabledModules) { liveModules = context.makeLiveModules() }
+            .onDisappear { liveModules = [] }
 
-            HStack(spacing: 14) {
+        HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(isOn ? String(localized: "Notch is on") : String(localized: "Notch is off"))
@@ -184,7 +187,7 @@ private struct NotchHero: View {
 
                 Spacer(minLength: 12)
 
-                Toggle(String(localized: "Notch"), isOn: $preferences.notchEnabled)
+                Toggle(String(localized: "Notch"), isOn: Bindable(preferences).notchEnabled)
                     .toggleStyle(MonochromeSwitchStyle(size: .large))
                     .labelsHidden()
                     .accessibilityHint(Text("Shows or hides the notch without quitting PancakeNotch."))
@@ -339,6 +342,7 @@ private struct TileLabel: View {
 private struct TipsCard: View {
     let preferences: Preferences
     let shortcuts: ShortcutController
+    let showsNowPlayingTips: Bool
     let showsShelfTips: Bool
     let openKeyboardSettings: () -> Void
 
@@ -399,15 +403,22 @@ private struct TipsCard: View {
         let shelf: [(symbol: String, title: String, detail: String)] = showsShelfTips ? [
             ("tray.and.arrow.down", String(localized: "Drop things on the notch"),
              String(localized: "Drag files, images, text or links to the notch to keep them on the Shelf.")),
+        ] + (showsNowPlayingTips ? [] : [
             ("hand.point.up.left", String(localized: "Click an item to open it"),
              String(localized: "See a big preview or edit a note or link. Right-click for Copy, AirDrop and more.")),
+        ]) : []
+        let nowPlaying: [(symbol: String, title: String, detail: String)] = showsNowPlayingTips ? [
+            ("music.note", String(localized: "Your music, in the notch"),
+             String(localized: "Album art and sound bars show while something plays. Open the notch to pause, skip or jump around.")),
+            ("rectangle.2.swap", String(localized: "Switch modules"),
+             String(localized: "Pick one at the top left of the open notch, or swipe sideways there with two fingers.")),
         ] : []
         return [
             ("cursorarrow.rays", String(localized: "Hover to open"),
              String(localized: "Rest the pointer on the notch and it slides open.")),
             ("hand.tap", String(localized: "Click to keep it small"),
              String(localized: "Click the open notch and it stays small: hover to open it, click again to close it fully.")),
-        ] + shelf + [
+        ] + nowPlaying + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
                    String(localized: "The PancakeNotch menu bar icon turns the notch on or off."))

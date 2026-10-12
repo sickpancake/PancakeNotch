@@ -1,0 +1,5 @@
+ungive/mediaremote-adapter v0.7.7 (e3ff5021eb0875858bd05f48d2e9ba2e962d1cf6)
+https://github.com/ungive/mediaremote-adapter
+Copied unmodified: LICENSE, bin/, include/, src/adapter, src/private, src/utility.
+The test client (src/test) is left out, apart from the header test.m includes. scripts/build-adapter.sh builds the framework with clang
+(no CMake needed), the way the project's CMakeLists.txt does, for arm64 only.

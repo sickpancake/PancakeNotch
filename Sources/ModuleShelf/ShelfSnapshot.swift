@@ -6,6 +6,24 @@ import UniformTypeIdentifiers
 /// temporary folder; the user's real Shelf is never touched.
 @MainActor
 public enum ShelfSnapshot {
+    /// A Shelf with `count` empty example files in a temporary folder (removed when the store is),
+    /// e.g. a nearly full one next to Now Playing.
+    public static func module(itemCount count: Int) -> ShelfModule {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-shelf-snapshot-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: folder.appending(path: "Docs"), withIntermediateDirectories: true)
+        let store = ShelfStore(directory: folder.appending(path: "Shelf"))
+        let inputs = (0..<count).map { index -> ShelfInput in
+            let url = folder.appending(path: "Docs/File \(index + 1).pdf")
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+            return .file(url, owned: false)
+        }
+        store.add(inputs, duplicates: .addAgain)
+        let settings = ShelfSettings(defaults: UserDefaults(suiteName: "io.github.sickpancake.PancakeNotch.snapshots.shelf") ?? .standard)
+        let module = ShelfModule(store: store, settings: settings)
+        module.isSnapshot = true
+        return module
+    }
+
     public static func models(layout: NotchLayout) -> [NotchViewModel] {
         let root = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-shelf-snapshot-\(UUID().uuidString)")
         var rows: [NotchViewModel] = []

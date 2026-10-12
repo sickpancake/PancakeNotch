@@ -7,9 +7,9 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 
 ## Planned for v1
 
-- **Now Playing** — album art, playback controls and a visualizer that live in the notch.
+- **Now Playing** — album art and sound bars beside the notch; open it to pause, skip, scrub, shuffle and repeat, for any app that plays.
 - **Shelf** — drag files onto the notch to park them; drag them out or AirDrop them later.
-- **Module menu** — your favorite modules in a small grid, everything else in a scrolling list.
+- **Module menu** — tabs for your favorite modules, a menu with all of them, or a two-finger swipe.
 - **Companion app** — settings, favorites, and stats (listening, usage, and the app's own memory use).
 
 Later: battery, calendar, timers, AirPods/Bluetooth, and more.
@@ -47,7 +47,9 @@ No analytics, no accounts, no telemetry. Everything stays on your Mac. The only 
 ## Thanks
 
 Inspired by [boring.notch](https://github.com/TheBoredTeam/boring.notch), [Atoll](https://github.com/Ebullioscopic/Atoll), [MewNotch](https://github.com/monuk7735/mew-notch), [DynamicNotchKit](https://github.com/MrKai77/DynamicNotchKit) and [NotchDrop](https://github.com/Lakr233/NotchDrop).
-Now Playing will use [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter).
+Now Playing uses [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) by Jonas van den Berg
+(BSD 3-Clause; included in `Vendor/mediaremote-adapter` with its [licence](Vendor/mediaremote-adapter/LICENSE),
+which also ships inside the app).
 
 ## License
 

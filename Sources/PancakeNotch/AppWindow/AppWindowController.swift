@@ -1,8 +1,11 @@
 import AppKit
 import HotKey
 import Learn
+import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
+import NowPlayingCore
+import Stats
 import SwiftUI
 
 /// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
@@ -10,27 +13,17 @@ import SwiftUI
 /// (ADR-0017). It is always dark, like the notch, whatever the system appearance.
 @MainActor
 final class AppWindowController: NSObject, NSWindowDelegate {
-    private let preferences: Preferences
-    private let shortcuts: ShortcutController
-    private let stats: UsageStats
-    private let shelfSettings: ShelfSettings
-    private let shelfStore: ShelfStore
-    private let progress: LearnProgress
-    private let makeLiveModule: () -> (any NotchModule)?
+    private let context: AppContext
+    /// Called each time the window opens (an app-health sample for the statistics).
+    var onShow: (() -> Void)?
     private var window: NSWindow?
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, shelfSettings: ShelfSettings, shelfStore: ShelfStore, progress: LearnProgress,
-         makeLiveModule: @escaping () -> (any NotchModule)?) {
-        self.preferences = preferences
-        self.shortcuts = shortcuts
-        self.stats = stats
-        self.shelfSettings = shelfSettings
-        self.shelfStore = shelfStore
-        self.progress = progress
-        self.makeLiveModule = makeLiveModule
+    init(context: AppContext) {
+        self.context = context
     }
 
     func show() {
+        onShow?()
         let window = self.window ?? makeWindow()
         self.window = window
         NSApp.setActivationPolicy(.regular)
@@ -40,15 +33,7 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = Self.makeWindow(
-            rootView: AppWindowView(
-                preferences: preferences,
-                shortcuts: shortcuts,
-                stats: stats,
-                shelfSettings: shelfSettings,
-                shelfStore: shelfStore,
-                progress: progress,
-                makeLiveModule: makeLiveModule
-            ),
+            rootView: AppWindowView(context: context),
             windowClass: NSWindow.self,
             size: AppWindowView.defaultSize
         )
@@ -82,12 +67,15 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         // Closing the window during the welcome counts as having seen it: it shows once (ADR-0020).
-        progress.onboardingDone = true
+        context.progress.onboardingDone = true
         NSApp.setActivationPolicy(.accessory)
-        // Release after AppKit finishes closing, so the SwiftUI view tree is freed.
+        // Release after AppKit finishes closing, so the SwiftUI view tree is freed (unless it was
+        // opened again straight away).
+        let closing = notification.object as? NSWindow
         DispatchQueue.main.async { [weak self] in
-            self?.window?.contentView = nil
-            self?.window = nil
+            guard let self, let closing, self.window === closing, !closing.isVisible else { return }
+            closing.contentView = nil
+            self.window = nil
         }
     }
 }
@@ -117,19 +105,38 @@ extension AppWindowController {
             duplicates: .addAgain
         )
 
+        let arrangement = ModuleArrangement()
+        let nowPlayingSettings = NowPlayingSettings(defaults: defaults)
+        let nowPlaying = NowPlayingCenter.practiceSnapshot(playing: true, elapsed: 74)
+        let statsStore = StatsStore(url: nil)
+        sampleStatistics(statsStore)
+        let context = AppContext(
+            preferences: preferences,
+            shortcuts: noShortcut,
+            stats: stats,
+            progress: progress,
+            arrangement: arrangement,
+            shelfSettings: shelfSettings,
+            shelfStore: shelfStore,
+            nowPlayingSettings: nowPlayingSettings,
+            nowPlaying: nowPlaying,
+            statsStore: statsStore,
+            makeLiveModules: {
+                var modules: [any NotchModule] = []
+                if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
+                if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
+                return modules
+            }
+        )
+
         func render(_ name: String, section: AppSection, lesson: LessonID = .basics, shortcuts: ShortcutController = noShortcut,
                     size: CGSize = AppWindowView.defaultSize) throws {
-            try render(name, rootView: AppWindowView(
-                preferences: preferences,
-                shortcuts: shortcuts,
-                stats: stats,
-                shelfSettings: shelfSettings,
-                shelfStore: shelfStore,
-                progress: progress,
-                makeLiveModule: { shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil },
-                section: section,
-                lesson: lesson
-            ), size: size)
+            let pageContext = shortcuts === noShortcut ? context : AppContext(
+                preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
+                shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
+                nowPlaying: nowPlaying, statsStore: statsStore, makeLiveModules: context.makeLiveModules
+            )
+            try render(name, rootView: AppWindowView(context: pageContext, section: section, lesson: lesson), size: size)
         }
 
         /// `then` runs once the page has settled, before a second wait (e.g. to open an item).
@@ -155,6 +162,9 @@ extension AppWindowController {
         }
         try render("home-small", section: .home, size: AppWindowView.minimumSize)
         try render("learn-shelf", section: .learn, lesson: .shelf)
+        try render("learn-nowplaying", section: .learn, lesson: .nowPlaying)
+        try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
+        try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
 
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
@@ -166,7 +176,7 @@ extension AppWindowController {
         // The practice Shelf working: open with the example items, then with one item opened.
         let practice = PracticeShelf(seeded: true)
         defer { practice.close() }
-        let stage = NotchStage(behavior: preferences.notchBehavior, practice: practice, startState: .expanded)
+        let stage = NotchStage(behavior: preferences.notchBehavior, modules: [practice.module], startState: .expanded)
             .background(AppPalette.background)
         try render("stage-open", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
         try render("stage-item", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2) {
@@ -176,17 +186,16 @@ extension AppWindowController {
         // Home's live notch, open, showing the (sample) real Shelf.
         let live = NotchStage(
             behavior: preferences.notchBehavior,
-            liveModule: ShelfModule(store: shelfStore, settings: shelfSettings),
+            arrangement: arrangement,
+            modules: context.makeLiveModules(),
             startState: .expanded
         )
         .background(AppPalette.background)
         try render("stage-live", rootView: live.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
 
-        progress.markDone(.basics)
-        progress.markDone(.shelf)
+        for lesson in LessonID.allCases { progress.markDone(lesson) }
         try render("home-learned", section: .home)
-        progress.reset(.basics)
-        progress.reset(.shelf)
+        for lesson in LessonID.allCases { progress.reset(lesson) }
 
         preferences.notchEnabled = false
         try render("home-off", section: .home)
@@ -204,6 +213,28 @@ extension AppWindowController {
                 try render("home-shortcut", section: .home, shortcuts: withShortcut)
                 try render("keyboard-shortcut", section: .keyboard, shortcuts: withShortcut)
             }
+        }
+    }
+
+    /// A week of made-up listening, notch use and memory samples, for the Statistics page snapshot.
+    private static func sampleStatistics(_ store: StatsStore) {
+        let songs: [(String, String, String)] = [
+            ("Pancake Sunrise", "The Flipsides", "com.apple.Music"),
+            ("Golden Edges", "Maple & Co.", "com.spotify.client"),
+            ("Night Owl", "Syrup Static", "com.apple.Music"),
+            ("Butter Blues", "The Flipsides", "com.spotify.client"),
+        ]
+        for day in 0..<7 {
+            let date = Date().addingTimeInterval(-Double(day) * 86_400)
+            for (index, song) in songs.enumerated() where (day + index) % 3 != 0 {
+                store.recordListening(title: song.0, artist: song.1, album: "", bundleID: song.2,
+                                      started: date.addingTimeInterval(-Double(index) * 600), seconds: Double(180 * (index + 1 + day % 3)))
+            }
+            for _ in 0..<(12 + day * 3) { store.recordNotchOpen(at: date) }
+            for _ in 0..<(8 + day) { store.recordModuleShown("nowPlaying", at: date) }
+            for _ in 0..<(4 + day) { store.recordModuleShown("shelf", at: date) }
+            store.recordShelved(count: day + 1, at: date)
+            store.recordHealth(HealthSample(date: date, footprintBytes: UInt64(31 + day) << 20, helperFootprintBytes: 6 << 20, cpuPercent: 0.2))
         }
     }
 

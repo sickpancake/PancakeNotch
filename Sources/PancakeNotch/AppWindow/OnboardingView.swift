@@ -133,7 +133,7 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: 0) {
-            NotchStage(behavior: preferences.notchBehavior, showsShelf: true, activeHint: String(localized: "Go on, hover it."))
+            NotchStage(behavior: preferences.notchBehavior, practice: [.shelf], activeHint: String(localized: "Go on, hover it."))
                 .background(Color.black)
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))
                 .overlay {

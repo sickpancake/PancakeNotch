@@ -55,6 +55,8 @@ struct ShelfView: View {
 private struct ShelfHeader: View {
     let module: ShelfModule
     let layout: ShelfLayout
+    /// The module tabs at the left of the band: the count starts after them, and they name the Shelf.
+    @Environment(\.notchModuleBarWidth) private var barWidth
 
     var body: some View {
         let count = module.store.items.count
@@ -64,8 +66,10 @@ private struct ShelfHeader: View {
                     Text("Choose items to remove")
                         .font(.system(size: 12, weight: .semibold))
                 } else {
-                    Text("Shelf")
-                        .font(.system(size: 12, weight: .semibold))
+                    if barWidth == 0 {
+                        Text("Shelf")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
                     if count > 0 {
                         Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
                             .font(.system(size: 11.5))
@@ -75,6 +79,7 @@ private struct ShelfHeader: View {
                 }
             }
             .lineLimit(1)
+            .padding(.leading, max(0, barWidth - ShelfLayout.sidePadding))
             .frame(width: layout.headerSideWidth, alignment: .leading)
 
             Spacer(minLength: 0)

@@ -21,6 +21,8 @@ public enum ShelfEvent: Equatable, Sendable {
     case cleared
     /// A drag out of the Shelf ended; `accepted` is whether something took it.
     case dragOutEnded(accepted: Bool)
+    /// Items were handed to AirDrop (from the drop zone or the menu), for statistics.
+    case airDropped(count: Int)
 }
 
 /// The Shelf: a drop zone in the notch for files, images, text and links (ADR-0013).
@@ -115,6 +117,9 @@ public final class ShelfModule: NotchModule {
 
     /// Whether a drag's source (`NSDraggingInfo.draggingSource`) is a Shelf tile or the
     /// "drag all" handle, so a drop target can refuse the Shelf's own items.
+    /// Items may be dragged to places inside the app (the practice Shelf, for the lesson's box).
+    @ObservationIgnored var dragsOutWithinApp = false
+
     public nonisolated static func isOwnDragSource(_ source: Any?) -> Bool {
         source is ShelfTileNSView
     }
@@ -133,6 +138,27 @@ public final class ShelfModule: NotchModule {
 
     // MARK: NotchModule
 
+    public var moduleID: String { "shelf" }
+    public var title: String { String(localized: "Shelf", comment: "Module name") }
+    public var symbol: String { "tray" }
+
+    public var menuStatus: String? {
+        let count = store.items.count
+        if count == 0 { return String(localized: "Empty", comment: "Shelf status in the Module Menu") }
+        return count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
+    }
+
+    /// The Shelf wants an ear while it's nearly full (and the setting is on).
+    public var isActive: Bool { showsNearlyFull }
+
+    /// A long tile row scrolls sideways, so a swipe over it mustn't switch modules.
+    public func scrollsHorizontally(at point: CGPoint) -> Bool {
+        guard let layout = notch?.layout, detailID == nil, prompt == nil, dropZone == nil else { return false }
+        let shelf = ShelfLayout(layout)
+        let rowWidth = CGFloat(store.items.count) * (ShelfLayout.tileSize.width + ShelfLayout.tileSpacing)
+        return rowWidth > shelf.content.width && shelf.content.contains(point)
+    }
+
     public func attach(to notch: NotchViewModel?) {
         if notch == nil {
             // Switched off: answer any open card (waiting files are discarded) and let go of the notch.
@@ -141,7 +167,6 @@ public final class ShelfModule: NotchModule {
             detailID = nil
             self.notch?.setTall(false)
             self.notch?.releaseKeyFocus?()
-            self.notch?.restingState = .closed
             store.stopObserving(by: self)
             quickLook.closeIfShowing()
         }
@@ -170,10 +195,10 @@ public final class ShelfModule: NotchModule {
         AnyView(ShelfView(module: self, layout: ShelfLayout(layout)))
     }
 
-    /// The Shelf in the left ear (it's the only module, so #1; ADR-0011). Shown whenever the notch is
-    /// compact: from 15 items, after a drop, and in the short shrink after a click.
+    /// The Shelf's tray with its count, in the ear its ranking gives it (ADR-0011): from 15 items,
+    /// after a drop, and in the short shrink after a click while it's the current module.
     public func compactEars(layout: NotchLayout) -> CompactEars? {
-        CompactEars(leading: AnyView(ShelfEar(module: self)))
+        CompactEars(main: AnyView(ShelfEar(module: self)))
     }
 
     public var holdsOpen: Bool { prompt != nil || detailID != nil || otherHolds }
@@ -258,7 +283,7 @@ public final class ShelfModule: NotchModule {
         // When the notch closes, it shows the new count in the ear for a moment.
         if settings.showsInEars {
             countBeforeDrop = store.items.count
-            notch?.closeThroughCompact(for: .seconds(1.5))
+            notch?.closeThroughCompact(for: .seconds(1.5), showing: self)
         }
         // Show the new items on the tiles (and any card about them).
         closeDetail()
@@ -518,6 +543,7 @@ public final class ShelfModule: NotchModule {
     private func receiveForAirDrop(_ drop: ShelfDrop, folders: [URL]) {
         sharing.deleteWhenFinished(folders)
         let batch = AirDropBatch(items: drop.inputs.map(\.shareable), waiting: 0)
+        onEvent?(.airDropped(count: drop.inputs.count + drop.promises.count))
         guard !drop.promises.isEmpty, let destination = try? ShelfSharing.makeTemporaryFolder() else {
             sharing.airDrop(batch.items)
             return
@@ -551,9 +577,9 @@ public final class ShelfModule: NotchModule {
     }
 
     /// The notch rests in Compact, with the Shelf in its ear, from 15 items; invisible otherwise.
+    /// Nearly full or not: the notch rests in Compact while any module is active.
     private func updateRestingState() {
-        let resting: NotchState = showsNearlyFull ? .compact : .closed
-        if notch?.restingState != resting { notch?.restingState = resting }
+        notch?.activityChanged()
     }
 
     // MARK: Selection
@@ -700,6 +726,7 @@ public final class ShelfModule: NotchModule {
     func airDrop(_ items: [ShelfItem]) {
         setHold { $0.isSharing = true }
         sharing.airDrop(shareables(items))
+        onEvent?(.airDropped(count: items.count))
     }
 
     func share(_ items: [ShelfItem], from view: NSView) {
@@ -735,9 +762,10 @@ public final class ShelfModule: NotchModule {
         }
     }
 
-    /// Outside our app: copy only, unless the user chose Finder-like moves. Never inside our app.
+    /// Outside our app: copy only, unless the user chose Finder-like moves. Inside our app only the
+    /// practice Shelf's items go out (to the lesson's box), as copies; the notches refuse them.
     func dragOperations(outside: Bool) -> NSDragOperation {
-        guard outside else { return [] }
+        guard outside else { return dragsOutWithinApp ? .copy : [] }
         return settings.dragOutMode == .move ? [.copy, .move, .generic] : .copy
     }
 

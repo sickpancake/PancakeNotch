@@ -1,4 +1,5 @@
 import Learn
+import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
 import SwiftUI
@@ -6,10 +7,10 @@ import SwiftUI
 /// Hands-on lessons: pick one, then do each step in the practice notch. Steps tick themselves when
 /// the lesson notices you did them (ADR-0031). Nothing here touches the real notch or Shelf.
 struct LearnView: View {
-    let preferences: Preferences
-    let shortcuts: ShortcutController
-    let progress: LearnProgress
+    let context: AppContext
     @Binding var lesson: LessonID
+
+    private var progress: LearnProgress { context.progress }
 
     var body: some View {
         AppPage(
@@ -27,8 +28,9 @@ struct LearnView: View {
 
             LessonPlayer(
                 lesson: Lesson.lesson(lesson),
-                behavior: preferences.notchBehavior,
-                shortcuts: shortcuts,
+                behavior: context.preferences.notchBehavior,
+                shortcuts: context.shortcuts,
+                arrangement: context.arrangement,
                 nextLesson: nextLesson,
                 onFinish: { progress.markDone(lesson) },
                 onNext: { if let next = nextLesson { lesson = next.id } }
@@ -104,11 +106,15 @@ struct LessonPlayer: View {
     let lesson: Lesson
     let behavior: NotchBehavior
     let shortcuts: ShortcutController
+    /// The user's module order and navigation, so the practice notch moves between modules like theirs.
+    var arrangement: ModuleArrangement?
     var nextLesson: Lesson?
     var onFinish: () -> Void = {}
     var onNext: () -> Void = {}
     @State private var runner: LessonRunner
     @State private var practice: PracticeShelf?
+    /// The pretend player (the Now Playing lesson), next to a practice Shelf to switch to.
+    @State private var nowPlaying: PracticeNowPlaying?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
 
@@ -116,6 +122,7 @@ struct LessonPlayer: View {
         lesson: Lesson,
         behavior: NotchBehavior,
         shortcuts: ShortcutController,
+        arrangement: ModuleArrangement? = nil,
         nextLesson: Lesson? = nil,
         onFinish: @escaping () -> Void = {},
         onNext: @escaping () -> Void = {}
@@ -123,6 +130,7 @@ struct LessonPlayer: View {
         self.lesson = lesson
         self.behavior = behavior
         self.shortcuts = shortcuts
+        self.arrangement = arrangement
         self.nextLesson = nextLesson
         self.onFinish = onFinish
         self.onNext = onNext
@@ -130,15 +138,26 @@ struct LessonPlayer: View {
     }
 
     private var usesShelf: Bool { lesson.id == .shelf }
+    private var usesNowPlaying: Bool { lesson.id == .nowPlaying }
+
+    /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf.
+    private var practiceModules: [any NotchModule] {
+        [nowPlaying?.module as (any NotchModule)?, practice?.module].compactMap { $0 }
+    }
+
+    private var hint: String? {
+        if usesShelf { return String(localized: "This is a practice Shelf: nothing here touches your real one.") }
+        if usesNowPlaying { return String(localized: "A practice player: the songs are made up and silent, and your music isn't touched.") }
+        return nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             NotchStage(
                 behavior: behavior,
-                practice: practice,
-                activeHint: usesShelf
-                    ? String(localized: "This is a practice Shelf: nothing here touches your real one.")
-                    : nil,
+                arrangement: arrangement,
+                modules: practiceModules,
+                activeHint: hint,
                 onStateChange: notchChanged
             )
             .background(Color.black)
@@ -242,14 +261,17 @@ struct LessonPlayer: View {
 
     private func start() {
         // Only a lesson done without skipping (optional steps aside) gets its checkmark.
-        runner.onFinish = { [runner] in if runner.isComplete { onFinish() } }
+        runner.onFinish = { [weak runner] in if runner?.isComplete == true { onFinish() } }
         if practice == nil { makePractice() }
         stepChanged()
     }
 
     private func stop() {
+        runner.onFinish = nil
         practice?.close()
         practice = nil
+        nowPlaying?.close()
+        nowPlaying = nil
     }
 
     private func restart() {
@@ -259,6 +281,12 @@ struct LessonPlayer: View {
     }
 
     private func makePractice() {
+        if usesNowPlaying {
+            let player = PracticeNowPlaying()
+            let signals = NowPlayingSignals(runner: runner)
+            player.module.onEvent = { event in signals.handle(event) }
+            nowPlaying = player
+        }
         // The basics lesson shows example items; the Shelf lesson starts empty, for your drops.
         let shelf = PracticeShelf(seeded: !usesShelf)
         let signals = ShelfSignals(runner: runner)
@@ -288,6 +316,10 @@ struct LessonPlayer: View {
         if step.signal == .shortcutSet, shortcuts.shortcut != nil {
             runner.receive(.shortcutSet)
         }
+        // "Play it again" needs a paused song (say the pause step was skipped).
+        if step.signal == .musicPlayed, let center = nowPlaying?.module.center, center.track?.isPlaying == true {
+            center.send(.pause)
+        }
         guard usesShelf, let practice else { return }
         let needed = switch step.signal {
         case .shelfSeveralSelected: 2
@@ -302,6 +334,30 @@ struct LessonPlayer: View {
 }
 
 private enum StepStatus { case done, skipped, current, upcoming }
+
+/// Turns what happens in the practice player into lesson signals. A class the module's callback holds,
+/// so the callback doesn't keep the page alive.
+@MainActor
+private final class NowPlayingSignals {
+    private weak var runner: LessonRunner?
+
+    init(runner: LessonRunner) {
+        self.runner = runner
+    }
+
+    func handle(_ event: NowPlayingEvent) {
+        guard let runner else { return }
+        switch event {
+        case .paused: runner.receive(.musicPaused)
+        case .played: runner.receive(.musicPlayed)
+        case .skippedForward, .skippedBack: runner.receive(.musicSkipped)
+        case .seeked: runner.receive(.musicSeeked)
+        case .shuffleChanged, .repeatChanged: runner.receive(.musicModeChanged)
+        case .artworkClicked: runner.receive(.musicArtworkClicked)
+        case .switchedAway: runner.receive(.moduleSwitched)
+        }
+    }
+}
 
 /// Turns what happens on the practice Shelf into lesson signals. A class the Shelf's callback holds,
 /// so the callback doesn't keep the page (and through it the practice Shelf) alive.
@@ -327,7 +383,7 @@ private final class ShelfSignals {
         case .dragOutEnded(let accepted): if accepted { runner.receive(.shelfDraggedOut) }
         case .selectionChanged(let count): if count >= 2 { runner.receive(.shelfSeveralSelected) }
         case .cleared: runner.receive(.shelfCleared)
-        case .menuClosed: break
+        case .menuClosed, .airDropped: break
         }
     }
 }

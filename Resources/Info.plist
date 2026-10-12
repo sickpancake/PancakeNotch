@@ -26,6 +26,8 @@
 	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Only if macOS stops sharing what's playing: PancakeNotch then asks Music and Spotify directly, to show and control the song in the notch.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 PancakeNotch contributors. GPL-3.0.</string>
 </dict>
