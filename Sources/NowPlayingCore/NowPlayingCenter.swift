@@ -204,13 +204,23 @@ public final class NowPlayingCenter {
     /// Brings the playing app (or the last one) to the front, launching it if needed.
     public func openPlayerApp() {
         guard connection != .practice else { return }
-        let bundleID = track?.bundleID ?? lastPlayerBundleID ?? "com.apple.Music"
-        if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            running.activate()
-        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-        } else {
+        openApp(track?.bundleID ?? lastPlayerBundleID ?? "com.apple.Music")
+    }
+
+    /// Brings an app to the front, launching it if needed. Goes through Launch Services like the Dock:
+    /// macOS ignores `NSRunningApplication.activate()` from an app that isn't active itself, and the
+    /// notch never is.
+    public func openApp(_ bundleID: String) {
+        guard connection != .practice else { return }
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
+        guard let url = running?.bundleURL ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             logger.notice("No app found for \(bundleID, privacy: .public)")
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [logger] _, error in
+            if let error { logger.notice("Couldn't open \(bundleID, privacy: .public): \(error.localizedDescription, privacy: .public)") }
         }
     }
 

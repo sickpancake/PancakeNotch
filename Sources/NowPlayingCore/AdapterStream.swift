@@ -29,7 +29,7 @@ struct AdapterState: Equatable, Sendable {
     static let knownKeys: Set<String> = [
         "title", "artist", "album", "bundleIdentifier", "parentApplicationBundleIdentifier",
         "processIdentifier", "playing", "playbackRate", "durationMicros", "elapsedTimeMicros",
-        "timestampEpochMicros", "shuffleMode", "repeatMode",
+        "timestampEpochMicros", "shuffleMode", "repeatMode", "isAdvertisement", "prohibitsSkip",
     ]
 
     var values: [String: AdapterValue] = [:]
@@ -96,7 +96,9 @@ struct AdapterState: Equatable, Sendable {
             sourceBundleID: source,
             shuffle: double("shuffleMode").flatMap { ShuffleMode(rawValue: Int($0)) },
             repeatMode: double("repeatMode").flatMap { RepeatMode(rawValue: Int($0)) },
-            artworkID: artworkID
+            artworkID: artworkID,
+            processID: double("processIdentifier").flatMap { $0 > 0 ? Int32(exactly: $0) : nil },
+            isAdvertisement: bool("isAdvertisement") == true || bool("prohibitsSkip") == true
         )
     }
 }

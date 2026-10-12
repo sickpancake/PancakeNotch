@@ -35,6 +35,11 @@ public struct NowPlayingTrack: Equatable, Sendable {
     public var repeatMode: RepeatMode?
     /// Changes whenever the artwork changes; nil = no artwork.
     public var artworkID: String?
+    /// The process that plays it, as macOS reports it (for a web page this can be a helper of the
+    /// browser); nil when unknown. The sound bars listen to its sound.
+    public var processID: Int32?
+    /// An ad is playing (Next, Previous and moving the position are refused by the player).
+    public var isAdvertisement: Bool
 
     public init(
         title: String,
@@ -49,7 +54,9 @@ public struct NowPlayingTrack: Equatable, Sendable {
         sourceBundleID: String? = nil,
         shuffle: ShuffleMode? = nil,
         repeatMode: RepeatMode? = nil,
-        artworkID: String? = nil
+        artworkID: String? = nil,
+        processID: Int32? = nil,
+        isAdvertisement: Bool = false
     ) {
         self.title = title
         self.artist = artist
@@ -66,6 +73,8 @@ public struct NowPlayingTrack: Equatable, Sendable {
         self.shuffle = shuffle
         self.repeatMode = repeatMode
         self.artworkID = artworkID
+        self.processID = processID
+        self.isAdvertisement = isAdvertisement
     }
 
     /// Title, artist, album and app together: when this changes, a different song is on.
