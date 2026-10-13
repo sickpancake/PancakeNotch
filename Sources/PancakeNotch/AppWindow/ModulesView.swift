@@ -324,9 +324,10 @@ private struct NowPlayingModuleCard: View {
 }
 
 /// Now Playing's settings, as rows with hairlines between them.
-private struct NowPlayingSettingsRows: View {
+struct NowPlayingSettingsRows: View {
     @Bindable var settings: NowPlayingSettings
     let center: NowPlayingCenter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -354,10 +355,14 @@ private struct NowPlayingSettingsRows: View {
                         }
                     }
                 }
-                if case .connected = center.connection {
+                switch center.connection {
+                case .connected:
                     ConnectionBadge(isGood: true)
-                } else {
+                case .limited, .unavailable:
+                    // Only when something is wrong: starting up (or the practice player) has nothing to retry.
                     Button(String(localized: "Try Again")) { center.retryConnection() }
+                case .starting, .practice:
+                    EmptyView()
                 }
             }
         }
@@ -368,6 +373,7 @@ private struct NowPlayingSettingsRows: View {
             Toggle(String(localized: "Show album art and sound bars beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
         }
+        soundBarsRows
         SettingsRow(
             title: String(localized: "Show each new song for a moment"),
             subtitle: String(localized: "When the song changes, its title and artist slide out under the notch for 3 seconds.")
@@ -401,6 +407,179 @@ private struct NowPlayingSettingsRows: View {
         case .practice:
             String(localized: "Practice player.")
         }
+    }
+}
+
+// MARK: Sound bars
+
+extension NowPlayingSettingsRows {
+    /// How the bars move; with "Follow the music", what they show and whether macOS allows listening.
+    @ViewBuilder
+    var soundBarsRows: some View {
+        SettingsRow(title: String(localized: "Sound bars"), subtitle: soundBarsText) {
+            MonochromeSegmented(
+                title: String(localized: "Sound bars"),
+                options: [
+                    (.followMusic, String(localized: "Follow the music")),
+                    (.gentle, String(localized: "Gentle motion")),
+                    (.still, String(localized: "Still")),
+                ],
+                selection: $settings.soundBars
+            )
+        }
+        // Without the ears there are no bars: say so instead of offering choices that do nothing.
+        .disabled(!settings.showsInEars)
+        .onChange(of: settings.soundBars) { _, style in
+            if style == .followMusic, settings.soundBarsAccess != .denied {
+                // Ask right away, while the user is looking at the setting.
+                SoundBarsAudio.shared.checkAccess(track: center.track, isPractice: isPractice, settings: settings)
+            } else {
+                SoundBarsAudio.shared.endCheck()
+            }
+        }
+        if settings.soundBars == .followMusic, settings.showsInEars {
+            SettingsRow(
+                title: String(localized: "Bars show"),
+                subtitle: String(localized: "Bass to treble: each bar is a slice of the sound, low notes on the left, high notes on the right. Loudness: every bar follows how loud it is.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Bars show"),
+                    options: [(.bands, String(localized: "Bass to treble")), (.loudness, String(localized: "Loudness"))],
+                    selection: $settings.soundBarsShow
+                )
+            }
+            SoundBarsAccessRow(settings: settings, center: center, isPractice: isPractice, audio: SoundBarsAudio.shared)
+        }
+    }
+
+    private var isPractice: Bool { center.connection == .practice }
+
+    private var soundBarsText: String {
+        guard settings.showsInEars else {
+            return String(localized: "Turn on album art and sound bars beside the notch to choose how the bars move.")
+        }
+        let text = switch settings.soundBars {
+        case .followMusic:
+            String(localized: "The bars move with the sound of the app that's playing.")
+        case .gentle:
+            String(localized: "The bars dance while the playing app makes sound and rest when it's quiet. No permission needed.")
+        case .still:
+            String(localized: "The bars stand still.")
+        }
+        guard reduceMotion, settings.soundBars != .still else { return text }
+        return text + " " + String(localized: "Reduce Motion is on, so the bars stay still.")
+    }
+}
+
+/// "Follow the music" needs macOS's System Audio Recording permission: what that means, whether it's
+/// allowed, and what to do when it isn't.
+private struct SoundBarsAccessRow: View {
+    @Bindable var settings: NowPlayingSettings
+    let center: NowPlayingCenter
+    let isPractice: Bool
+    let audio: SoundBarsAudio
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 24) {
+                SettingsRowLabel(
+                    title: String(localized: "System Audio Recording"),
+                    subtitle: String(localized: "To follow the music, macOS asks for System Audio Recording and shows a purple dot in the menu bar while the bars listen. PancakeNotch listens only to the app that's playing, only while the bars are showing, and never records or saves sound.")
+                )
+                controls
+                    .fixedSize()
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: statusSymbol)
+                    .font(.app(size: 11, weight: .bold))
+                    .accessibilityHidden(true)
+                Text(statusText)
+                    .font(.app(size: 12.5, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(AppPalette.primaryText)
+            .accessibilityElement(children: .combine)
+        }
+        .settingsRowPadding()
+    }
+
+    /// Something real is playing, so there's something to listen to right now.
+    private var canListenNow: Bool {
+        !isPractice && center.track?.isPlaying == true
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        HStack(spacing: 8) {
+            switch settings.soundBarsAccess {
+            case .denied:
+                Button(String(localized: "Open Privacy Settings")) { Self.openPrivacySettings() }
+                Button(String(localized: "Try Again")) { tryAgain() }
+                    .accessibilityHint(Text("Clears the remembered answer and listens again"))
+            case .allowed:
+                AllowedBadge()
+            case .unknown:
+                if !audio.isChecking, canListenNow {
+                    Button(String(localized: "Ask Now")) { tryAgain() }
+                        .accessibilityHint(Text("Listens to the playing app for a moment so macOS asks for the permission"))
+                }
+            }
+        }
+    }
+
+    private var statusSymbol: String {
+        if audio.isChecking { return "ellipsis" }
+        return switch settings.soundBarsAccess {
+        case .allowed: "checkmark"
+        case .denied: "xmark"
+        case .unknown: audio.checkCouldNotListen ? "exclamationmark" : "info.circle"
+        }
+    }
+
+    private var statusText: String {
+        if audio.isChecking {
+            return String(localized: "Listening for a moment… If macOS asks, click Allow.")
+        }
+        switch settings.soundBarsAccess {
+        case .allowed:
+            return String(localized: "The bars follow the music. After PancakeNotch updates, macOS may ask once more.")
+        case .denied:
+            return String(localized: "Not allowed — the bars use Gentle motion instead. Turn on PancakeNotch under System Audio Recording, then click Try Again.")
+        case .unknown:
+            if audio.checkCouldNotListen {
+                return String(localized: "PancakeNotch couldn't listen to the app that's playing, so its bars use Gentle motion. Another app may work.")
+            }
+            return canListenNow
+                ? String(localized: "Not checked yet. macOS asks the first time the bars listen, or click Ask Now.")
+                : String(localized: "macOS will ask the first time music plays while the bars are showing.")
+        }
+    }
+
+    private func tryAgain() {
+        settings.soundBarsAccess = .unknown
+        audio.checkAccess(track: center.track, isPractice: isPractice, settings: settings)
+    }
+
+    /// Privacy & Security, on the System Audio Recording list (its own anchor on newer macOS; on
+    /// macOS 15 it's part of Screen & System Audio Recording).
+    private static func openPrivacySettings() {
+        var anchor = "Privacy_ScreenCapture"
+        if #available(macOS 26, *) { anchor = "Privacy_AudioCapture" }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+private struct AllowedBadge: View {
+    var body: some View {
+        Label(String(localized: "Allowed"), systemImage: "checkmark")
+            .font(.app(size: 12, weight: .semibold))
+            .foregroundStyle(AppPalette.primaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(AppPalette.hover, in: Capsule())
+            .overlay(PillOutline(color: AppPalette.hairline))
     }
 }
 

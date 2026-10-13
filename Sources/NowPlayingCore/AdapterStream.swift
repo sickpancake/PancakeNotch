@@ -5,10 +5,16 @@ enum AdapterValue: Equatable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
+    /// A list of whole numbers (`enabledCommands`).
+    case numbers([Int])
 
-    /// Converts what `JSONSerialization` produced; nil for null, lists and objects.
+    /// Converts what `JSONSerialization` produced; nil for null, objects and lists of anything but numbers.
     init?(json: Any) {
-        if let number = json as? NSNumber {
+        if let list = json as? [Any] {
+            let numbers = list.compactMap { ($0 as? NSNumber)?.intValue }
+            guard numbers.count == list.count else { return nil }
+            self = .numbers(numbers)
+        } else if let number = json as? NSNumber {
             if CFGetTypeID(number) == CFBooleanGetTypeID() {
                 self = .bool(number.boolValue)
             } else {
@@ -30,6 +36,8 @@ struct AdapterState: Equatable, Sendable {
         "title", "artist", "album", "bundleIdentifier", "parentApplicationBundleIdentifier",
         "processIdentifier", "playing", "playbackRate", "durationMicros", "elapsedTimeMicros",
         "timestampEpochMicros", "shuffleMode", "repeatMode", "isAdvertisement", "prohibitsSkip",
+        // Added by our small patch to the adapter (Vendor/mediaremote-adapter/VERSION).
+        "enabledCommands",
     ]
 
     var values: [String: AdapterValue] = [:]
@@ -60,8 +68,13 @@ struct AdapterState: Equatable, Sendable {
         case .number(let value): value
         case .bool(let value): value ? 1 : 0
         case .string(let value): Double(value)
-        case nil: nil
+        case .numbers, nil: nil
         }
+    }
+
+    func numbers(_ key: String) -> [Int]? {
+        if case .numbers(let value) = values[key] { return value }
+        return nil
     }
 
     func bool(_ key: String) -> Bool? {
@@ -98,7 +111,8 @@ struct AdapterState: Equatable, Sendable {
             repeatMode: double("repeatMode").flatMap { RepeatMode(rawValue: Int($0)) },
             artworkID: artworkID,
             processID: double("processIdentifier").flatMap { $0 > 0 ? Int32(exactly: $0) : nil },
-            isAdvertisement: bool("isAdvertisement") == true || bool("prohibitsSkip") == true
+            isAdvertisement: bool("isAdvertisement") == true || bool("prohibitsSkip") == true,
+            enabledCommands: numbers("enabledCommands").map(Set.init)
         )
     }
 }

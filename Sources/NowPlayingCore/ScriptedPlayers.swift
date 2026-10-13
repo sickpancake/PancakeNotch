@@ -11,6 +11,8 @@ struct ScriptedPlayerState: Equatable, Sendable {
     var position: TimeInterval?
     var shuffle: ShuffleMode?
     var repeatMode: RepeatMode?
+    /// Spotify only: the current item is an ad.
+    var isAdvertisement = false
 }
 
 /// The AppleScript we send to Music and Spotify. Every script first checks the app is running:
@@ -26,7 +28,8 @@ enum PlayerScripts {
         """
     }
 
-    /// Returns `{"stopped"}` or `{state, name, artist, album, duration (s), position (s), shuffle, repeat}`.
+    /// Returns `{"stopped"}` or `{state, name, artist, album, duration (s), position (s), shuffle, repeat}`,
+    /// and for Spotify also `address, popularity, track number` (to tell ads apart, see `SpotifyAd`).
     static func state(for bundleID: String) -> String {
         let body = bundleID == PlayerNotificationInfo.spotifyBundleID
             ? """
@@ -38,7 +41,19 @@ enum PlayerScripts {
             if shuffling then set sm to "tracks"
             set r to "off"
             if repeating then set r to "playlist"
-            return {s, name of t, artist of t, album of t, (duration of t) / 1000, player position, sm, r}
+            set u to ""
+            try
+            set u to spotify url of t
+            end try
+            set p to -1
+            try
+            set p to popularity of t
+            end try
+            set n to -1
+            try
+            set n to track number of t
+            end try
+            return {s, name of t, artist of t, album of t, (duration of t) / 1000, player position, sm, r, u, p, n}
             """
             : """
             if player state is stopped then return {"stopped"}
@@ -106,6 +121,8 @@ enum PlayerScripts {
         guard first != "stopped", items.count >= 8 else { return ScriptedPlayerState(state: .stopped) }
         func text(_ index: Int) -> String { items[index].nonMissing?.stringValue ?? "" }
         func number(_ index: Int) -> Double? { items[index].nonMissing.map(\.doubleValue) }
+        func whole(_ index: Int) -> Int? { number(index).flatMap { $0 < 0 ? nil : Int($0) } }
+        let isAd = items.count >= 11 && SpotifyAd.isAd(address: text(8), popularity: whole(9), trackNumber: whole(10))
         return ScriptedPlayerState(
             state: first == "playing" ? .playing : .paused,
             title: text(1),
@@ -114,7 +131,8 @@ enum PlayerScripts {
             duration: number(4).flatMap { $0 > 0 ? $0 : nil },
             position: number(5).map { max(0, $0) },
             shuffle: shuffleMode(text(6)),
-            repeatMode: repeatMode(text(7))
+            repeatMode: repeatMode(text(7)),
+            isAdvertisement: isAd
         )
     }
 
@@ -230,13 +248,6 @@ final class ScriptedPlayers {
         send(command, to: bundleID)
     }
 
-    /// Plays the preferred app if it's running, else Music or Spotify if one is running. Never launches anything.
-    func resume(preferring bundleID: String?) {
-        let candidates = ([bundleID].compactMap { $0 } + Self.bundleIDs).filter { Self.bundleIDs.contains($0) }
-        guard let target = candidates.first(where: Self.isRunning) else { return }
-        send(.play, to: target)
-    }
-
     // MARK: Private
 
     /// The track to show: the most recent player that's playing, else the most recently changed one.
@@ -296,9 +307,11 @@ final class ScriptedPlayers {
         var track = NowPlayingTrack(
             title: state.title, artist: state.artist, album: state.album, duration: state.duration,
             elapsed: 0, elapsedDate: date, isPlaying: state.state == .playing, bundleID: bundleID,
-            shuffle: state.shuffle, repeatMode: state.repeatMode
+            shuffle: state.shuffle, repeatMode: state.repeatMode, isAdvertisement: state.isAdvertisement
         )
         let sameSong = previous?.track.identity == track.identity
+        // Spotify's announcement may have said "ad" already.
+        if sameSong, previous?.track.isAdvertisement == true { track.isAdvertisement = true }
         if let position = state.position {
             track.elapsed = position
         } else if let previous, sameSong {

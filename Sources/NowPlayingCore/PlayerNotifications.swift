@@ -79,7 +79,8 @@ struct PlayerNotificationInfo: Equatable, Sendable {
         guard state != .stopped, !title.isEmpty else { return nil }
         var track = NowPlayingTrack(
             title: title, artist: artist, album: album, duration: duration,
-            elapsed: 0, elapsedDate: date, isPlaying: state == .playing, bundleID: bundleID
+            elapsed: 0, elapsedDate: date, isPlaying: state == .playing, bundleID: bundleID,
+            isAdvertisement: bundleID == Self.spotifyBundleID && SpotifyAd.isAdAddress(trackID)
         )
         let sameSong = previous?.identity == track.identity
         if let position {
@@ -91,6 +92,7 @@ struct PlayerNotificationInfo: Equatable, Sendable {
             track.shuffle = previous.shuffle
             track.repeatMode = previous.repeatMode
             track.artworkID = previous.artworkID
+            if previous.isAdvertisement { track.isAdvertisement = true }
         }
         return track
     }

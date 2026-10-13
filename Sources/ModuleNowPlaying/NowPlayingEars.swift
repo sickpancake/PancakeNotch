@@ -31,27 +31,45 @@ struct NowPlayingArtEar: View {
     }
 }
 
-/// Four sound bars in the compact notch: they dance while music plays and the ears are out, and settle
-/// flat when paused. Not real audio levels (those would need a recording permission).
+/// Four sound bars in the compact notch. How they move is a setting (Modules page): following the
+/// playing app's real sound, dancing gently while it makes sound (the default), or standing still.
+/// They only ever move while they can be seen.
 struct NowPlayingBarsEar: View {
     let module: NowPlayingModule
     let height: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let isPlaying = module.center.track?.isPlaying ?? false
-        // Only while they can be seen: in the compact notch, never while it's closed or open.
-        let isMoving = isPlaying && module.notch?.state == .compact && !reduceMotion
+        let track = module.center.track
+        let isPlaying = track?.isPlaying ?? false
+        let isPractice = module.center.connection == .practice
+        // The practice players keep throwaway settings: their bars show the user's choice instead.
+        let choice = isPractice ? (NowPlayingSettings.user ?? module.settings) : module.settings
         let barHeight = max(8, height - 17)
         Group {
             if module.isSnapshot {
                 StillBars(levels: isPlaying ? [0.55, 0.95, 0.7, 0.4] : SoundBarsView.restLevels, height: barHeight)
             } else {
-                SoundBarsView(isMoving: isMoving, isPlaying: isPlaying, height: barHeight, settlesSmoothly: !reduceMotion)
+                SoundBarsView(
+                    configuration: SoundBarsConfiguration(
+                        style: choice.soundBars,
+                        show: choice.soundBarsShow,
+                        access: choice.soundBarsAccess,
+                        isPractice: isPractice,
+                        // The pretend player makes no sound: nothing to listen to.
+                        source: isPractice ? nil : track.flatMap(SoundSourceID.init(track:)),
+                        isPlaying: isPlaying,
+                        // Only in the compact notch, never while it's closed or open.
+                        isShown: module.notch?.state == .compact,
+                        reduceMotion: reduceMotion,
+                        height: barHeight
+                    ),
+                    settings: isPractice ? nil : module.settings
+                )
             }
         }
         .frame(width: SoundBarsView.width, height: barHeight)
-        .opacity(module.center.track == nil ? 0.35 : 1)
+        .opacity(track == nil ? 0.35 : 1)
         .accessibilityHidden(true)
     }
 }
@@ -72,38 +90,71 @@ private struct StillBars: View {
     }
 }
 
-/// The bars as Core Animation layers: the animation runs in the window server, so the app itself does
-/// nothing between frames (AGENTS.md: ~0% CPU). It's removed whenever the bars can't be seen.
+/// Everything the bars need to know to decide what to do.
+struct SoundBarsConfiguration: Equatable {
+    var style: SoundBarsStyle
+    var show: SoundBarsShow
+    var access: SoundBarsAccess
+    var isPractice: Bool
+    var source: SoundSourceID?
+    var isPlaying: Bool
+    var isShown: Bool
+    var reduceMotion: Bool
+    var height: CGFloat
+}
+
+/// The bars as Core Animation layers. Gentle motion runs in the window server, so the app itself does
+/// nothing between frames (AGENTS.md: ~0% CPU). Following the music, the levels arrive about 30 times
+/// a second while the bars can be seen and the song plays. Everything stops when they can't be seen.
 struct SoundBarsView: NSViewRepresentable {
-    let isMoving: Bool
-    let isPlaying: Bool
-    let height: CGFloat
-    /// Bars glide to their resting height (off with Reduce Motion: they jump).
-    var settlesSmoothly = true
+    let configuration: SoundBarsConfiguration
+    /// Where "allowed" or "not allowed" is remembered (nil for the practice player).
+    let settings: NowPlayingSettings?
 
     static let barWidth: CGFloat = 2.5
     static let spacing: CGFloat = 2
     static let count = 4
     static var width: CGFloat { CGFloat(count) * barWidth + CGFloat(count - 1) * spacing }
-    /// Heights while paused or still (a fraction of the full height).
+    /// Heights while paused or silent (a fraction of the full height).
     static let restLevels: [CGFloat] = [0.22, 0.3, 0.26, 0.2]
-    /// Heights while playing but not moving (Reduce Motion).
+    /// Heights while playing but not moving (Still, Reduce Motion).
     static let stillLevels: [CGFloat] = [0.5, 0.85, 0.65, 0.4]
+    /// The lowest a bar goes while following the music, so it never disappears.
+    static let minimumLevel: CGFloat = 0.16
 
     func makeNSView(context: Context) -> SoundBarsNSView {
         SoundBarsNSView()
     }
 
     func updateNSView(_ view: SoundBarsNSView, context: Context) {
-        view.update(isMoving: isMoving, isPlaying: isPlaying, height: height, smoothly: settlesSmoothly)
+        view.update(configuration, settings: settings)
+    }
+
+    static func dismantleNSView(_ view: SoundBarsNSView, coordinator: ()) {
+        view.stopListening()
     }
 }
 
 final class SoundBarsNSView: NSView {
+    /// What the bars look like right now.
+    enum Pose: Equatable {
+        case rest, still, dance, levels
+    }
+
     private var bars: [CALayer] = []
-    private var isMoving = false
-    private var isPlaying: Bool?
+    private var pose: Pose?
     private var barHeight: CGFloat = 0
+    private var configuration: SoundBarsConfiguration?
+    private weak var settings: NowPlayingSettings?
+    private lazy var link: SoundBarsLink = {
+        let link = SoundBarsAudio.shared.makeLink()
+        link.onChange = { [weak self] in self?.refresh() }
+        link.onLevels = { [weak self] levels in self?.show(levels) }
+        return link
+    }()
+    private var occlusionObserver: NSObjectProtocol?
+    private var sleepObservers: [NSObjectProtocol] = []
+    private var screensAsleep = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -134,24 +185,120 @@ final class SoundBarsNSView: NSView {
         CATransaction.commit()
     }
 
-    func update(isMoving: Bool, isPlaying: Bool, height: CGFloat, smoothly: Bool) {
-        if height != barHeight {
-            barHeight = height
+    func update(_ configuration: SoundBarsConfiguration, settings: NowPlayingSettings?) {
+        if configuration.height != barHeight {
+            barHeight = configuration.height
             needsLayout = true
         }
-        guard isMoving != self.isMoving || isPlaying != self.isPlaying else { return }
-        self.isMoving = isMoving
-        self.isPlaying = isPlaying
+        self.configuration = configuration
+        self.settings = settings
+        refresh()
+    }
+
+    /// The view is going away: nothing may keep running for it.
+    func stopListening() {
+        configuration = nil
+        link.cancel()
+        removeObservers()
+    }
+
+    // MARK: Being seen
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        occlusionObserver = nil
+        if let window {
+            occlusionObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refresh() }
+            }
+            if sleepObservers.isEmpty {
+                let workspace = NSWorkspace.shared.notificationCenter
+                sleepObservers = [
+                    workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.screensAsleep = true; self?.refresh() }
+                    },
+                    workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.screensAsleep = false; self?.refresh() }
+                    },
+                ]
+            }
+        } else {
+            removeObservers()
+        }
+        refresh()
+    }
+
+    private func removeObservers() {
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        occlusionObserver = nil
+        for observer in sleepObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        sleepObservers = []
+    }
+
+    private var isOnScreen: Bool {
+        guard let window, !screensAsleep else { return false }
+        return window.occlusionState.contains(.visible)
+    }
+
+    // MARK: Deciding
+
+    /// Works out the mode, starts or stops the listening it needs, and shows the right pose.
+    private func refresh() {
+        guard let configuration else {
+            link.cancel()
+            return
+        }
+        let mode = SoundBarsMode.resolve(
+            style: configuration.style,
+            access: configuration.access,
+            isPractice: configuration.isPractice,
+            hasSource: configuration.source != nil,
+            isPlaying: configuration.isPlaying,
+            isVisible: configuration.isShown && isOnScreen,
+            reduceMotion: configuration.reduceMotion
+        )
+        switch mode {
+        case .off, .still:
+            link.cancel()
+        case .gentle:
+            link.follow(configuration.source, wantsLevels: false, settings: settings)
+        case .real:
+            link.follow(configuration.source, wantsLevels: true, settings: settings)
+        }
+        let isPlaying = configuration.isPlaying
+        // Gentle motion only while the app really makes sound (nil = can't tell: go by "playing").
+        let gentle: Pose = isPlaying && link.isRunningOutput != false ? .dance : .rest
+        let pose: Pose = switch mode {
+        case .off, .still: isPlaying ? .still : .rest
+        case .gentle: gentle
+        case .real:
+            switch link.hearing {
+            case .notHearing, .unavailable: gentle
+            case .off, .waiting, .hearing: .levels
+            }
+        }
+        apply(pose, smoothly: !configuration.reduceMotion)
+    }
+
+    // MARK: Drawing
+
+    private func apply(_ pose: Pose, smoothly: Bool) {
+        guard pose != self.pose else { return }
+        self.pose = pose
         for (index, bar) in bars.enumerated() {
             bar.removeAnimation(forKey: "dance")
-            let level = isPlaying ? SoundBarsView.stillLevels[index] : SoundBarsView.restLevels[index]
+            guard pose != .levels else { continue }
+            let level = pose == .rest ? SoundBarsView.restLevels[index] : SoundBarsView.stillLevels[index]
             // Settle to the resting height with a short implicit animation.
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.25)
             CATransaction.setDisableActions(!smoothly)
             bar.transform = CATransform3DMakeScale(1, level, 1)
             CATransaction.commit()
-            guard isMoving else { continue }
+            guard pose == .dance else { continue }
             let dance = CABasicAnimation(keyPath: "transform.scale.y")
             dance.fromValue = [0.25, 0.35, 0.3, 0.2][index]
             dance.toValue = [0.9, 1.0, 0.8, 0.95][index]
@@ -163,6 +310,20 @@ final class SoundBarsNSView: NSView {
             dance.fillMode = .backwards
             bar.add(dance, forKey: "dance")
         }
+    }
+
+    /// New levels from the music. A very short linear glide between them, so 30 updates a second look fluid.
+    private func show(_ levels: SoundLevels) {
+        guard pose == .levels, let configuration else { return }
+        let values = levels.bars(configuration.show)
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.05)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .linear))
+        for (index, bar) in bars.enumerated() {
+            let level = SoundBarsView.minimumLevel + (1 - SoundBarsView.minimumLevel) * CGFloat(values[index])
+            bar.transform = CATransform3DMakeScale(1, level, 1)
+        }
+        CATransaction.commit()
     }
 }
 

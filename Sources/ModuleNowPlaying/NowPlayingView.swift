@@ -43,7 +43,7 @@ struct NowPlayingView: View {
             Color.clear.frame(width: layout.notchWidth)
             HStack(spacing: 6) {
                 Spacer(minLength: 0)
-                if module.center.needsAutomationPermission {
+                if module.center.needsAutomationPermission || module.center.isAutomationDenied(module.center.track?.bundleID) {
                     PermissionPill()
                 } else if let bundleID = module.center.track?.bundleID {
                     SourceAppPill(bundleID: bundleID, isPractice: module.center.connection == .practice) {
@@ -121,7 +121,8 @@ private struct ArtworkButton: View {
         Button {
             module.openApp()
         } label: {
-            ArtworkImage(image: module.center.artwork, artworkID: track.artworkID, size: size, cornerRadius: 14)
+            ArtworkImage(image: module.center.artwork, artworkID: track.artworkID, size: size, cornerRadius: 14,
+                         isAdvertisement: track.isAdvertisement)
                 .overlay {
                     if isHovered {
                         ZStack {
@@ -156,17 +157,19 @@ private struct ArtworkButton: View {
             withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
         }
         .help(Text("Open the app that's playing"))
-        .accessibilityLabel(Text("Album art"))
+        .accessibilityLabel(track.isAdvertisement ? Text("Album art, ad") : Text("Album art"))
         .accessibilityHint(Text("Opens the app that's playing."))
     }
 }
 
-/// The artwork, or a soft placeholder note. Changing songs cross-fades.
+/// The artwork, or a soft placeholder note. Changing songs cross-fades. During an ad it says so: a small
+/// "Ad" label on the picture, or "Ad" instead of the note when there's no picture.
 struct ArtworkImage: View {
     let image: NSImage?
     let artworkID: String?
     let size: CGFloat
     let cornerRadius: CGFloat
+    var isAdvertisement = false
 
     var body: some View {
         ZStack {
@@ -178,7 +181,7 @@ struct ArtworkImage: View {
                     .id(artworkID ?? "artwork")
                     .transition(.opacity)
             } else {
-                ArtworkPlaceholder(size: size)
+                ArtworkPlaceholder(size: size, text: isAdvertisement ? String(localized: "Ad", comment: "Stands for advertisement, where album art would be") : nil)
                     .transition(.opacity)
             }
         }
@@ -188,22 +191,52 @@ struct ArtworkImage: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(.white.opacity(0.08))
         }
+        .overlay(alignment: .topLeading) {
+            if isAdvertisement, image != nil, size >= 40 {
+                AdBadge()
+                    .padding(6)
+                    .transition(.opacity)
+            }
+        }
         .animation(.easeInOut(duration: 0.35), value: artworkID)
         .accessibilityHidden(true)
     }
 }
 
-/// Grey squares with a note, where album art would be.
+/// Grey squares with a note (or a short word, like "Ad"), where album art would be.
 struct ArtworkPlaceholder: View {
     let size: CGFloat
+    var text: String?
 
     var body: some View {
         ZStack {
             LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Image(systemName: "music.note")
-                .font(.system(size: size * 0.32, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
+            if let text {
+                Text(text)
+                    .font(.system(size: size * 0.26, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            } else {
+                Image(systemName: "music.note")
+                    .font(.system(size: size * 0.32, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
         }
+    }
+}
+
+/// A small "Ad" label on the artwork while an ad plays.
+private struct AdBadge: View {
+    var body: some View {
+        Text("Ad", comment: "Label on the artwork while an advertisement plays")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 6)
+            .frame(height: 16)
+            .background(.white.opacity(0.9), in: Capsule())
+            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+            .accessibilityHidden(true)
     }
 }
 
@@ -226,7 +259,9 @@ private struct ProgressRow: View {
             Text(NowPlayingTime.format(elapsed))
                 .frame(width: 40, alignment: .leading)
             if let duration = track.duration, duration > 0 {
-                ProgressScrubber(module: module, elapsed: elapsed, duration: duration)
+                let abilities = module.center.abilities
+                ProgressScrubber(module: module, elapsed: elapsed, duration: duration, rate: track.playbackRate,
+                                 canSeek: abilities.canSeek, blockedReason: abilities.seekBlockedReason)
                 Button {
                     module.toggleTimeDisplay()
                 } label: {
@@ -254,20 +289,39 @@ private struct ProgressRow: View {
     }
 }
 
-/// A slim bar that thickens under the pointer; drag or click anywhere on it to jump there.
+/// A slim bar that thickens under the pointer; drag or click anywhere on it to jump there. When the
+/// player refuses jumps (an ad), it only shows the progress.
+///
+/// It glides between the once-a-second steps of a playing song, but snaps for anything else: a jump
+/// back, or the player correcting itself (e.g. after refusing a skip). Sliding there would show the
+/// position running ahead and back.
 private struct ProgressScrubber: View {
     let module: NowPlayingModule
     let elapsed: TimeInterval
     let duration: TimeInterval
+    let rate: Double
+    let canSeek: Bool
+    let blockedReason: String
     @State private var isHovered = false
+    /// The position drawn last, to tell a normal step from a jump.
+    @State private var lastElapsed: TimeInterval?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// A normal step forward: no more than a second and a half of playing (at the song's speed).
+    static func glides(from previous: TimeInterval?, to elapsed: TimeInterval, rate: Double) -> Bool {
+        guard let previous else { return false }
+        let step = elapsed - previous
+        return step >= 0 && step <= 1.5 * max(1, rate)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let fraction = min(max(elapsed / duration, 0), 1)
-            let isActive = isHovered || module.scrubTime != nil
+            let isActive = canSeek && (isHovered || module.scrubTime != nil)
             let height: CGFloat = isActive ? 6 : 4
+            let glide: Animation? = module.scrubTime == nil && !reduceMotion && Self.glides(from: lastElapsed, to: elapsed, rate: rate)
+                ? .linear(duration: 1) : nil
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(.white.opacity(0.18))
@@ -276,14 +330,14 @@ private struct ProgressScrubber: View {
                     .fill(.white.opacity(0.92))
                     .frame(width: max(height, width * fraction), height: height)
                     // Glides between the once-a-second ticks while playing.
-                    .animation(module.scrubTime == nil && !reduceMotion ? .linear(duration: 1) : nil, value: fraction)
+                    .animation(glide, value: fraction)
                 Circle()
                     .fill(.white)
                     .frame(width: 12, height: 12)
                     .shadow(color: .black.opacity(0.4), radius: 2)
                     .offset(x: width * fraction - 6)
                     .opacity(isActive ? 1 : 0)
-                    .animation(module.scrubTime == nil && !reduceMotion ? .linear(duration: 1) : nil, value: fraction)
+                    .animation(glide, value: fraction)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -300,16 +354,22 @@ private struct ProgressScrubber: View {
                             try? await Task.sleep(for: .milliseconds(250))
                             module.scrubTime = nil
                         }
-                    }
+                    },
+                including: canSeek ? .all : .none
             )
             .animation(.easeOut(duration: 0.15), value: isActive)
         }
         .frame(height: 16)
         .onHover { isHovered = $0 }
+        .onAppear { lastElapsed = elapsed }
+        .onChange(of: elapsed) { _, value in lastElapsed = value }
+        .help(canSeek ? Text("") : Text(blockedReason))
         .accessibilityElement()
         .accessibilityLabel(Text("Song position"))
         .accessibilityValue(Text("\(NowPlayingTime.spoken(elapsed)) of \(NowPlayingTime.spoken(duration))"))
+        .accessibilityHint(canSeek ? Text("") : Text(blockedReason))
         .accessibilityAdjustableAction { direction in
+            guard canSeek else { return }
             switch direction {
             case .increment: module.seek(to: min(duration, elapsed + 10))
             case .decrement: module.seek(to: elapsed - 10)
@@ -319,43 +379,48 @@ private struct ProgressScrubber: View {
     }
 }
 
-/// Shuffle, back, play/pause, forward, repeat. Shuffle and repeat show only when the app reports them.
+/// Shuffle, back, play/pause, forward, repeat. Shuffle and repeat show only when they really work for
+/// this app (`PlayerAbilities`); otherwise both sides stay empty alike, so the middle three stay centred.
+/// Back and forward dim when the player refuses them (an ad); play/pause always works.
 private struct ControlsRow: View {
     let module: NowPlayingModule
     let track: NowPlayingTrack
 
     var body: some View {
+        let abilities = module.center.abilities
         HStack(spacing: 6) {
             ModeButton(
                 symbol: "shuffle",
-                isOn: (track.shuffle ?? .off) != .off,
-                isAvailable: track.shuffle != nil,
-                label: track.shuffle.map { $0 == .off ? String(localized: "Shuffle, off") : String(localized: "Shuffle, on") } ?? ""
+                isOn: (abilities.shuffle ?? .off) != .off,
+                isAvailable: abilities.canShuffle,
+                label: abilities.shuffle.map { $0 == .off ? String(localized: "Shuffle, off") : String(localized: "Shuffle, on") } ?? ""
             ) { module.cycleShuffle() }
             Spacer(minLength: 0)
-            TransportButton(symbol: "backward.fill", size: 15, label: String(localized: "Previous")) {
+            TransportButton(symbol: "backward.fill", size: 15, label: String(localized: "Previous"),
+                            isEnabled: abilities.canSkipBack, disabledReason: abilities.skipBlockedReason) {
                 module.skip(forward: false)
             }
             TransportButton(symbol: track.isPlaying ? "pause.fill" : "play.fill", size: 22, label: track.isPlaying ? String(localized: "Pause") : String(localized: "Play")) {
                 module.playPause()
             }
             .frame(width: 44)
-            TransportButton(symbol: "forward.fill", size: 15, label: String(localized: "Next")) {
+            TransportButton(symbol: "forward.fill", size: 15, label: String(localized: "Next"),
+                            isEnabled: abilities.canSkipForward, disabledReason: abilities.skipBlockedReason) {
                 module.skip(forward: true)
             }
             Spacer(minLength: 0)
             ModeButton(
-                symbol: track.repeatMode == .track ? "repeat.1" : "repeat",
-                isOn: (track.repeatMode ?? .off) != .off,
-                isAvailable: track.repeatMode != nil,
-                label: repeatLabel
+                symbol: abilities.repeatMode == .track ? "repeat.1" : "repeat",
+                isOn: (abilities.repeatMode ?? .off) != .off,
+                isAvailable: abilities.canRepeat,
+                label: repeatLabel(abilities.repeatMode)
             ) { module.cycleRepeat() }
         }
         .frame(height: 34)
     }
 
-    private var repeatLabel: String {
-        switch track.repeatMode {
+    private func repeatLabel(_ mode: RepeatMode?) -> String {
+        switch mode {
         case .off: String(localized: "Repeat, off")
         case .playlist: String(localized: "Repeat, all songs")
         case .track: String(localized: "Repeat, this song")
@@ -364,10 +429,14 @@ private struct ControlsRow: View {
     }
 }
 
+/// Back, play/pause or forward. Dimmed (not hidden, so the row doesn't move) when the player refuses
+/// it, with the reason as its tooltip and VoiceOver hint.
 private struct TransportButton: View {
     let symbol: String
     let size: CGFloat
     let label: String
+    var isEnabled = true
+    var disabledReason = ""
     let action: () -> Void
     @State private var isHovered = false
 
@@ -377,13 +446,17 @@ private struct TransportButton: View {
                 .font(.system(size: size, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: size + 20, height: size + 14)
-                .background(.white.opacity(isHovered ? 0.1 : 0), in: Circle())
+                .background(.white.opacity(isHovered && isEnabled ? 0.1 : 0), in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.3)
+        .animation(.easeInOut(duration: 0.2), value: isEnabled)
         .onHover { isHovered = $0 }
-        .help(Text(label))
+        .help(Text(isEnabled ? label : disabledReason))
         .accessibilityLabel(Text(label))
+        .accessibilityHint(Text(isEnabled ? "" : disabledReason))
     }
 }
 
@@ -427,14 +500,21 @@ struct PressableStyle: ButtonStyle {
 
 // MARK: Nothing playing
 
-/// No song loaded: start the last app again, or open it.
+/// No song loaded: start the last app again (only where that really works), or open an app.
+///
+/// "Resume" shows only for the practice player and for Music or Spotify (told to play with AppleScript);
+/// when they refused the Automation permission it becomes the way to allow it. "Open" opens the last
+/// player (or Music), and its ▾ lists the other media apps on this Mac.
 private struct NowPlayingNothing: View {
     let module: NowPlayingModule
     let layout: NowPlayingLayout
 
     var body: some View {
         let center = module.center
-        let app = center.lastPlayerBundleID.flatMap(PlayerApp.init(bundleID:))
+        let resume = center.resumeOption
+        let mainApp = center.connection == .practice
+            ? nil
+            : MediaApps.mainApp(lastPlayer: center.lastPlayerBundleID, isInstalled: InstalledApps.isInstalled)
         HStack(alignment: .center, spacing: NowPlayingLayout.columnGap) {
             ArtworkPlaceholder(size: layout.artworkSize)
                 .frame(width: layout.artworkSize, height: layout.artworkSize)
@@ -451,16 +531,25 @@ private struct NowPlayingNothing: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
-                    NotchPill(
-                        title: app.map { String(localized: "Resume \($0.name)") } ?? String(localized: "Play"),
-                        symbol: "play.fill",
-                        prominent: true
-                    ) { module.playPause() }
-                    if center.connection != .practice {
-                        NotchPill(
-                            title: String(localized: "Open \(app?.name ?? String(localized: "Music"))"),
-                            symbol: "arrow.up.forward.app"
-                        ) { module.openApp() }
+                    switch resume {
+                    case .practice?:
+                        NotchPill(title: String(localized: "Play"), symbol: "play.fill", prominent: true) { module.resume() }
+                    case .app(let bundleID)?:
+                        let name = PlayerApp(bundleID: bundleID)?.name ?? bundleID
+                        NotchPill(title: String(localized: "Resume \(name)"), symbol: "play.fill", prominent: true) { module.resume() }
+                            .help(Text("Plays \(name) again"))
+                    case .needsPermission(let bundleID)?:
+                        let name = PlayerApp(bundleID: bundleID)?.name ?? bundleID
+                        NotchPill(title: String(localized: "Allow control"), symbol: "lock", prominent: true) {
+                            NowPlayingPermissions.openAutomationSettings()
+                        }
+                        .help(Text("PancakeNotch needs permission to control \(name). Opens System Settings."))
+                        .accessibilityHint(Text("PancakeNotch needs permission to control \(name). Opens System Settings."))
+                    case nil:
+                        EmptyView()
+                    }
+                    if let mainApp {
+                        OpenAppButton(module: module, bundleID: mainApp, prominent: resume == nil)
                     }
                 }
                 .padding(.top, 8)
@@ -468,6 +557,119 @@ private struct NowPlayingNothing: View {
             .frame(width: layout.columnWidth, alignment: .leading)
         }
         .frame(height: layout.artworkSize)
+        // Look the apps up again each time this shows (one quick lookup per app, never per redraw):
+        // an app installed or removed since then shows up right.
+        .onAppear {
+            InstalledApps.forget()
+            PlayerApp.forgetMissing()
+        }
+    }
+}
+
+/// "Open <app>" with a ▾ attached: the main part opens the app, the ▾ lists other media apps.
+/// One capsule, like `NotchPill`. The ▾ is left out when there's no other app to offer.
+private struct OpenAppButton: View {
+    let module: NowPlayingModule
+    let bundleID: String
+    let prominent: Bool
+    @State private var hovered: Part?
+
+    private enum Part { case main, menu }
+
+    var body: some View {
+        let name = PlayerApp(bundleID: bundleID)?.name ?? bundleID
+        let others = MediaApps.menuApps(seen: module.center.seenApps, main: bundleID, isInstalled: InstalledApps.isInstalled)
+        HStack(spacing: 0) {
+            Button {
+                module.openApp(bundleID)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.system(size: 9.5, weight: .bold))
+                    Text("Open \(name)")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .padding(.leading, 11)
+                .padding(.trailing, others.isEmpty ? 11 : 8)
+                .frame(height: 24)
+                .background(highlight(.main))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+            .onHover { hovered = $0 ? .main : (hovered == .main ? nil : hovered) }
+            .help(Text("Open \(name)"))
+            .accessibilityLabel(Text("Open \(name)"))
+
+            if !others.isEmpty {
+                Rectangle()
+                    .fill(prominent ? Color.black.opacity(0.2) : Color.white.opacity(0.2))
+                    .frame(width: 1, height: 14)
+                    .accessibilityHidden(true)
+                Button {
+                    // After this click is handled: the menu runs its own event loop until it closes.
+                    Task { @MainActor in NowPlayingAppMenu.show(others, for: module) }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .frame(width: 22, height: 24)
+                        .background(highlight(.menu))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .onHover { hovered = $0 ? .menu : (hovered == .menu ? nil : hovered) }
+                .help(Text("Open another app"))
+                .accessibilityLabel(Text("More apps"))
+            }
+        }
+        .foregroundStyle(prominent ? .black : .white)
+        .background(prominent ? Color.white : Color.white.opacity(0.13), in: Capsule())
+        .clipShape(Capsule())
+    }
+
+    private func highlight(_ part: Part) -> Color {
+        guard hovered == part else { return .clear }
+        return prominent ? .black.opacity(0.1) : .white.opacity(0.08)
+    }
+}
+
+/// The ▾ menu of `OpenAppButton`: a system menu (dark, grey app icons), which keeps the notch open
+/// while it's showing.
+@MainActor
+enum NowPlayingAppMenu {
+    static func show(_ bundleIDs: [String], for module: NowPlayingModule) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.appearance = NSAppearance(named: .darkAqua)
+        let target = MenuTarget { module.openApp($0) }
+        for bundleID in bundleIDs {
+            guard let app = PlayerApp(bundleID: bundleID) else { continue }
+            let item = NSMenuItem(title: app.name, action: #selector(MenuTarget.choose(_:)), keyEquivalent: "")
+            item.target = target
+            item.representedObject = bundleID
+            item.image = app.grayIcon
+            item.setAccessibilityLabel(String(localized: "Open \(app.name)"))
+            menu.addItem(item)
+        }
+        guard !menu.items.isEmpty else { return }
+        module.setAppMenuOpen(true)
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        module.setAppMenuOpen(false)
+        withExtendedLifetime(target) {}
+    }
+
+    /// Receives the menu's choice (menu items need an Objective-C target).
+    private final class MenuTarget: NSObject {
+        let open: @MainActor (String) -> Void
+
+        init(open: @escaping @MainActor (String) -> Void) {
+            self.open = open
+        }
+
+        @MainActor @objc func choose(_ sender: NSMenuItem) {
+            guard let bundleID = sender.representedObject as? String else { return }
+            open(bundleID)
+        }
     }
 }
 
@@ -596,12 +798,15 @@ private struct PermissionPill: View {
     }
 }
 
-/// A playing app's name and icon, looked up once per app.
+/// A playing app's name and icon, looked up once per app (also remembering apps that aren't installed).
 struct PlayerApp {
     let name: String
     let icon: NSImage?
+    private let bundleID: String
 
     @MainActor private static var cache: [String: PlayerApp] = [:]
+    @MainActor private static var missing: Set<String> = []
+    @MainActor private static var grayIcons: [String: NSImage] = [:]
 
     @MainActor
     init?(bundleID: String) {
@@ -609,13 +814,41 @@ struct PlayerApp {
             self = cached
             return
         }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        guard !Self.missing.contains(bundleID) else { return nil }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            Self.missing.insert(bundleID)
+            return nil
+        }
         let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
         let icon = NSWorkspace.shared.icon(forFile: url.path)
         icon.size = NSSize(width: 28, height: 28)
         self.name = name
         self.icon = icon
+        self.bundleID = bundleID
         Self.cache[bundleID] = self
+    }
+
+    /// Forgets the apps found missing (the "Open" menu looks again when it shows).
+    @MainActor
+    static func forgetMissing() {
+        missing = []
+    }
+
+    /// The icon in grey (everything but album art is monochrome), 16 pt, for menus.
+    @MainActor
+    var grayIcon: NSImage? {
+        if let cached = Self.grayIcons[bundleID] { return cached }
+        guard let icon else { return nil }
+        let gray = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            icon.draw(in: rect)
+            // Take the colour out, then put the icon's own transparency back.
+            NSColor.gray.setFill()
+            rect.fill(using: .saturation)
+            icon.draw(in: rect, from: .zero, operation: .destinationIn, fraction: 1)
+            return true
+        }
+        Self.grayIcons[bundleID] = gray
+        return gray
     }
 }
 

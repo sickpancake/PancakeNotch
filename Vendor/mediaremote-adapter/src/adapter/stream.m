@@ -6,6 +6,7 @@
 #import <Foundation/Foundation.h>
 
 #import "MediaRemoteAdapter.h"
+#import "adapter/enabled_commands.h"
 #import "adapter/env.h"
 #import "adapter/globals.h"
 #import "adapter/keys.h"
@@ -304,6 +305,18 @@ extern void adapter_stream() {
           });
     };
 
+    // PancakeNotch patch: the commands the app accepts right now.
+    void (^requestEnabledCommandsBlock)() = ^{
+      requestEnabledCommands(g_serialdispatchQueue, ^(NSArray *enabled) {
+        if (enabled != nil) {
+            liveData[kMRAEnabledCommands] = enabled;
+        } else {
+            [liveData removeObjectForKey:kMRAEnabledCommands];
+        }
+        handle();
+      });
+    };
+
     void (^requestNowPlayingInfo)() = ^{
       g_mediaRemote.getNowPlayingInfo(g_serialdispatchQueue, ^(
                                           NSDictionary *information) {
@@ -331,6 +344,11 @@ extern void adapter_stream() {
         if (liveData[kMRAPlaying] != nil) {
             converted[kMRAPlaying] = liveData[kMRAPlaying];
         }
+        // PancakeNotch patch: keep the enabled commands until they're asked
+        // again below.
+        if (liveData[kMRAEnabledCommands] != nil) {
+            converted[kMRAEnabledCommands] = liveData[kMRAEnabledCommands];
+        }
         // Use the old artwork data, since often the MediaRemote framework
         // unloads the artwork and then loads it again shortly after.
         // Only do this when the items have the same identity.
@@ -349,6 +367,9 @@ extern void adapter_stream() {
         liveDataStats = compareIdentifyingTrackKeys(liveData, converted);
         [liveData setDictionary:converted];
         handleWithUpdatedStats();
+        // PancakeNotch patch: what the app accepts may change with the item
+        // (an ad turns off skipping).
+        requestEnabledCommandsBlock();
       });
     };
 
@@ -489,6 +510,20 @@ extern void adapter_stream() {
                   });
                 }];
 
+    // PancakeNotch patch: ask again when an app's commands change.
+    NSMutableArray *commands_change_observers = [NSMutableArray array];
+    for (NSString *name in enabledCommandsChangeNotifications()) {
+        [commands_change_observers
+            addObject:[default_center
+                          addObserverForName:name
+                                      object:nil
+                                       queue:nil
+                                  usingBlock:^(NSNotification *notification) {
+                                    dispatch_async(g_serialdispatchQueue,
+                                                   requestEnabledCommandsBlock);
+                                  }]];
+    }
+
     g_mediaRemote.registerForNowPlayingNotifications(g_serialdispatchQueue);
 
     CFRunLoopRun();
@@ -497,6 +532,9 @@ extern void adapter_stream() {
 
     [default_center removeObserver:is_playing_change_observer];
     [default_center removeObserver:info_change_observer];
+    for (id observer in commands_change_observers) {
+        [default_center removeObserver:observer];
+    }
     [shared_workscape_notification_center
         removeObserver:app_termination_observer];
 }

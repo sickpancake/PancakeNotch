@@ -4,7 +4,7 @@ import os
 /// The real Now Playing source: the mediaremote-adapter helper (every app), and when that doesn't work,
 /// Music and Spotify asked directly (ADR-0012). `FallbackPolicy` decides; this class carries it out.
 @MainActor
-final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlayingAutomationReporting {
+final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
     /// After launching the helper, wait this long for something playing before believing "nothing plays"
     /// (its first line is often empty, right before the real data).
     static let startupGrace: TimeInterval = 1
@@ -27,6 +27,11 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlaying
     private var startupTask: Task<Void, Never>?
     private var restartTask: Task<Void, Never>?
     private var silenceTask: Task<Void, Never>?
+    /// Spotify's own announcement says when it plays an ad (its address starts with "spotify:ad:"),
+    /// which the helper doesn't: the ad's title, added to the helper's reports. Needs no permission.
+    private var spotifyAdTitle: String?
+    /// The helper's last report as it came (to add or remove the ad mark when Spotify's word changes).
+    private var lastAdapterUpdate: NowPlayingUpdate?
     private let now: () -> Date
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "nowplaying")
 
@@ -73,6 +78,8 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlaying
         adapter.stop()
         players.stop()
         watcher.stop()
+        spotifyAdTitle = nil
+        lastAdapterUpdate = nil
     }
 
     func send(_ command: NowPlayingCommand) {
@@ -81,15 +88,6 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlaying
             if let location { adapter.send(command, location: location) }
         case .fallback:
             players.send(command)
-        }
-    }
-
-    func resume(preferring bundleID: String?) {
-        switch policy.source {
-        case .adapter:
-            if let location { adapter.send(.play, location: location) }
-        case .fallback:
-            players.resume(preferring: bundleID)
         }
     }
 
@@ -153,13 +151,35 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlaying
         awaitingFirstContent = false
         startupTask?.cancel()
         connection = .connected
-        onUpdate?(update)
+        lastAdapterUpdate = update
+        onUpdate?(Self.marking(update, spotifyAdTitle: spotifyAdTitle))
+    }
+
+    /// The helper's report with Spotify's ad flagged when Spotify announced this title as an ad.
+    static func marking(_ update: NowPlayingUpdate, spotifyAdTitle: String?) -> NowPlayingUpdate {
+        guard var track = update.track, !track.isAdvertisement, let spotifyAdTitle, track.title == spotifyAdTitle,
+              track.bundleID == ScriptablePlayers.spotify || track.sourceBundleID == ScriptablePlayers.spotify
+        else { return update }
+        track.isAdvertisement = true
+        return NowPlayingUpdate(track: track, artwork: update.artwork)
+    }
+
+    /// Spotify announced a new item: remember whether it's an ad, and fix the shown song if that changes it.
+    private func spotifyAnnounced(_ info: PlayerNotificationInfo) {
+        let adTitle = SpotifyAd.isAdAddress(info.trackID) ? info.title : nil
+        guard adTitle != spotifyAdTitle else { return }
+        let before = lastAdapterUpdate.map { Self.marking($0, spotifyAdTitle: spotifyAdTitle) }
+        spotifyAdTitle = adTitle
+        guard let last = lastAdapterUpdate else { return }
+        let after = Self.marking(last, spotifyAdTitle: adTitle)
+        if after.track?.isAdvertisement != before?.track?.isAdvertisement { onUpdate?(after) }
     }
 
     private func playerAnnounced(_ info: PlayerNotificationInfo) {
         guard isRunning else { return }
         switch policy.source {
         case .adapter:
+            if info.bundleID == ScriptablePlayers.spotify { spotifyAnnounced(info) }
             if info.state == .playing {
                 perform(policy.handle(.playerStartedPlaying(bundleID: info.bundleID, at: now())))
             }
@@ -173,6 +193,7 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingResumable, NowPlaying
         cancelTasks()
         awaitingFirstContent = false
         adapter.stop()
+        lastAdapterUpdate = nil
         onUpdate?(NowPlayingUpdate(track: nil))
         if ScriptedPlayers.isAvailable {
             connection = .limited

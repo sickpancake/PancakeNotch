@@ -40,6 +40,9 @@ public struct NowPlayingTrack: Equatable, Sendable {
     public var processID: Int32?
     /// An ad is playing (Next, Previous and moving the position are refused by the player).
     public var isAdvertisement: Bool
+    /// The MediaRemote commands the player accepts right now (see `MediaCommand`); nil when unknown,
+    /// which counts as "accepts everything".
+    public var enabledCommands: Set<Int>?
 
     public init(
         title: String,
@@ -56,7 +59,8 @@ public struct NowPlayingTrack: Equatable, Sendable {
         repeatMode: RepeatMode? = nil,
         artworkID: String? = nil,
         processID: Int32? = nil,
-        isAdvertisement: Bool = false
+        isAdvertisement: Bool = false,
+        enabledCommands: Set<Int>? = nil
     ) {
         self.title = title
         self.artist = artist
@@ -75,6 +79,7 @@ public struct NowPlayingTrack: Equatable, Sendable {
         self.artworkID = artworkID
         self.processID = processID
         self.isAdvertisement = isAdvertisement
+        self.enabledCommands = enabledCommands
     }
 
     /// Title, artist, album and app together: when this changes, a different song is on.

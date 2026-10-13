@@ -50,6 +50,17 @@ public enum NowPlayingSnapshot {
         let empty = NowPlayingModule(center: NowPlayingCenter.practiceSnapshot(playing: false, elapsed: 0, empty: true))
         empty.isSnapshot = true
         row(.expanded, empty)
+        // An ad: back, forward and the progress bar dimmed, "Ad" on the artwork (then without artwork).
+        for artwork in [true, false] {
+            let ad = NowPlayingModule(center: NowPlayingCenter.practiceSnapshot(playing: true, elapsed: 9, ad: true, artwork: artwork))
+            ad.isSnapshot = true
+            row(.expanded, ad)
+        }
+        // Nothing playing in the real notch: "Resume Music" and "Open Music ▾".
+        let nothing = NowPlayingModule(center: NowPlayingCenter.snapshotNothingPlaying(
+            lastPlayer: "com.apple.Music", seen: ["com.google.Chrome", "com.spotify.client"]))
+        nothing.isSnapshot = true
+        row(.expanded, nothing)
         // A peek strip under the compact notch.
         row(.compact, module(playing: true)) { model in
             model.layout.isPeeking = true

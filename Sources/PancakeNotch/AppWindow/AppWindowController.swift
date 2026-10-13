@@ -166,6 +166,25 @@ extension AppWindowController {
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
         try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
 
+        // Now Playing's settings in each sound-bar state (the practice center: nothing is listened to).
+        let soundBarStates: [(String, SoundBarsStyle, SoundBarsAccess)] = [
+            ("gentle", .gentle, .unknown), ("still", .still, .unknown), ("follow", .followMusic, .unknown),
+            ("follow-allowed", .followMusic, .allowed), ("follow-denied", .followMusic, .denied),
+        ]
+        for (name, style, access) in soundBarStates {
+            nowPlayingSettings.soundBars = style
+            nowPlayingSettings.soundBarsAccess = access
+            let rows = NowPlayingSettingsRows(settings: nowPlayingSettings, center: nowPlaying)
+                .frame(width: 760)
+                .glassPanel()
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(AppPalette.background)
+            try render("nowplaying-settings-\(name)", rootView: rows.appWindowStyle(), size: CGSize(width: 820, height: 900))
+        }
+        nowPlayingSettings.soundBars = .gentle
+        nowPlayingSettings.soundBarsAccess = .unknown
+
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
             try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(

@@ -5,6 +5,7 @@
 #import <dispatch/dispatch.h>
 
 #import "MediaRemoteAdapter.h"
+#import "adapter/enabled_commands.h"
 #import "adapter/env.h"
 #import "adapter/get.h"
 #import "adapter/globals.h"
@@ -94,6 +95,15 @@ NSDictionary *internal_get(BOOL isTestMode) {
       NSDictionary *converted = convertNowPlayingInformation(
           information, convert_micros, calculate_now, no_artwork);
       [liveData addEntriesFromDictionary:converted];
+      dispatch_group_leave(group);
+    });
+
+    // PancakeNotch patch: the commands the app accepts right now.
+    dispatch_group_enter(group);
+    requestEnabledCommands(g_serialdispatchQueue, ^(NSArray *enabled) {
+      if (enabled != nil) {
+          liveData[kMRAEnabledCommands] = enabled;
+      }
       dispatch_group_leave(group);
     });
 

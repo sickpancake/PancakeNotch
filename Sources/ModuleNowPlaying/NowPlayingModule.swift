@@ -33,6 +33,8 @@ public final class NowPlayingModule: NotchModule {
     var scrubTime: TimeInterval?
     /// A short note over the artwork (the practice player can't open an app).
     var artworkNote: String?
+    /// The "Open ▾" app menu is showing: it keeps the notch open.
+    private(set) var isAppMenuOpen = false
 
     @ObservationIgnored private var lastIdentity: String?
     @ObservationIgnored private var wasPlaying = false
@@ -87,6 +89,7 @@ public final class NowPlayingModule: NotchModule {
         guard notch != nil else {
             noteTask?.cancel()
             scrubTime = nil
+            center.viewerClosed(self)
             return
         }
         lastIdentity = center.track?.identity
@@ -113,6 +116,7 @@ public final class NowPlayingModule: NotchModule {
 
     /// Coming back to Now Playing takes its ear back (the user hasn't moved on any more).
     public func notchDidOpen() {
+        center.viewerOpened(self)
         guard hasYielded else { return }
         hasYielded = false
         notch?.activityChanged()
@@ -120,6 +124,7 @@ public final class NowPlayingModule: NotchModule {
 
     public func notchDidClose() {
         scrubTime = nil
+        center.viewerClosed(self)
     }
 
     public func userSwitchedAway() {
@@ -168,41 +173,49 @@ public final class NowPlayingModule: NotchModule {
 
     // MARK: Actions (from the views)
 
+    // Every action checks `center.abilities` again: a button that can't work does nothing and tells
+    // the lessons nothing (the views dim or hide it as well).
+
     func playPause() {
-        guard let track = center.track else {
-            center.resume()
-            onEvent?(.played)
-            return
-        }
+        guard let track = center.track else { return }
         center.send(track.isPlaying ? .pause : .play)
         onEvent?(track.isPlaying ? .paused : .played)
     }
 
+    /// "Resume" while nothing plays (see `NowPlayingCenter.resumeOption`).
+    func resume() {
+        switch center.resumeOption {
+        case .practice?, .app?: break
+        case .needsPermission?, nil: return
+        }
+        center.resume()
+        onEvent?(.played)
+    }
+
     func skip(forward: Bool) {
+        let abilities = center.abilities
+        guard forward ? abilities.canSkipForward : abilities.canSkipBack else { return }
         center.send(forward ? .next : .previous)
         onEvent?(forward ? .skippedForward : .skippedBack)
     }
 
     func seek(to time: TimeInterval) {
+        guard center.abilities.canSeek else { return }
         center.send(.seek(to: max(0, time)))
         onEvent?(.seeked)
     }
 
     func cycleShuffle() {
-        guard let shuffle = center.track?.shuffle else { return }
-        center.send(.setShuffle(shuffle == .off ? .tracks : .off))
+        guard let shuffle = center.abilities.shuffle else { return }
+        center.setShuffle(shuffle == .off ? .tracks : .off)
         onEvent?(.shuffleChanged)
     }
 
-    /// Off → whole list → this song → off, like the Music app.
+    /// Off → whole list → this song → off, like the Music app (Spotify: off ↔ on).
     func cycleRepeat() {
-        guard let mode = center.track?.repeatMode else { return }
-        let next: RepeatMode = switch mode {
-        case .off: .playlist
-        case .playlist: .track
-        case .track: .off
-        }
-        center.send(.setRepeat(next))
+        let abilities = center.abilities
+        guard let mode = abilities.repeatMode else { return }
+        center.setRepeat(abilities.nextRepeatMode(after: mode))
         onEvent?(.repeatChanged)
     }
 
@@ -218,8 +231,26 @@ public final class NowPlayingModule: NotchModule {
         notch?.close()
     }
 
+    /// Opens another app from the "Open ▾" menu and gets the notch out of its way.
+    func openApp(_ bundleID: String) {
+        guard center.connection != .practice else { return }
+        center.openApp(bundleID)
+        notch?.close()
+    }
+
     func toggleTimeDisplay() {
         settings.showsRemainingTime.toggle()
+    }
+
+    // MARK: Holding the notch open
+
+    /// The app menu keeps the notch open while it's showing.
+    public var holdsOpen: Bool { isAppMenuOpen }
+
+    func setAppMenuOpen(_ open: Bool) {
+        guard isAppMenuOpen != open else { return }
+        isAppMenuOpen = open
+        if !open { notch?.holdReleased() }
     }
 
     private func showNote(_ text: String) {

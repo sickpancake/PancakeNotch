@@ -1,5 +1,11 @@
 ungive/mediaremote-adapter v0.7.7 (e3ff5021eb0875858bd05f48d2e9ba2e962d1cf6)
 https://github.com/ungive/mediaremote-adapter
-Copied unmodified: LICENSE, bin/, include/, src/adapter, src/private, src/utility.
+Copied unmodified: LICENSE, bin/, include/, src/adapter, src/private, src/utility, except the patch below.
 The test client (src/test) is left out, apart from the header test.m includes. scripts/build-adapter.sh builds the framework with clang
 (no CMake needed), the way the project's CMakeLists.txt does, for arm64 only.
+
+PancakeNotch patch (small, read-only): `stream` and `get` also report "enabledCommands", the MediaRemote command numbers the
+now playing app accepts right now (4 next, 5 previous, 24 change position…), so the notch can dim buttons the player would
+ignore (e.g. skipping during an ad). New files src/adapter/enabled_commands.{h,m}; marked hooks in src/adapter/stream.m
+(asked after every now playing info change and on MediaRemote's "supported commands changed" notifications) and
+src/adapter/get.m. To update the adapter: copy the new release over, then re-apply these lines.
