@@ -272,7 +272,7 @@ struct NotchModulesTests {
         #expect(model.layout.isPeeking)
         #expect(model.state == .compact)
         #expect(model.layout.bodySize(for: .compact).height == layout.geometry.compactHeight + NotchLayout.peekStripHeight)
-        try await Task.sleep(for: .milliseconds(400))
+        try await settle(.milliseconds(400)) { !model.layout.isPeeking && model.state == .closed }
         #expect(!model.layout.isPeeking)
         #expect(model.state == .closed)
     }

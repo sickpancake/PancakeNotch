@@ -326,7 +326,7 @@ struct NowPlayingCenterTests {
         backend.onUpdate?(NowPlayingUpdate(track: song(at: clock.now)))
         center.send(.pause)
         #expect(center.track?.isPlaying == false)
-        try await Task.sleep(for: NowPlayingCenter.confirmTimeout + .milliseconds(300))
+        try await settle(NowPlayingCenter.confirmTimeout + .milliseconds(300)) { center.track?.isPlaying == true }
         #expect(center.track?.isPlaying == true)
     }
 

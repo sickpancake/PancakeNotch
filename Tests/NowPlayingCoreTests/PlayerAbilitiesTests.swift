@@ -394,7 +394,7 @@ struct CenterScriptingTests {
         #expect(scripting.sent.first?.0 == .setShuffle(.tracks))
         // Spotify answers that it really did change.
         scripting.readResult = .success(reading(shuffle: .tracks))
-        try await Task.sleep(for: NowPlayingCenter.modeCheckDelay + .milliseconds(300))
+        try await settle(NowPlayingCenter.modeCheckDelay + .milliseconds(300)) { scripting.reads.count == 2 }
         #expect(scripting.reads.count == 2)
         #expect(center.abilities.shuffle == .tracks)
     }
