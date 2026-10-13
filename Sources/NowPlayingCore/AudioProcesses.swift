@@ -181,3 +181,38 @@ final class AudioOutputWatcher {
         AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     }
 }
+
+/// Whether some apps (their helper processes included) are making sound right now, from Core Audio's
+/// "running output" switch. Callbacks only, no permission. Tells whether the full-screen app plays, so
+/// the notch can hide for its video but not for music playing in the background (ADR-0030).
+@MainActor
+public final class AppSoundWatcher {
+    /// `isMakingSound` changed.
+    public var onChange: (() -> Void)?
+    public private(set) var isMakingSound = false
+    private var sources: [SoundSourceID] = []
+    private var watchers: [AudioOutputWatcher] = []
+
+    public init() {}
+
+    /// Watches these apps instead; an empty list stops watching.
+    public func watch(_ apps: [SoundSourceID]) {
+        guard apps != sources else { return }
+        sources = apps
+        watchers.forEach { $0.stop() }
+        watchers = apps.map { source in
+            let watcher = AudioOutputWatcher(source: source)
+            watcher.start()
+            watcher.onChange = { [weak self] _ in self?.refresh() }
+            return watcher
+        }
+        refresh()
+    }
+
+    private func refresh() {
+        let making = watchers.contains { $0.isRunningOutput == true }
+        guard making != isMakingSound else { return }
+        isMakingSound = making
+        onChange?()
+    }
+}

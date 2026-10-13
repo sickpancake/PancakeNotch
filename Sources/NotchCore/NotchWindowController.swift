@@ -36,12 +36,14 @@ public final class NotchWindowController {
     public var isHiddenForFullScreen = false {
         didSet {
             guard isHiddenForFullScreen != oldValue else { return }
-            isRevealed = false
+            // Open right now (the user is in it): it hides once it has closed.
+            isRevealed = isHiddenForFullScreen && model?.state == .expanded
             updateVisibility()
         }
     }
 
-    /// Shown by the keyboard shortcut while hidden for full screen, until the notch closes.
+    /// Shown while hidden for full screen (opened by the shortcut, or open when hiding began), until the
+    /// notch closes.
     private var isRevealed = false
 
     /// The user's on/off switch: off hides the notch until it's turned back on.
@@ -99,6 +101,7 @@ public final class NotchWindowController {
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
         guard hasGeometry, !isSuppressed, isEnabled, let model else { return }
+        let wasExpanded = model.state == .expanded
         if isHiddenForFullScreen, !isRevealed {
             isRevealed = true
             updateVisibility()
@@ -106,10 +109,12 @@ public final class NotchWindowController {
         model.toggle()
         // Opened from the keyboard: keep using the keyboard inside it.
         if model.state == .expanded, !model.modules.isEmpty { takeKeyFocus() }
-        if model.state != .expanded { hideAfterReveal() }
+        // It couldn't open (e.g. Mission Control is up): hide again now. A close hides at its end.
+        if !wasExpanded, model.state != .expanded { hideAfterReveal() }
     }
 
-    /// Back to hidden once the notch the shortcut opened has finished closing.
+    /// Back to hidden once the notch the shortcut opened has finished closing (or shrinking: in full
+    /// screen nothing stays around the notch).
     private func hideAfterReveal() {
         guard isRevealed, let model, model.state != .expanded else { return }
         isRevealed = false
@@ -117,7 +122,7 @@ public final class NotchWindowController {
     }
 
     /// The window shows: there's a notch, the user wants it, and no full-screen app hides it.
-    private var isShowing: Bool {
+    var isShowing: Bool {
         hasGeometry && !isSuppressed && isEnabled && (!isHiddenForFullScreen || isRevealed)
     }
 

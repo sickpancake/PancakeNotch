@@ -139,20 +139,12 @@ struct NotchSettingsView: View {
                     MonochromeSegmented(
                         title: String(localized: "Hide the notch in full screen"),
                         options: [
+                            (.whileWatching, String(localized: "While watching")),
                             (.always, String(localized: "Always")),
-                            (.whilePlaying, String(localized: "While playing")),
                             (.never, String(localized: "Never")),
                         ],
                         selection: $preferences.fullScreenHiding
                     )
-                }
-                if preferences.fullScreenHiding == .whilePlaying, !context.nowPlayingSettings.isEnabled {
-                    SettingsRow(
-                        title: String(localized: "Now Playing is off"),
-                        subtitle: String(localized: "PancakeNotch learns what's playing from Now Playing. Turn it on, or pick Always.")
-                    ) {
-                        Button(String(localized: "Open Modules"), action: openModules)
-                    }
                 }
             }
 
@@ -181,10 +173,10 @@ extension NotchSettingsView {
 
 private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
     switch hiding {
+    case .whileWatching:
+        String(localized: "Hidden while the full-screen app plays and you sit still. Scroll or move the pointer and it's back.")
     case .always:
         String(localized: "Hidden whenever an app fills the screen, like a video or a game.")
-    case .whilePlaying:
-        String(localized: "Hidden while a video or song plays in full screen. Pause and it's back.")
     case .never:
         String(localized: "Works as usual in full-screen apps.")
     }

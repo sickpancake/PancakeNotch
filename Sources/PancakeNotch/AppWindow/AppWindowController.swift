@@ -166,12 +166,9 @@ extension AppWindowController {
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
         try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
         try render("notch-long", section: .notch, size: CGSize(width: 1000, height: 2000))
-        // "While playing" with Now Playing off points to the Modules page.
-        preferences.fullScreenHiding = .whilePlaying
-        nowPlayingSettings.isEnabled = false
-        try render("notch-long-playing-off", section: .notch, size: CGSize(width: 1000, height: 2000))
-        nowPlayingSettings.isEnabled = true
         preferences.fullScreenHiding = .always
+        try render("notch-long-always", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.fullScreenHiding = .whileWatching
 
         // Now Playing's settings in each sound-bar state (the practice center: nothing is listened to).
         let soundBarStates: [(String, SoundBarsStyle, SoundBarsAccess)] = [

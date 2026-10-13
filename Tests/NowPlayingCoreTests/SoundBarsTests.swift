@@ -263,6 +263,16 @@ struct SoundSourceTests {
         #expect(source?.processID == 7)
         #expect(source?.bundleIDs == ["com.google.Chrome", "com.google.Chrome.helper"])
     }
+
+    @Test func knowsWhichAppATrackComesFrom() {
+        let chrome = SoundSourceID(processID: 500, bundleIDs: ["com.google.Chrome"])!
+        #expect(chrome.plays(NowPlayingTrack(title: "Video", bundleID: "com.google.Chrome")))
+        #expect(chrome.plays(NowPlayingTrack(title: "Video", bundleID: "com.google.chrome.helper")))
+        #expect(chrome.plays(NowPlayingTrack(title: "Video", processID: 500)))
+        // Spotify playing in the background while Chrome is full screen.
+        #expect(!chrome.plays(NowPlayingTrack(title: "Song", bundleID: "com.spotify.client", processID: 9)))
+        #expect(!chrome.plays(NowPlayingTrack(title: "Song", bundleID: "com.google.ChromeCanary")))
+    }
 }
 
 struct AudioProcessSelectionTests {

@@ -77,4 +77,14 @@ public struct SoundSourceID: Hashable, Sendable {
     public init?(track: NowPlayingTrack) {
         self.init(processID: track.processID, bundleIDs: [track.bundleID, track.sourceBundleID])
     }
+
+    /// The track comes from this app: its process, or its bundle ID or a helper's ("….helper").
+    public func plays(_ track: NowPlayingTrack) -> Bool {
+        if let processID, track.processID == processID { return true }
+        let ids = bundleIDs.map { $0.lowercased() }
+        return [track.bundleID, track.sourceBundleID].contains { trackID in
+            guard let trackID = trackID?.lowercased(), !trackID.isEmpty else { return false }
+            return ids.contains { trackID == $0 || trackID.hasPrefix($0 + ".") }
+        }
+    }
 }
