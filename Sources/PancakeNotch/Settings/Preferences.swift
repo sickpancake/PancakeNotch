@@ -31,6 +31,11 @@ final class Preferences {
         didSet { defaults.set(hapticOnOpen, forKey: Keys.hapticOnOpen) }
     }
 
+    /// Whether the notch hides while a full-screen app fills the built-in display.
+    var fullScreenHiding: FullScreenHiding {
+        didSet { defaults.set(fullScreenHiding.rawValue, forKey: Keys.fullScreenHiding) }
+    }
+
     var notchBehavior: NotchBehavior {
         NotchBehavior(
             openDelay: .milliseconds(Int(openDelayMilliseconds)),
@@ -47,12 +52,14 @@ final class Preferences {
             Keys.openDelay: 150.0,
             Keys.closeDelay: 300.0,
             Keys.hapticOnOpen: false,
+            Keys.fullScreenHiding: FullScreenHiding.always.rawValue,
         ])
         notchEnabled = defaults.bool(forKey: Keys.notchEnabled)
         showMenuBarIcon = defaults.bool(forKey: Keys.showMenuBarIcon)
         openDelayMilliseconds = defaults.double(forKey: Keys.openDelay)
         closeDelayMilliseconds = defaults.double(forKey: Keys.closeDelay)
         hapticOnOpen = defaults.bool(forKey: Keys.hapticOnOpen)
+        fullScreenHiding = defaults.string(forKey: Keys.fullScreenHiding).flatMap(FullScreenHiding.init(rawValue:)) ?? .always
     }
 
     private enum Keys {
@@ -61,5 +68,6 @@ final class Preferences {
         static let openDelay = "openDelayMilliseconds"
         static let closeDelay = "closeDelayMilliseconds"
         static let hapticOnOpen = "hapticOnOpen"
+        static let fullScreenHiding = "fullScreenHiding"
     }
 }

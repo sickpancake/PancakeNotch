@@ -79,6 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var appObserver: NSObjectProtocol?
+    /// Something plays, as "Hide while playing" in full screen sees it: a pause counts only after a
+    /// moment, so scrubbing or the gap between songs doesn't flash the notch.
+    private var isPlayingForFullScreen = false
+    private var pauseTask: Task<Void, Never>?
+    static let pauseGrace: Duration = .seconds(3)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
@@ -107,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
         observeModules()
+        observePlaying()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -172,6 +178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notchController.isEnabled = preferences.notchEnabled
             notchController.behavior = preferences.notchBehavior
             menuBar.isVisible = preferences.showMenuBarIcon
+            _ = preferences.fullScreenHiding
+            updateFullScreen()
         } onChange: { [weak self] in
             Task { @MainActor in self?.observePreferences() }
         }
@@ -254,20 +262,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Full-screen apps keep the notch working, except apps on the user's hide list (ADR-0030).
+    /// In full screen the notch follows the user's setting (hidden, hidden while playing, or working as
+    /// usual); apps on the hide list hide it completely, the shortcut included (ADR-0030).
     private func updateFullScreen() {
+        let hiding = preferences.fullScreenHiding
         let hiddenApps = NotchSettings.appsHiddenInFullScreen
-        var suppress = false
-        if !hiddenApps.isEmpty,
-           let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           hiddenApps.contains(frontmost),
-           let screen = NSScreen.builtIn {
-            suppress = FullScreenDetector.isFullScreen(displayID: screen.displayID)
+        var isFullScreen = false
+        if hiding != .never || !hiddenApps.isEmpty, let screen = NSScreen.builtIn {
+            isFullScreen = FullScreenDetector.isFullScreen(displayID: screen.displayID)
         }
-        if suppress != notchController.isSuppressed {
-            logger.info("Notch \(suppress ? "hidden for full-screen app" : "shown", privacy: .public)")
+        let suppress = isFullScreen
+            && NSWorkspace.shared.frontmostApplication?.bundleIdentifier.map(hiddenApps.contains) == true
+        let hide = hiding.hides(isFullScreen: isFullScreen, isPlaying: isPlayingForFullScreen)
+        if suppress != notchController.isSuppressed || hide != notchController.isHiddenForFullScreen {
+            logger.info("Notch \(suppress ? "hidden for a listed full-screen app" : hide ? "hidden in full screen" : "shown", privacy: .public)")
         }
         notchController.isSuppressed = suppress
+        notchController.isHiddenForFullScreen = hide
+    }
+
+    /// Follows whether something plays, for "Hide while playing" (no polling: Observation).
+    private func observePlaying() {
+        let playing = withObservationTracking {
+            nowPlaying.track?.isPlaying == true
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observePlaying() }
+        }
+        if playing {
+            pauseTask?.cancel()
+            pauseTask = nil
+            guard !isPlayingForFullScreen else { return }
+            isPlayingForFullScreen = true
+            updateFullScreen()
+        } else if isPlayingForFullScreen, pauseTask == nil {
+            pauseTask = Task { [weak self] in
+                try? await Task.sleep(for: Self.pauseGrace)
+                guard !Task.isCancelled, let self else { return }
+                self.pauseTask = nil
+                self.isPlayingForFullScreen = false
+                self.updateFullScreen()
+            }
+        }
     }
 
     private func updateGeometry() {

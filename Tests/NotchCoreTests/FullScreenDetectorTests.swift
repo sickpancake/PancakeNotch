@@ -36,3 +36,18 @@ struct FullScreenDetectorTests {
         #expect(!FullScreenDetector.isFullScreen(displaySpaces: [["junk": 1]], displayUUID: builtIn))
     }
 }
+
+struct FullScreenHidingTests {
+    @Test func nothingHidesOutsideFullScreen() {
+        for hiding in FullScreenHiding.allCases {
+            #expect(!hiding.hides(isFullScreen: false, isPlaying: true))
+        }
+    }
+
+    @Test func eachSettingInFullScreen() {
+        #expect(FullScreenHiding.always.hides(isFullScreen: true, isPlaying: false))
+        #expect(FullScreenHiding.whilePlaying.hides(isFullScreen: true, isPlaying: true))
+        #expect(!FullScreenHiding.whilePlaying.hides(isFullScreen: true, isPlaying: false))
+        #expect(!FullScreenHiding.never.hides(isFullScreen: true, isPlaying: true))
+    }
+}

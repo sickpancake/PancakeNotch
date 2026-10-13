@@ -131,6 +131,31 @@ struct NotchSettingsView: View {
                 }
             }
 
+            SettingsCard(header: String(localized: "Full screen"), footer: fullScreenFooter) {
+                SettingsRow(
+                    title: String(localized: "Hide the notch in full screen"),
+                    subtitle: fullScreenHint(preferences.fullScreenHiding)
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Hide the notch in full screen"),
+                        options: [
+                            (.always, String(localized: "Always")),
+                            (.whilePlaying, String(localized: "While playing")),
+                            (.never, String(localized: "Never")),
+                        ],
+                        selection: $preferences.fullScreenHiding
+                    )
+                }
+                if preferences.fullScreenHiding == .whilePlaying, !context.nowPlayingSettings.isEnabled {
+                    SettingsRow(
+                        title: String(localized: "Now Playing is off"),
+                        subtitle: String(localized: "PancakeNotch learns what's playing from Now Playing. Turn it on, or pick Always.")
+                    ) {
+                        Button(String(localized: "Open Modules"), action: openModules)
+                    }
+                }
+            }
+
             SettingsCard(header: String(localized: "Feedback")) {
                 SettingsRow(
                     title: String(localized: "Tap the trackpad when the notch opens"),
@@ -141,6 +166,27 @@ struct NotchSettingsView: View {
                 }
             }
         }
+    }
+}
+
+extension NotchSettingsView {
+    /// While it's hidden, the keyboard shortcut is the way in.
+    private var fullScreenFooter: String? {
+        guard preferences.fullScreenHiding != .never else { return nil }
+        return context.shortcuts.shortcut == nil
+            ? String(localized: "Set a shortcut on the Keyboard page to open the notch while it's hidden.")
+            : String(localized: "Your keyboard shortcut still opens the notch while it's hidden.")
+    }
+}
+
+private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
+    switch hiding {
+    case .always:
+        String(localized: "Hidden whenever an app fills the screen, like a video or a game.")
+    case .whilePlaying:
+        String(localized: "Hidden while a video or song plays in full screen. Pause and it's back.")
+    case .never:
+        String(localized: "Works as usual in full-screen apps.")
     }
 }
 

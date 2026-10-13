@@ -31,6 +31,19 @@ public final class NotchWindowController {
         }
     }
 
+    /// Hides the notch while a full-screen app fills the display (the user's setting, ADR-0030). Unlike
+    /// `isSuppressed`, the keyboard shortcut still opens it; it hides again once it has closed.
+    public var isHiddenForFullScreen = false {
+        didSet {
+            guard isHiddenForFullScreen != oldValue else { return }
+            isRevealed = false
+            updateVisibility()
+        }
+    }
+
+    /// Shown by the keyboard shortcut while hidden for full screen, until the notch closes.
+    private var isRevealed = false
+
     /// The user's on/off switch: off hides the notch until it's turned back on.
     public var isEnabled = true {
         didSet {
@@ -86,9 +99,26 @@ public final class NotchWindowController {
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
         guard hasGeometry, !isSuppressed, isEnabled, let model else { return }
+        if isHiddenForFullScreen, !isRevealed {
+            isRevealed = true
+            updateVisibility()
+        }
         model.toggle()
         // Opened from the keyboard: keep using the keyboard inside it.
         if model.state == .expanded, !model.modules.isEmpty { takeKeyFocus() }
+        if model.state != .expanded { hideAfterReveal() }
+    }
+
+    /// Back to hidden once the notch the shortcut opened has finished closing.
+    private func hideAfterReveal() {
+        guard isRevealed, let model, model.state != .expanded else { return }
+        isRevealed = false
+        updateVisibility()
+    }
+
+    /// The window shows: there's a notch, the user wants it, and no full-screen app hides it.
+    private var isShowing: Bool {
+        hasGeometry && !isSuppressed && isEnabled && (!isHiddenForFullScreen || isRevealed)
     }
 
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
@@ -113,7 +143,7 @@ public final class NotchWindowController {
     }
 
     private func updateVisibility() {
-        if hasGeometry && !isSuppressed && isEnabled {
+        if isShowing {
             panel?.orderFrontRegardless()
         } else {
             model?.reset()
@@ -124,7 +154,7 @@ public final class NotchWindowController {
 
     /// Watches for file drags heading to the notch while it's showing and a module takes drops.
     private func updateDragWatcher() {
-        guard let model, !modules.isEmpty, !model.isPinned, hasGeometry, !isSuppressed, isEnabled else {
+        guard let model, !modules.isEmpty, !model.isPinned, isShowing else {
             dragWatcher.stop()
             return
         }
@@ -166,9 +196,11 @@ public final class NotchWindowController {
         container.dropDelegate = dropRouter
         panel.contentView = container
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
-        model.fitWindow = { [weak panel, weak model] state in
+        model.fitWindow = { [weak self, weak panel, weak model] state in
             guard let panel, let model else { return }
             panel.setFrame(model.layout.windowFrame(for: state), display: true)
+            // A transition's end (the size asked for is the state it settled in) after the shortcut's reveal.
+            if state == model.state { self?.hideAfterReveal() }
         }
         self.model = model
         self.panel = panel

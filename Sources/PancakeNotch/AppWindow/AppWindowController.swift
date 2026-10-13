@@ -165,6 +165,13 @@ extension AppWindowController {
         try render("learn-nowplaying", section: .learn, lesson: .nowPlaying)
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
         try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
+        try render("notch-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        // "While playing" with Now Playing off points to the Modules page.
+        preferences.fullScreenHiding = .whilePlaying
+        nowPlayingSettings.isEnabled = false
+        try render("notch-long-playing-off", section: .notch, size: CGSize(width: 1000, height: 2000))
+        nowPlayingSettings.isEnabled = true
+        preferences.fullScreenHiding = .always
 
         // Now Playing's settings in each sound-bar state (the practice center: nothing is listened to).
         let soundBarStates: [(String, SoundBarsStyle, SoundBarsAccess)] = [
@@ -231,6 +238,7 @@ extension AppWindowController {
                 let withShortcut = ShortcutController(defaults: shortcutDefaults) {}
                 try render("home-shortcut", section: .home, shortcuts: withShortcut)
                 try render("keyboard-shortcut", section: .keyboard, shortcuts: withShortcut)
+                try render("notch-long-shortcut", section: .notch, shortcuts: withShortcut, size: CGSize(width: 1000, height: 2000))
             }
         }
     }
