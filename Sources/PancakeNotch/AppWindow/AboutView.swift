@@ -47,7 +47,7 @@ struct AboutView: View {
                 }
                 SettingsRow(
                     title: String(localized: "Your data stays here"),
-                    subtitle: String(localized: "The numbers on Home are counted on this Mac and never sent anywhere.")
+                    subtitle: String(localized: "The numbers on Home and Statistics are counted on this Mac and never sent anywhere.")
                 ) {
                     Image(systemName: "lock")
                         .font(.app(size: 14, weight: .semibold))
@@ -66,6 +66,15 @@ struct AboutView: View {
                 ) {
                     Button { openURL(AppInfo.license) } label: {
                         Label(String(localized: "Read License"), systemImage: "arrow.up.right")
+                            .labelStyle(TrailingIconLabelStyle())
+                    }
+                }
+                SettingsRow(
+                    title: String(localized: "Acknowledgements"),
+                    subtitle: String(localized: "Now Playing uses mediaremote-adapter by Jonas van den Berg, under the BSD 3-Clause license.")
+                ) {
+                    Button { openURL(AppInfo.nowPlayingHelperLicense) } label: {
+                        Label(String(localized: "View License"), systemImage: "arrow.up.right")
                             .labelStyle(TrailingIconLabelStyle())
                     }
                 }

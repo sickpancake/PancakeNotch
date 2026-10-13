@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NotchCore
 
@@ -31,8 +32,52 @@ struct FullScreenDetectorTests {
         #expect(FullScreenDetector.isFullScreen(displaySpaces: spaces, displayUUID: builtIn))
     }
 
+    @Test func theFullScreenAppIsNamed() {
+        var spaces = [display(builtIn, currentType: 4)]
+        var current = spaces[0]["Current Space"] as! [String: Any]
+        current["pid"] = NSNumber(value: 812)
+        spaces[0]["Current Space"] = current
+        #expect(FullScreenDetector.fullScreenApps(displaySpaces: spaces, displayUUID: builtIn) == [812])
+    }
+
+    @Test func splitViewNamesBothApps() {
+        var spaces = [display(builtIn, currentType: 4)]
+        var current = spaces[0]["Current Space"] as! [String: Any]
+        current["pid"] = NSNumber(value: 812)
+        current["TileLayoutManager"] = ["TileSpaces": [["pid": NSNumber(value: 812)], ["pid": NSNumber(value: 97)]]]
+        spaces[0]["Current Space"] = current
+        #expect(FullScreenDetector.fullScreenApps(displaySpaces: spaces, displayUUID: builtIn) == [812, 97])
+    }
+
+    @Test func aDesktopNamesNoApps() {
+        #expect(FullScreenDetector.fullScreenApps(displaySpaces: [display(builtIn, currentType: 0)], displayUUID: builtIn) == nil)
+        // Full screen, but macOS didn't say whose.
+        #expect(FullScreenDetector.fullScreenApps(displaySpaces: [display(builtIn, currentType: 4)], displayUUID: builtIn) == [])
+    }
+
     @Test func unknownDataIsNotFullScreen() {
         #expect(!FullScreenDetector.isFullScreen(displaySpaces: [], displayUUID: builtIn))
         #expect(!FullScreenDetector.isFullScreen(displaySpaces: [["junk": 1]], displayUUID: builtIn))
+    }
+}
+
+struct FullScreenHidingTests {
+    @Test func nothingHidesOutsideFullScreen() {
+        for hiding in FullScreenHiding.allCases {
+            #expect(!hiding.hides(isFullScreen: false, isPlaying: true, isUserActive: false))
+        }
+    }
+
+    @Test func whileWatchingHidesOnlyWhileItPlaysAndTheUserSitsStill() {
+        #expect(FullScreenHiding.whileWatching.hides(isFullScreen: true, isPlaying: true, isUserActive: false))
+        // Scrolling or moving the pointer brings it back.
+        #expect(!FullScreenHiding.whileWatching.hides(isFullScreen: true, isPlaying: true, isUserActive: true))
+        // Studying in full screen with music from another app: isPlaying is false.
+        #expect(!FullScreenHiding.whileWatching.hides(isFullScreen: true, isPlaying: false, isUserActive: false))
+    }
+
+    @Test func alwaysAndNeverIgnorePlayingAndActivity() {
+        #expect(FullScreenHiding.always.hides(isFullScreen: true, isPlaying: false, isUserActive: true))
+        #expect(!FullScreenHiding.never.hides(isFullScreen: true, isPlaying: true, isUserActive: false))
     }
 }

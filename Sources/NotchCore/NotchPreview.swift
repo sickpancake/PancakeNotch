@@ -2,11 +2,11 @@ import AppKit
 import SwiftUI
 
 /// A working miniature of the notch for the app window: hover or click it to try the current behavior
-/// settings, drop files on it, click and right-click what's inside. It runs its own model, separate
+/// settings, drop files on it, click and right-click what's inside, switch between its modules. It runs its own model, separate
 /// from the real notch, hosted the same way as the real one (AppKit drops, keys while focused).
 public struct NotchPreview: View {
     private let behavior: NotchBehavior
-    private let module: (any NotchModule)?
+    private let modules: [any NotchModule]
     private let onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
     private let startState: NotchState?
     @State private var host: NotchPreviewHost
@@ -14,7 +14,8 @@ public struct NotchPreview: View {
     /// - Parameters:
     ///   - behavior: hover delays and haptics, normally the user's current settings.
     ///   - screenWidth: width of the pretend screen; the expanded panel is clamped to it.
-    ///   - module: what the preview shows inside (e.g. a practice Shelf); `nil` shows the placeholder.
+    ///   - modules: what the preview shows inside (e.g. a practice Shelf); empty shows the placeholder.
+    ///   - arrangement: module ranking and navigation, normally the user's, so the settings can be tried.
     ///   - acceptsDragSource: which drags may drop in, by their source (`nil` for other apps). By
     ///     default every drag, so files dragged from inside the app window land too.
     ///   - onStateChange: called when the preview opens, shrinks or closes (lessons), and whether a
@@ -23,18 +24,20 @@ public struct NotchPreview: View {
     public init(
         behavior: NotchBehavior,
         screenWidth: CGFloat = 640,
-        module: (any NotchModule)? = nil,
+        modules: [any NotchModule] = [],
+        arrangement: ModuleArrangement? = nil,
         acceptsDragSource: @escaping @MainActor (Any?) -> Bool = { _ in true },
         onStateChange: ((NotchState, _ byClick: Bool) -> Void)? = nil,
         startState: NotchState? = nil
     ) {
         self.behavior = behavior
-        self.module = module
+        self.modules = modules
         self.onStateChange = onStateChange
         self.startState = startState
         _host = State(initialValue: NotchPreviewHost(
             behavior: behavior,
             screenWidth: screenWidth,
+            arrangement: arrangement,
             acceptsDragSource: acceptsDragSource
         ))
     }
@@ -50,13 +53,13 @@ public struct NotchPreview: View {
         NotchPreviewRepresentable(host: host)
             .frame(width: host.width, height: host.height, alignment: .top)
             .onChange(of: behavior, initial: true) { model.behavior = behavior }
-            .onChange(of: module.map(ObjectIdentifier.init), initial: true) { model.module = module }
+            .onChange(of: modules.map(ObjectIdentifier.init), initial: true) { model.modules = modules }
             .onChange(of: model.state) { onStateChange?(model.state, model.lastChangeWasClick) }
             .onAppear { if let startState { model.transition(to: startState) } }
             // Gone from the page: let go of the module (closes its menus) and settle.
             .onDisappear {
                 model.reset()
-                model.module = nil
+                model.modules = []
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(Text("Notch preview"))
@@ -75,13 +78,14 @@ final class NotchPreviewHost {
     @ObservationIgnored weak var view: NotchContainerView?
     @ObservationIgnored private var mouseMonitor: Any?
     @ObservationIgnored private var keyMonitor: Any?
+    @ObservationIgnored private var scrollMonitor: Any?
     @ObservationIgnored private let restingHeight: CGFloat
 
     static func layout(screenWidth: CGFloat) -> NotchLayout {
         NotchLayout(geometry: NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: screenWidth, height: 400)))
     }
 
-    init(behavior: NotchBehavior, screenWidth: CGFloat, acceptsDragSource: @escaping @MainActor (Any?) -> Bool) {
+    init(behavior: NotchBehavior, screenWidth: CGFloat, arrangement: ModuleArrangement?, acceptsDragSource: @escaping @MainActor (Any?) -> Bool) {
         let layout = Self.layout(screenWidth: screenWidth)
         router = NotchDropRouter(acceptsSource: acceptsDragSource)
         restingHeight = layout.windowFrame(for: .expanded).height
@@ -92,6 +96,7 @@ final class NotchPreviewHost {
         model = NotchViewModel(
             layout: layout,
             behavior: behavior,
+            arrangement: arrangement,
             pointerLocation: { reference.host?.pointerOnPretendScreen() ?? .zero },
             isMissionControlActive: { false }
         )
@@ -157,19 +162,40 @@ final class NotchPreviewHost {
                 guard let self, let view = self.view, let window = view.window, event.window === window else { return }
                 let point = view.convert(event.locationInWindow, from: nil)
                 if !view.bounds.contains(point) {
-                    self.model.module?.clickedOutsidePreview()
+                    self.model.modules.forEach { $0.clickedOutsidePreview() }
                     self.releaseKeyFocus()
                 }
             }
             return event
         }
+        // Two-finger swipes on the open preview switch modules, like on the real notch.
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, let view = self.view, let window = view.window, event.window === window,
+                      self.model.state == .expanded else { return }
+                let point = view.convert(event.locationInWindow, from: nil)
+                guard view.bounds.contains(point) else { return }
+                self.model.handleScroll(event, at: self.bodyPoint(viewPoint: point, in: view))
+            }
+            return event
+        }
+    }
+
+    /// A point in the preview view to notch-body coordinates (origin at the body's top-left, y down).
+    private func bodyPoint(viewPoint point: CGPoint, in view: NSView) -> CGPoint {
+        let top = view.isFlipped ? view.bounds.minY : view.bounds.maxY
+        let below = view.isFlipped ? point.y - top : top - point.y
+        let bodyWidth = model.layout.bodySize(for: .expanded).width
+        return CGPoint(x: point.x - (view.bounds.midX - bodyWidth / 2), y: below)
     }
 
     func removeMonitors() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
+        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
         keyMonitor = nil
         mouseMonitor = nil
+        scrollMonitor = nil
     }
 }
 

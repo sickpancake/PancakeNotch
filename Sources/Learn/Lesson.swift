@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, shelf
+    case basics, nowPlaying, shelf
 
     public var id: Self { self }
 }
@@ -11,7 +11,9 @@ public enum LessonID: String, CaseIterable, Identifiable, Sendable {
 public enum LessonSignal: Hashable, Sendable {
     case notchOpened, notchShrunk, notchClosed, shortcutSet,
          shelfItemAdded, shelfItemOpened, shelfItemClosed, shelfMenuOpened,
-         shelfDraggedOut, shelfSeveralSelected, shelfCleared
+         shelfDraggedOut, shelfSeveralSelected, shelfCleared,
+         musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
+         moduleSwitched
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -55,11 +57,12 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, shelf] }
+    public static var all: [Lesson] { [basics, nowPlaying, shelf] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
         case .basics: basics
+        case .nowPlaying: nowPlaying
         case .shelf: shelf
         }
     }
@@ -99,6 +102,72 @@ public struct Lesson: Identifiable, Sendable {
                 symbol: "command",
                 signal: .shortcutSet,
                 isOptional: true
+            ),
+        ]
+    )
+
+    /// Pausing, skipping and jumping around in a pretend song, then moving to another module.
+    public static let nowPlaying = Lesson(
+        id: .nowPlaying,
+        title: String(localized: "Now Playing", comment: "Lesson title"),
+        summary: String(localized: "Control your music from the notch.", comment: "Lesson summary"),
+        symbol: "music.note",
+        steps: [
+            LessonStep(
+                id: "nowPlaying.open",
+                title: String(localized: "Open the player", comment: "Lesson step title"),
+                detail: String(localized: "A pretend song is playing: see its album art and sound bars beside the notch? Hover the notch to open it.", comment: "Lesson step detail"),
+                symbol: "cursorarrow.rays",
+                signal: .notchOpened
+            ),
+            LessonStep(
+                id: "nowPlaying.pause",
+                title: String(localized: "Pause the song", comment: "Lesson step title"),
+                detail: String(localized: "Click the pause button in the middle.", comment: "Lesson step detail"),
+                symbol: "pause.fill",
+                signal: .musicPaused
+            ),
+            LessonStep(
+                id: "nowPlaying.play",
+                title: String(localized: "Play it again", comment: "Lesson step title"),
+                detail: String(localized: "The same button carries on where you left off.", comment: "Lesson step detail"),
+                symbol: "play.fill",
+                signal: .musicPlayed
+            ),
+            LessonStep(
+                id: "nowPlaying.skip",
+                title: String(localized: "Skip to the next song", comment: "Lesson step title"),
+                detail: String(localized: "Click the forward button. The back button goes to the start of the song, then the one before.", comment: "Lesson step detail"),
+                symbol: "forward.fill",
+                signal: .musicSkipped
+            ),
+            LessonStep(
+                id: "nowPlaying.seek",
+                title: String(localized: "Jump to another part", comment: "Lesson step title"),
+                detail: String(localized: "Drag along the progress bar, or click anywhere on it.", comment: "Lesson step detail"),
+                symbol: "timeline.selection",
+                signal: .musicSeeked
+            ),
+            LessonStep(
+                id: "nowPlaying.modes",
+                title: String(localized: "Turn on shuffle or repeat", comment: "Lesson step title"),
+                detail: String(localized: "The small buttons at either end. They light up while they're on.", comment: "Lesson step detail"),
+                symbol: "shuffle",
+                signal: .musicModeChanged
+            ),
+            LessonStep(
+                id: "nowPlaying.artwork",
+                title: String(localized: "Click the album art", comment: "Lesson step title"),
+                detail: String(localized: "In your real notch, this brings the app that's playing to the front.", comment: "Lesson step detail"),
+                symbol: "arrow.up.forward.app",
+                signal: .musicArtworkClicked
+            ),
+            LessonStep(
+                id: "nowPlaying.switch",
+                title: String(localized: "Switch to the Shelf", comment: "Lesson step title"),
+                detail: String(localized: "Pick it at the top left of the open notch, or swipe sideways there with two fingers.", comment: "Lesson step detail"),
+                symbol: "rectangle.2.swap",
+                signal: .moduleSwitched
             ),
         ]
     )

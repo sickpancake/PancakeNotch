@@ -1,4 +1,5 @@
 import ModuleShelf
+import NotchCore
 import SwiftUI
 
 struct GeneralSettingsView: View {
@@ -56,15 +57,28 @@ struct GeneralSettingsView: View {
 }
 
 struct NotchSettingsView: View {
-    @Bindable var preferences: Preferences
-    let shelfSettings: ShelfSettings
+    let context: AppContext
+    /// Goes to the Modules page (order and favorites live there).
+    let openModules: () -> Void
+
+    private var preferences: Preferences { context.preferences }
+
+    /// The practice modules matching the user's switches, so the stage shows their notch.
+    private var practice: Set<PracticeKind> {
+        var kinds: Set<PracticeKind> = []
+        if context.nowPlayingSettings.isEnabled { kinds.insert(.nowPlaying) }
+        if context.shelfSettings.isEnabled { kinds.insert(.shelf) }
+        return kinds
+    }
 
     var body: some View {
+        @Bindable var preferences = context.preferences
+        @Bindable var arrangement = context.arrangement
         AppPage(
             title: String(localized: "Notch"),
             subtitle: String(localized: "How the notch reacts to your pointer. Try your changes right here.")
         ) {
-            NotchStage(behavior: preferences.notchBehavior, showsShelf: shelfSettings.isEnabled)
+            NotchStage(behavior: preferences.notchBehavior, arrangement: context.arrangement, practice: practice)
                 .background(Color.black)
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))
                 .overlay {
@@ -91,6 +105,49 @@ struct NotchSettingsView: View {
                 )
             }
 
+            SettingsCard(
+                header: String(localized: "Moving between modules"),
+                footer: String(localized: "A two-finger swipe sideways on the open notch also moves to the next module.")
+            ) {
+                SettingsRow(
+                    title: String(localized: "In the open notch, show"),
+                    subtitle: navigationHint(arrangement.navigation)
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "In the open notch, show"),
+                        options: [
+                            (.tabsAndMenu, String(localized: "Menu and tabs")),
+                            (.tabs, String(localized: "Tabs")),
+                            (.menu, String(localized: "Menu")),
+                        ],
+                        selection: $arrangement.navigation
+                    )
+                }
+                SettingsRow(
+                    title: String(localized: "Order and favorites"),
+                    subtitle: String(localized: "Which modules come first, which are tabs, and which are on.")
+                ) {
+                    Button(String(localized: "Open Modules"), action: openModules)
+                }
+            }
+
+            SettingsCard(header: String(localized: "Full screen"), footer: fullScreenFooter) {
+                SettingsRow(
+                    title: String(localized: "Hide the notch in full screen"),
+                    subtitle: fullScreenHint(preferences.fullScreenHiding)
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Hide the notch in full screen"),
+                        options: [
+                            (.whileWatching, String(localized: "While watching")),
+                            (.always, String(localized: "Always")),
+                            (.never, String(localized: "Never")),
+                        ],
+                        selection: $preferences.fullScreenHiding
+                    )
+                }
+            }
+
             SettingsCard(header: String(localized: "Feedback")) {
                 SettingsRow(
                     title: String(localized: "Tap the trackpad when the notch opens"),
@@ -101,6 +158,38 @@ struct NotchSettingsView: View {
                 }
             }
         }
+    }
+}
+
+extension NotchSettingsView {
+    /// While it's hidden, the keyboard shortcut is the way in.
+    private var fullScreenFooter: String? {
+        guard preferences.fullScreenHiding != .never else { return nil }
+        return context.shortcuts.shortcut == nil
+            ? String(localized: "Set a shortcut on the Keyboard page to open the notch while it's hidden.")
+            : String(localized: "Your keyboard shortcut still opens the notch while it's hidden.")
+    }
+}
+
+private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
+    switch hiding {
+    case .whileWatching:
+        String(localized: "Hidden while the full-screen app plays and you sit still. Scroll or move the pointer and it's back.")
+    case .always:
+        String(localized: "Hidden whenever an app fills the screen, like a video or a game.")
+    case .never:
+        String(localized: "Works as usual in full-screen apps.")
+    }
+}
+
+private func navigationHint(_ navigation: NotchNavigation) -> String {
+    switch navigation {
+    case .tabsAndMenu:
+        String(localized: "A Menu button with every module, then a tab for each favorite.")
+    case .tabs:
+        String(localized: "A tab for every module, one click apart.")
+    case .menu:
+        String(localized: "Just the module's name: click it for the Menu. The tidiest.")
     }
 }
 
@@ -168,7 +257,7 @@ struct KeyboardSettingsView: View {
                     title: String(localized: "Open the selected item"),
                     subtitle: String(localized: "A big preview, or an editor for notes and links. Space works too.")
                 ) {
-                    KeyCombo(keys: ["Return"])
+                    KeyCombo(keys: [String(localized: "Return", comment: "Key name, as printed on the keyboard")])
                 }
                 SettingsRow(
                     title: String(localized: "Move the selection"),
@@ -186,22 +275,22 @@ struct KeyboardSettingsView: View {
                     title: String(localized: "Remove from the Shelf"),
                     subtitle: String(localized: "The files themselves stay where they are.")
                 ) {
-                    KeyCombo(keys: ["Delete"])
+                    KeyCombo(keys: [String(localized: "Delete", comment: "Key name, as printed on the keyboard")])
                 }
                 SettingsRow(
                     title: String(localized: "Go back, then close"),
                     subtitle: String(localized: "Leaves an open item, then closes the notch.")
                 ) {
-                    KeyCombo(keys: ["Esc"])
+                    KeyCombo(keys: [String(localized: "Esc", comment: "Key name, as printed on the keyboard")])
                 }
             }
 
             SettingsCard(header: String(localized: "In this window")) {
                 SettingsRow(
                     title: String(localized: "Jump to a page"),
-                    subtitle: String(localized: "Home, Modules, Learn, General, Notch, Keyboard, About, in sidebar order.")
+                    subtitle: String(localized: "Home, Modules, Learn, Statistics, General, Notch, Keyboard, About, in sidebar order.")
                 ) {
-                    KeyCombo(keys: ["⌘", "1 – 7"])
+                    KeyCombo(keys: ["⌘", "1 – 8"])
                 }
                 SettingsRow(
                     title: String(localized: "Close the window"),

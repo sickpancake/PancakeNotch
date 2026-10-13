@@ -23,6 +23,10 @@ public final class ShelfPreviewModule: NotchModule {
 
     public init() {}
 
+    public var moduleID: String { "shelf" }
+    public var title: String { String(localized: "Shelf", comment: "Module name") }
+    public var symbol: String { "tray" }
+
     public func attach(to notch: NotchViewModel?) {}
 
     public func expandedView(layout: NotchLayout) -> AnyView {
@@ -30,23 +34,28 @@ public final class ShelfPreviewModule: NotchModule {
     }
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {
-        CompactEars(leading: AnyView(ShelfTrayBadge(count: Self.samples.count)))
+        CompactEars(main: AnyView(ShelfTrayBadge(count: Self.samples.count)))
     }
 }
 
 private struct ShelfPreviewPanel: View {
     let layout: ShelfLayout
+    /// The module tabs at the left of the band: the count starts after them, and they name the Shelf.
+    @Environment(\.notchModuleBarWidth) private var barWidth
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Text("Shelf")
-                    .font(.system(size: 12, weight: .semibold))
+                if barWidth == 0 {
+                    Text("Shelf")
+                        .font(.system(size: 12, weight: .semibold))
+                }
                 Text("\(ShelfPreviewModule.samples.count) items", comment: "Shelf header item count")
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer(minLength: 0)
             }
+            .padding(.leading, max(0, barWidth - ShelfLayout.sidePadding))
             .frame(width: layout.headerSideWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: layout.bandHeight)

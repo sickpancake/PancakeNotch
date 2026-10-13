@@ -31,19 +31,27 @@ struct NotchView: View {
     }
 
     private var accessibilityLabel: String {
-        guard model.state != .expanded, let status = model.module?.accessibilityStatus else { return "PancakeNotch" }
-        return "PancakeNotch, " + status
+        guard model.state != .expanded else { return "PancakeNotch" }
+        let statuses = model.rankedModules.compactMap(\.accessibilityStatus)
+        return (["PancakeNotch"] + statuses).joined(separator: ", ")
     }
 
     private func notch(state: NotchState) -> some View {
         let layout = model.layout
         let shape = NotchShape(layout.radii(for: state))
         let size = layout.shapeSize(for: state)
+        let ears = model.ears(layout: layout)
         return ZStack(alignment: .top) {
             Color.black
             content(layout: layout, state: state)
-            if let ears = model.module?.compactEars(layout: layout) {
-                CompactEarsView(ears: ears, layout: layout, state: state, reduceMotion: reduceMotion)
+            if ears.left != nil || ears.right != nil {
+                CompactEarsView(left: ears.left, right: ears.right, layout: layout, state: state, reduceMotion: reduceMotion)
+            }
+            if state == .compact, let peek = model.peekView {
+                peek
+                    .frame(width: layout.bodySize(for: .compact).width, height: NotchLayout.peekStripHeight)
+                    .padding(.top, layout.geometry.compactHeight)
+                    .transition(.opacity)
             }
         }
         .frame(width: size.width, height: size.height, alignment: .top)
@@ -59,7 +67,7 @@ struct NotchView: View {
         switch state {
         case .compact:
             // A module's ears are drawn by `CompactEarsView` in every state.
-            if model.module?.compactEars(layout: layout) == nil, model.isPinned {
+            if model.modules.isEmpty, model.isPinned {
                 CompactPlaceholderView(layout: layout)
                     .frame(width: layout.bodySize(for: .compact).width, height: layout.bodySize(for: .compact).height)
                     .transition(.opacity)
@@ -67,20 +75,35 @@ struct NotchView: View {
         case .closed:
             EmptyView()
         case .expanded:
-            Group {
-                if let module = model.module {
-                    module.expandedView(layout: layout)
-                } else {
-                    ExpandedPlaceholderView(layout: layout)
+            let barWidth = model.showsModuleBar ? NotchModuleBar.width(for: model) : 0
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if model.showsMenu {
+                        NotchMenuView(model: model, layout: layout)
+                            .transition(reduceMotion ? .opacity : .menuReveal)
+                    } else if let module = model.selectedModule {
+                        module.expandedView(layout: layout)
+                            .id(module.moduleID)
+                            .transition(reduceMotion ? .opacity : .moduleSwitch(forward: model.switchedForward))
+                    } else {
+                        ExpandedPlaceholderView(layout: layout)
+                    }
+                }
+                .environment(\.notchModuleBarWidth, barWidth)
+                if model.showsModuleBar {
+                    NotchModuleBar(model: model)
+                        .frame(height: layout.geometry.notchRect.height)
+                        .padding(.leading, NotchModuleBar.leadingInset)
+                        .transition(.opacity)
                 }
             }
-            .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height)
+            .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height, alignment: .topLeading)
             .transition(reduceMotion ? .opacity : .blurReveal)
         }
     }
 }
 
-/// Expanded panel shown until modules exist (Shelf arrives in M2, Now Playing in M3).
+/// Expanded panel shown while every module is switched off.
 private struct ExpandedPlaceholderView: View {
     let layout: NotchLayout
 
@@ -104,10 +127,10 @@ private struct ExpandedPlaceholderView: View {
                     .font(.system(size: 22, weight: .regular))
                     .foregroundStyle(.white.opacity(0.4))
                     .accessibilityHidden(true)
-                Text("No modules yet")
+                Text("No modules on")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                Text("Turn on the Shelf on the Modules page. Now Playing is on the way.")
+                Text("Turn on Now Playing or the Shelf on the Modules page.")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -117,7 +140,7 @@ private struct ExpandedPlaceholderView: View {
     }
 }
 
-/// Sample compact ears, shown only via `PANCAKENOTCH_DEBUG_STATE=compact` until a module supplies real ones.
+/// Sample compact ears, shown only via `PANCAKENOTCH_DEBUG_STATE=compact` while no module is on.
 private struct CompactPlaceholderView: View {
     let layout: NotchLayout
 
@@ -150,39 +173,88 @@ private extension AnyTransition {
             identity: BlurRevealModifier(progress: 1)
         )
     }
+
+    /// Switching modules: the new one slides in from the side it lives on, the old one blurs away
+    /// where it is (so a change of direction never slides it the wrong way).
+    static func moduleSwitch(forward: Bool) -> AnyTransition {
+        .asymmetric(
+            insertion: .modifier(
+                active: SlideBlurModifier(offset: forward ? 34 : -34, blur: 6, opacity: 0, scale: 1),
+                identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
+            ),
+            removal: .modifier(
+                active: SlideBlurModifier(offset: 0, blur: 6, opacity: 0, scale: 0.97),
+                identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
+            )
+        )
+    }
+
+    /// The Module Menu grows a little from the top-left corner, where its button is.
+    static var menuReveal: AnyTransition {
+        .modifier(
+            active: SlideBlurModifier(offset: 0, blur: 5, opacity: 0, scale: 0.96),
+            identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
+        )
+    }
+}
+
+private struct SlideBlurModifier: ViewModifier {
+    let offset: CGFloat
+    let blur: CGFloat
+    let opacity: Double
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .scaleEffect(scale, anchor: .topLeading)
+            .blur(radius: blur)
+            .opacity(opacity)
+    }
 }
 
 /// The ears' content, kept in every state so it can move: it slides out from under the notch as the ears
 /// grow, and back under it as they shrink, where the hardware cutout hides it. That reads even on a black
-/// app, where the black ears themselves can't be seen. Hidden (and not clickable) unless Compact.
+/// app, where the black ears themselves can't be seen. Hidden (and not clickable) unless Compact. When an
+/// ear changes hands (another module becomes active), the old content shrinks away and the new one grows in.
 private struct CompactEarsView: View {
-    let ears: CompactEars
+    let left: NotchViewModel.EarSlot?
+    let right: NotchViewModel.EarSlot?
     let layout: NotchLayout
     let state: NotchState
     let reduceMotion: Bool
 
     var body: some View {
         let width = layout.compactEarWidth
-        let height = layout.bodySize(for: .compact).height
+        // The ears are as tall as the menu bar even while a peek strip hangs below them.
+        let height = layout.geometry.compactHeight
         let isShown = state == .compact
         // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
         let tuck = state == .closed && !reduceMotion ? width + 8 : 0
         HStack(spacing: 0) {
-            ear(ears.leading, width: width, height: height)
+            ear(left, width: width, height: height)
                 .offset(x: tuck)
             Spacer(minLength: 0)
-            ear(ears.trailing, width: width, height: height)
+            ear(right, width: width, height: height)
                 .offset(x: -tuck)
         }
         .frame(width: layout.bodySize(for: .compact).width, height: height)
         // Fading out to Closed waits until the content is under the notch, so the slide stays visible.
         .animation(fade(isShown: isShown)) { $0.opacity(isShown ? 1 : 0) }
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85), value: [left?.id, right?.id])
         .allowsHitTesting(false)
         .accessibilityHidden(!isShown)
     }
 
-    private func ear(_ view: AnyView?, width: CGFloat, height: CGFloat) -> some View {
-        (view ?? AnyView(Color.clear)).frame(width: width, height: height)
+    private func ear(_ slot: NotchViewModel.EarSlot?, width: CGFloat, height: CGFloat) -> some View {
+        ZStack {
+            if let slot {
+                slot.view
+                    .id(slot.id)
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
+        .frame(width: width, height: height)
     }
 
     private func fade(isShown: Bool) -> Animation {

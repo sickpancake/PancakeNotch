@@ -1,21 +1,55 @@
+import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
 import SwiftUI
 
+/// Practice modules a stage can make for itself: the real module code on throwaway data.
+enum PracticeKind: Hashable {
+    case nowPlaying, shelf
+}
+
+/// A stage's own practice modules: they exist only while it shows, and start fresh each time.
+@MainActor
+@Observable
+final class PracticeSet {
+    private(set) var nowPlaying: PracticeNowPlaying?
+    private(set) var shelf: PracticeShelf?
+
+    var modules: [any NotchModule] {
+        [nowPlaying?.module as (any NotchModule)?, shelf?.module].compactMap { $0 }
+    }
+
+    func update(_ kinds: Set<PracticeKind>) {
+        if kinds.contains(.nowPlaying) {
+            if nowPlaying == nil { nowPlaying = PracticeNowPlaying() }
+        } else {
+            nowPlaying?.close()
+            nowPlaying = nil
+        }
+        if kinds.contains(.shelf) {
+            if shelf == nil { shelf = PracticeShelf(seeded: true) }
+        } else {
+            shelf?.close()
+            shelf = nil
+        }
+    }
+
+    func close() { update([]) }
+}
+
 /// The top edge of a pretend screen with a working notch in it: a sketched menu bar, a soft glow
 /// behind the notch and a live `NotchPreview`, so people can try their hover settings right in the
-/// window. With the Shelf on it holds a practice Shelf with example items: click one to open it,
-/// right-click it, drop files on it. Nothing in it touches the real Shelf. Off, the notch dims and
-/// stops reacting.
+/// window. It can hold practice modules (a pretend song, a Shelf with example items): click, drop,
+/// switch between them. Nothing in them touches the real ones. Off, the notch dims and stops reacting.
 struct NotchStage: View {
     let behavior: NotchBehavior
+    /// Module ranking and navigation, normally the user's (so the settings can be tried here).
+    var arrangement: ModuleArrangement?
     var isActive = true
-    /// Shows a practice Shelf with example items inside the preview (when the Shelf is on).
-    var showsShelf = false
-    /// A practice Shelf from outside (a lesson's); otherwise the stage keeps its own while it shows.
-    var practice: PracticeShelf?
-    /// The user's real modules on their real data (Home): shown instead of any practice Shelf.
-    var liveModule: (any NotchModule)?
+    /// Practice modules the stage makes for itself while it shows.
+    var practice: Set<PracticeKind> = []
+    /// Modules from outside instead (a lesson's practice ones, or Home's live ones on the real data).
+    var modules: [any NotchModule]?
     /// What the hint says while inactive; by default, that the notch is off.
     var inactiveHint: String?
     /// What the hint says while active; by default, how to open and shrink it.
@@ -26,7 +60,7 @@ struct NotchStage: View {
     var onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
     /// Opens the preview on appearing (off-screen snapshots).
     var startState: NotchState?
-    @State private var ownShelf: PracticeShelf?
+    @State private var own = PracticeSet()
 
     var body: some View {
         let size = NotchPreview.restingSize(screenWidth: screenWidth)
@@ -34,7 +68,8 @@ struct NotchStage: View {
         NotchPreview(
             behavior: behavior,
             screenWidth: screenWidth,
-            module: module,
+            modules: modules ?? own.modules,
+            arrangement: arrangement,
             acceptsDragSource: { !ShelfModule.isOwnDragSource($0) },
             onStateChange: onStateChange,
             startState: startState
@@ -60,28 +95,13 @@ struct NotchStage: View {
             }
         }
         .clipped()
-        .onAppear(perform: updateOwnShelf)
-        .onChange(of: showsShelf) { updateOwnShelf() }
-        .onDisappear {
-            ownShelf?.close()
-            ownShelf = nil
-        }
+        .onAppear(perform: updatePractice)
+        .onChange(of: practice) { updatePractice() }
+        .onDisappear { own.close() }
     }
 
-    private var module: (any NotchModule)? {
-        if let liveModule { return liveModule }
-        if let practice { return practice.module }
-        return showsShelf ? ownShelf?.module : nil
-    }
-
-    /// The stage's own practice Shelf exists only while it's shown, and starts fresh each time.
-    private func updateOwnShelf() {
-        if practice == nil, liveModule == nil, showsShelf {
-            if ownShelf == nil { ownShelf = PracticeShelf(seeded: true) }
-        } else {
-            ownShelf?.close()
-            ownShelf = nil
-        }
+    private func updatePractice() {
+        own.update(modules == nil ? practice : [])
     }
 
     /// Sits under the notch, so the opening panel covers it.
@@ -216,4 +236,9 @@ enum AppInfo {
 
     static let sourceCode = URL(string: "https://github.com/sickpancake/PancakeNotch")!
     static let license = URL(string: "https://github.com/sickpancake/PancakeNotch/blob/main/LICENSE")!
+    /// Now Playing's helper licence: the copy inside the app, or the project's page when running from `.build`.
+    static var nowPlayingHelperLicense: URL {
+        Bundle.main.url(forResource: "mediaremote-adapter-LICENSE", withExtension: "txt")
+            ?? URL(string: "https://github.com/ungive/mediaremote-adapter")!
+    }
 }

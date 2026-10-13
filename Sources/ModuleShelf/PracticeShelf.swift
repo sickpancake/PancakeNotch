@@ -43,6 +43,7 @@ public final class PracticeShelf {
 
         let store = ShelfStore(directory: folder.appending(path: "Shelf", directoryHint: .isDirectory))
         module = ShelfModule(store: store, settings: settings)
+        module.dragsOutWithinApp = true
         if seeded { seed(store) }
     }
 

@@ -1,8 +1,11 @@
 import AppKit
 import Learn
+import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
+import NowPlayingCore
 import os
+import Stats
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -11,9 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set `PANCAKENOTCH_SIMULATE_NOTCH=1` to fake a notch on screens without one (CI, external displays).
     private let simulateNotch = ProcessInfo.processInfo.environment["PANCAKENOTCH_SIMULATE_NOTCH"] == "1"
 
+    /// Module ranking, favorites, ear sides and navigation, shared by the notch and the app window.
+    private let arrangement = ModuleArrangement(defaults: .standard)
+
     /// Set `PANCAKENOTCH_DEBUG_STATE=compact|expanded` to pin the notch in that state (screenshots, design work).
-    private let notchController = NotchWindowController(
-        initialState: ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_STATE"].flatMap(NotchState.init(rawValue:))
+    private lazy var notchController = NotchWindowController(
+        initialState: ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_STATE"].flatMap(NotchState.init(rawValue:)),
+        arrangement: arrangement
     )
 
     private let preferences = Preferences()
@@ -23,18 +30,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var shelfStore = ShelfStore()
     /// Exists only while the Shelf is switched on.
     private var shelf: ShelfModule?
+    private let nowPlayingSettings = NowPlayingSettings()
+    /// What's playing. Its helper process runs only while Now Playing is switched on.
+    private lazy var nowPlaying: NowPlayingCenter = {
+        let center = NowPlayingCenter.live(settings: nowPlayingSettings)
+        center.onListened = { [weak self] record in
+            self?.statistics.recordListening(
+                title: record.title, artist: record.artist, album: record.album,
+                bundleID: record.bundleID, started: record.started, seconds: record.seconds
+            )
+        }
+        return center
+    }()
+    /// Exists only while Now Playing is switched on.
+    private var nowPlayingModule: NowPlayingModule?
+    /// Listening, usage and app-health statistics, in a local file (ADR-0018).
+    private let statistics = StatsStore(url: StatsStore.defaultURL())
+    /// Keeps at most one app-health sample per 10 minutes, taken when the notch or window opens.
+    private var healthSampler = HealthSampler()
+    private var lastStatisticsCleanup: Date?
+    /// The Shelf's item count, to count items put on it.
+    private var shelfCount: Int?
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
     /// Finished lessons and whether the welcome has been seen.
     private let learnProgress = LearnProgress()
-    private lazy var appWindow = AppWindowController(
-        preferences: preferences,
-        shortcuts: shortcuts,
-        stats: stats,
-        shelfSettings: shelfSettings,
-        shelfStore: shelfStore,
-        progress: learnProgress,
-        makeLiveModule: { [weak self] in self?.makeLiveModule() }
-    )
+    private lazy var appWindow: AppWindowController = {
+        let controller = AppWindowController(context: AppContext(
+            preferences: preferences,
+            shortcuts: shortcuts,
+            stats: stats,
+            progress: learnProgress,
+            arrangement: arrangement,
+            shelfSettings: shelfSettings,
+            shelfStore: shelfStore,
+            nowPlayingSettings: nowPlayingSettings,
+            nowPlaying: nowPlaying,
+            statsStore: statistics,
+            makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
+        ))
+        controller.onShow = { [weak self] in self?.sampleHealth() }
+        return controller
+    }()
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
         openApp: { [weak self] in self?.showAppWindow() }
@@ -43,6 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var appObserver: NSObjectProtocol?
+    /// Hides the notch in full screen as the user chose.
+    private lazy var fullScreen = FullScreenWatch(preferences: preferences, nowPlaying: nowPlaying, notch: notchController)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
@@ -55,13 +93,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
-        notchController.onOpen = { [weak self] in self?.stats.recordOpen() }
+        notchController.onOpen = { [weak self] in
+            guard let self else { return }
+            self.stats.recordOpen()
+            self.statistics.recordNotchOpen()
+            self.sampleHealth()
+            self.removeOldStatisticsDaily()
+        }
+        notchController.onModuleShown = { [weak self] moduleID in self?.statistics.recordModuleShown(moduleID) }
+        notchController.openSettings = { [weak self] in self?.showAppWindow() }
+        removeOldStatisticsDaily()
         observePreferences()
         ShelfModule.removeTemporaryFiles()
         PracticeShelf.removeLeftovers()
         shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
-        observeShelf()
+        observeModules()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -78,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.updateFullScreen()
+                self?.fullScreen.update()
                 self?.notchController.model?.pointerMayHaveLeft()
             }
         }
@@ -88,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateFullScreen() }
+            MainActor.assumeIsolated { self?.fullScreen.update() }
         }
         updateGeometry()
         showWelcomeIfNeeded()
@@ -107,6 +154,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Writes text typed in the Shelf's editor that's still waiting to be saved.
     func applicationWillTerminate(_ notification: Notification) {
         shelfStore.saveEdits()
+        // Ends the Now Playing helper and the current listening stretch, then lets it reach the file.
+        if nowPlayingModule != nil { nowPlaying.stop() }
+        statistics.waitForWrites()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -118,15 +168,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appWindow.show()
     }
 
-    /// Applies preferences now and again whenever one changes (no polling).
+    /// Applies preferences now and again whenever one changes (no polling). Only the preferences are
+    /// read while tracking: applying them touches the notch, whose changes mustn't re-run this.
     private func observePreferences() {
-        withObservationTracking {
-            notchController.isEnabled = preferences.notchEnabled
-            notchController.behavior = preferences.notchBehavior
-            menuBar.isVisible = preferences.showMenuBarIcon
+        let (enabled, behavior, menuBarIcon, _) = withObservationTracking {
+            (preferences.notchEnabled, preferences.notchBehavior, preferences.showMenuBarIcon, preferences.fullScreenHiding)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observePreferences() }
         }
+        notchController.isEnabled = enabled
+        notchController.behavior = behavior
+        menuBar.isVisible = menuBarIcon
+        fullScreen.update()
     }
 
     /// `PANCAKENOTCH_SHELF_SEED=/folder` fills an empty Shelf with that folder's files (memory checks;
@@ -140,39 +193,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.
-    /// Each copy has its own open/selected state; items and settings are shared. Later modules join here.
-    private func makeLiveModule() -> (any NotchModule)? {
-        shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
+    /// Each copy has its own open/selected state; items, the song and settings are shared.
+    private func makeLiveModules() -> [any NotchModule] {
+        var modules: [any NotchModule] = []
+        if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
+        if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
+        return modules
     }
 
-    /// Creates the Shelf when it's switched on and drops it when it's off (no drops are accepted then).
-    private func observeShelf() {
-        withObservationTracking {
-            if shelfSettings.isEnabled {
-                if shelf == nil { shelf = ShelfModule(store: shelfStore, settings: shelfSettings) }
-            } else {
-                shelf = nil
-            }
-            notchController.module = shelf
+    /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
+    /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
+    private func observeModules() {
+        let (nowPlayingOn, shelfOn) = withObservationTracking {
+            (nowPlayingSettings.isEnabled, shelfSettings.isEnabled)
         } onChange: { [weak self] in
-            Task { @MainActor in self?.observeShelf() }
+            Task { @MainActor in self?.observeModules() }
+        }
+        if nowPlayingOn {
+            if nowPlayingModule == nil { nowPlayingModule = NowPlayingModule(center: nowPlaying) }
+            nowPlaying.start()
+        } else if nowPlayingModule != nil {
+            nowPlayingModule = nil
+            nowPlaying.stop()
+        }
+        if shelfOn {
+            if shelf == nil {
+                let module = ShelfModule(store: shelfStore, settings: shelfSettings)
+                shelfCount = shelfStore.items.count
+                module.onEvent = { [weak self] event in self?.shelfChanged(event) }
+                shelf = module
+            }
+        } else {
+            shelf = nil
+        }
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf].compactMap { $0 }
+    }
+
+    /// Counts items put on the Shelf and sent with AirDrop, for the statistics.
+    private func shelfChanged(_ event: ShelfEvent) {
+        switch event {
+        case .itemsChanged(let count):
+            if let before = shelfCount, count > before { statistics.recordShelved(count: count - before) }
+            shelfCount = count
+        case .airDropped(let count):
+            statistics.recordAirDropped(count: count)
+        default:
+            break
         }
     }
 
-    /// Full-screen apps keep the notch working, except apps on the user's hide list (ADR-0030).
-    private func updateFullScreen() {
-        let hiddenApps = NotchSettings.appsHiddenInFullScreen
-        var suppress = false
-        if !hiddenApps.isEmpty,
-           let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           hiddenApps.contains(frontmost),
-           let screen = NSScreen.builtIn {
-            suppress = FullScreenDetector.isFullScreen(displayID: screen.displayID)
+    /// Statistics older than 90 days go at launch and then on the first notch open of each day (the app
+    /// can run for weeks), never on a timer.
+    private func removeOldStatisticsDaily() {
+        let today = Calendar.current.startOfDay(for: Date())
+        guard lastStatisticsCleanup != today else { return }
+        lastStatisticsCleanup = today
+        statistics.removeOld()
+    }
+
+    /// An app-health sample (memory and CPU, the Now Playing helper included), at most every 10 minutes.
+    private func sampleHealth() {
+        let helper = nowPlayingModule != nil ? nowPlaying.helperProcessID : nil
+        if let sample = healthSampler.sample(now: Date(), helperPID: helper) {
+            statistics.recordHealth(sample)
         }
-        if suppress != notchController.isSuppressed {
-            logger.info("Notch \(suppress ? "hidden for full-screen app" : "shown", privacy: .public)")
-        }
-        notchController.isSuppressed = suppress
     }
 
     private func updateGeometry() {
@@ -183,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.info("No notch available; idling")
         }
         notchController.update(geometry: geometry)
-        updateFullScreen()
+        fullScreen.update()
     }
 
     /// Renders all notch states to a PNG and quits. See `NotchSnapshot`.
@@ -191,12 +275,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let geometry = currentGeometry() ?? .simulated(in: NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1512, height: 982))
         do {
             try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
-                ShelfSnapshot.models(layout: layout)
+                NowPlayingSnapshot.models(layout: layout) + Self.moduleSnapshots(layout: layout) + ShelfSnapshot.models(layout: layout)
             }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }
         NSApp.terminate(nil)
+    }
+
+    /// Now Playing and the Shelf together: both ears, the tabs, the Menu, the Shelf picked, "Menu only".
+    private static func moduleSnapshots(layout: NotchLayout) -> [NotchViewModel] {
+        func model(_ state: NotchState, navigation: NotchNavigation = .tabsAndMenu, swapped: Bool = false,
+                   shelf: any NotchModule = ShelfPreviewModule(), setUp: (NotchViewModel) -> Void = { _ in }) -> NotchViewModel {
+            let arrangement = ModuleArrangement()
+            arrangement.navigation = navigation
+            arrangement.swapsEarSides = swapped
+            let model = NotchViewModel(layout: layout, state: state, arrangement: arrangement)
+            model.modules = [NowPlayingSnapshot.module(), shelf]
+            setUp(model)
+            return model
+        }
+        return [
+            model(.compact, shelf: ShelfSnapshot.module(itemCount: 16)),
+            model(.compact, swapped: true, shelf: ShelfSnapshot.module(itemCount: 20)),
+            model(.expanded),
+            model(.expanded) { $0.toggleMenu() },
+            model(.expanded) { $0.select("shelf") },
+            model(.expanded, navigation: .tabs) { $0.select("shelf") },
+            model(.expanded, navigation: .menu),
+        ]
     }
 
     private func currentGeometry() -> NotchGeometry? {

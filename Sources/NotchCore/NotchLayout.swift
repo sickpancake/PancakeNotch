@@ -20,21 +20,26 @@ public struct NotchLayout: Equatable, Sendable {
     public static let tallExpandedBodyHeight: CGFloat = 360
     /// Transparent margin around the expanded panel so its shadow isn't clipped.
     public static let shadowPadding: CGFloat = 24
+    /// Height of the strip a module can show under the compact notch for a moment (the new song).
+    public static let peekStripHeight: CGFloat = 24
 
     public let geometry: NotchGeometry
     /// The expanded panel is the taller version (see `NotchViewModel.setTall`).
     public var isTall: Bool
+    /// The compact notch shows a module's peek strip under it (see `NotchViewModel.peek`).
+    public var isPeeking: Bool
 
-    public init(geometry: NotchGeometry, isTall: Bool = false) {
+    public init(geometry: NotchGeometry, isTall: Bool = false, isPeeking: Bool = false) {
         self.geometry = geometry
         self.isTall = isTall
+        self.isPeeking = isPeeking
     }
 
     public func radii(for state: NotchState) -> NotchRadii {
         switch state {
         // No top ears when closed: everything drawn stays inside the hardware cutout, where black is invisible.
         case .closed: NotchRadii(top: 0, bottom: 14)
-        case .compact: NotchRadii(top: 6, bottom: 14)
+        case .compact: NotchRadii(top: 6, bottom: isPeeking ? 16 : 14)
         case .expanded: NotchRadii(top: 18, bottom: 26)
         }
     }
@@ -49,7 +54,8 @@ public struct NotchLayout: Equatable, Sendable {
         case .closed:
             return notch
         case .compact:
-            return CGSize(width: notch.width + 2 * compactEarWidth, height: geometry.compactHeight)
+            let peek = isPeeking ? Self.peekStripHeight : 0
+            return CGSize(width: notch.width + 2 * compactEarWidth, height: geometry.compactHeight + peek)
         case .expanded:
             let available = geometry.screenFrame.width - 2 * (Self.shadowPadding + radii(for: .expanded).top)
             let width = max(notch.width, min(Self.maxExpandedBodySize.width, available))

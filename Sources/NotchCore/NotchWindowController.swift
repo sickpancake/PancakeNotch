@@ -11,9 +11,16 @@ public final class NotchWindowController {
     private let initialState: NotchState?
     private var hasGeometry = false
 
-    /// - Parameter initialState: if set, start in this state and pin it (debug/screenshot aid).
-    public init(initialState: NotchState? = nil) {
+    /// - Parameters:
+    ///   - initialState: if set, start in this state and pin it (debug/screenshot aid).
+    ///   - arrangement: the user's module ranking and navigation settings.
+    public init(initialState: NotchState? = nil, arrangement: ModuleArrangement = ModuleArrangement()) {
         self.initialState = initialState
+        self.arrangement = arrangement
+    }
+
+    private static func same(_ lhs: [any NotchModule], _ rhs: [any NotchModule]) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { $0 === $1 }
     }
 
     /// Hides the notch completely, e.g. while a full-screen app on the user's hide list is in front.
@@ -23,6 +30,21 @@ public final class NotchWindowController {
             updateVisibility()
         }
     }
+
+    /// Hides the notch while a full-screen app fills the display (the user's setting, ADR-0030). Unlike
+    /// `isSuppressed`, the keyboard shortcut still opens it; it hides again once it has closed.
+    public var isHiddenForFullScreen = false {
+        didSet {
+            guard isHiddenForFullScreen != oldValue else { return }
+            // Open right now (the user is in it): it hides once it has closed.
+            isRevealed = isHiddenForFullScreen && model?.state == .expanded
+            updateVisibility()
+        }
+    }
+
+    /// Shown while hidden for full screen (opened by the shortcut, or open when hiding began), until the
+    /// notch closes.
+    private var isRevealed = false
 
     /// The user's on/off switch: off hides the notch until it's turned back on.
     public var isEnabled = true {
@@ -42,12 +64,27 @@ public final class NotchWindowController {
         didSet { model?.behavior = behavior }
     }
 
-    /// The module shown in the notch; `nil` shows the placeholder and refuses drops.
-    public var module: (any NotchModule)? {
+    /// The modules in the notch (any order: the arrangement ranks them). Empty shows the placeholder
+    /// and refuses drops.
+    public var modules: [any NotchModule] = [] {
         didSet {
-            model?.module = module
+            guard !Self.same(modules, oldValue) else { return }
+            model?.modules = modules
             updateDragWatcher()
         }
+    }
+
+    /// Ranking, favorites, ear sides and navigation, shared with the app window.
+    public let arrangement: ModuleArrangement
+
+    /// The Module Menu's gear: opens the app window.
+    public var openSettings: (() -> Void)? {
+        didSet { model?.openSettings = openSettings }
+    }
+
+    /// A module's view appeared in the open notch (statistics).
+    public var onModuleShown: ((String) -> Void)? {
+        didSet { model?.onModuleShown = onModuleShown }
     }
 
     /// When true, taking keyboard focus also activates the app (fallback if a non-activating
@@ -55,6 +92,7 @@ public final class NotchWindowController {
     public var activatesForKeyFocus = false
 
     private var appToRestore: NSRunningApplication?
+    private var scrollMonitor: Any?
     private let dragWatcher = NotchDragWatcher()
     /// Hands drags over the notch to the module.
     private let dropRouter = NotchDropRouter()
@@ -63,9 +101,29 @@ public final class NotchWindowController {
     /// Opens or closes the notch (keyboard shortcut).
     public func toggle() {
         guard hasGeometry, !isSuppressed, isEnabled, let model else { return }
+        let wasExpanded = model.state == .expanded
+        if isHiddenForFullScreen, !isRevealed {
+            isRevealed = true
+            updateVisibility()
+        }
         model.toggle()
         // Opened from the keyboard: keep using the keyboard inside it.
-        if model.state == .expanded, model.module != nil { takeKeyFocus() }
+        if model.state == .expanded, !model.modules.isEmpty { takeKeyFocus() }
+        // It couldn't open (e.g. Mission Control is up): hide again now. A close hides at its end.
+        if !wasExpanded, model.state != .expanded { hideAfterReveal() }
+    }
+
+    /// Back to hidden once the notch the shortcut opened has finished closing (or shrinking: in full
+    /// screen nothing stays around the notch).
+    private func hideAfterReveal() {
+        guard isRevealed, let model, model.state != .expanded else { return }
+        isRevealed = false
+        updateVisibility()
+    }
+
+    /// The window shows: there's a notch, the user wants it, and no full-screen app hides it.
+    var isShowing: Bool {
+        hasGeometry && !isSuppressed && isEnabled && (!isHiddenForFullScreen || isRevealed)
     }
 
     /// Show, move, or hide the notch for new geometry. `nil` hides it (e.g. lid closed).
@@ -79,6 +137,7 @@ public final class NotchWindowController {
 
         if let panel, let model {
             layout.isTall = model.layout.isTall
+            layout.isPeeking = model.layout.isPeeking
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
             panel.setFrame(layout.windowFrame(for: model.state), display: true)
@@ -89,7 +148,7 @@ public final class NotchWindowController {
     }
 
     private func updateVisibility() {
-        if hasGeometry && !isSuppressed && isEnabled {
+        if isShowing {
             panel?.orderFrontRegardless()
         } else {
             model?.reset()
@@ -100,7 +159,7 @@ public final class NotchWindowController {
 
     /// Watches for file drags heading to the notch while it's showing and a module takes drops.
     private func updateDragWatcher() {
-        guard let model, module != nil, !model.isPinned, hasGeometry, !isSuppressed, isEnabled else {
+        guard let model, !modules.isEmpty, !model.isPinned, isShowing else {
             dragWatcher.stop()
             return
         }
@@ -111,25 +170,27 @@ public final class NotchWindowController {
             return NotchLayout(geometry: model.layout.geometry).outlineFrame(for: .expanded)
         }
         dragWatcher.accepts = { [weak model] pasteboard in
-            model?.module?.canAcceptDrag(pasteboard) ?? false
+            model?.module(accepting: pasteboard) != nil
         }
-        dragWatcher.onApproach = { [weak self, weak model] in
+        dragWatcher.onApproach = { [weak self, weak model] pasteboard in
             self?.logger.info("File drag approaching the notch: opening early")
-            model?.dragApproached()
+            model?.dragApproached(pasteboard)
         }
         dragWatcher.onMove = { [weak self, weak model] pasteboard, location in
-            guard let self, let model, model.state == .expanded else { return }
-            model.module?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
+            guard let self, let model, model.state == .expanded, !model.showsMenu else { return }
+            model.selectedModule?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
         }
         dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
         dragWatcher.start()
     }
 
     private func createPanel(layout: NotchLayout) {
-        let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior)
+        let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior, arrangement: arrangement)
         model.isPinned = initialState != nil
         model.onOpen = onOpen
-        model.module = module
+        model.onModuleShown = onModuleShown
+        model.openSettings = openSettings
+        model.modules = modules
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
@@ -140,14 +201,32 @@ public final class NotchWindowController {
         container.dropDelegate = dropRouter
         panel.contentView = container
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
-        model.fitWindow = { [weak panel, weak model] state in
+        model.fitWindow = { [weak self, weak panel, weak model] state in
             guard let panel, let model else { return }
             panel.setFrame(model.layout.windowFrame(for: state), display: true)
+            // A transition's end (the size asked for is the state it settled in) after the shortcut's reveal.
+            if state == model.state { self?.hideAfterReveal() }
         }
         self.model = model
         self.panel = panel
         self.container = container
+        watchScrolls()
         updateDragWatcher()
+    }
+
+    /// Two-finger swipes on the open notch switch modules. A local monitor sees only scrolls delivered
+    /// to this app's windows, so it costs nothing while the pointer is elsewhere.
+    private func watchScrolls() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, let panel = self.panel, event.window === panel, let model = self.model,
+                      model.state == .expanded else { return }
+                let point = self.bodyPoint(screen: NSEvent.mouseLocation, layout: model.layout)
+                model.handleScroll(event, at: point)
+            }
+            return event
+        }
     }
 
     private func takeKeyFocus() {

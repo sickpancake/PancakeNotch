@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The pages of the app window, in sidebar order.
 enum AppSection: String, CaseIterable, Identifiable {
-    case home, modules, learn, general, notch, keyboard, about
+    case home, modules, learn, statistics, general, notch, keyboard, about
 
     var id: Self { self }
 
@@ -14,6 +14,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .home: String(localized: "Home")
         case .modules: String(localized: "Modules")
         case .learn: String(localized: "Learn")
+        case .statistics: String(localized: "Statistics")
         case .general: String(localized: "General")
         case .notch: String(localized: "Notch")
         case .keyboard: String(localized: "Keyboard")
@@ -26,6 +27,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .home: "house"
         case .modules: "square.grid.2x2"
         case .learn: "graduationcap"
+        case .statistics: "chart.bar.xaxis"
         case .general: "gearshape"
         case .notch: "rectangle.topthird.inset.filled"
         case .keyboard: "command"
@@ -43,14 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 /// with the notch's on/off switch; settings are one section of it (ADR-0017). Until the welcome has
 /// been seen, the welcome fills the window instead (ADR-0020).
 struct AppWindowView: View {
-    @Bindable var preferences: Preferences
-    let shortcuts: ShortcutController
-    let stats: UsageStats
-    let shelfSettings: ShelfSettings
-    let shelfStore: ShelfStore
-    let progress: LearnProgress
-    /// The notch's modules on the user's real data, for the live notch on Home.
-    let makeLiveModule: () -> (any NotchModule)?
+    let context: AppContext
     @State private var section: AppSection
     /// The lesson shown on Learn; other pages pick one before switching there.
     @State private var lesson: LessonID
@@ -59,27 +54,14 @@ struct AppWindowView: View {
     static let defaultSize = CGSize(width: 1000, height: 780)
     static let minimumSize = CGSize(width: 860, height: 600)
 
-    init(
-        preferences: Preferences,
-        shortcuts: ShortcutController,
-        stats: UsageStats,
-        shelfSettings: ShelfSettings,
-        shelfStore: ShelfStore,
-        progress: LearnProgress,
-        makeLiveModule: @escaping () -> (any NotchModule)?,
-        section: AppSection = .home,
-        lesson: LessonID = .basics
-    ) {
-        self.preferences = preferences
-        self.shortcuts = shortcuts
-        self.stats = stats
-        self.shelfSettings = shelfSettings
-        self.shelfStore = shelfStore
-        self.progress = progress
-        self.makeLiveModule = makeLiveModule
+    init(context: AppContext, section: AppSection = .home, lesson: LessonID = .basics) {
+        self.context = context
         _section = State(initialValue: section)
         _lesson = State(initialValue: lesson)
     }
+
+    private var progress: LearnProgress { context.progress }
+    private var preferences: Preferences { context.preferences }
 
     var body: some View {
         ZStack {
@@ -87,7 +69,7 @@ struct AppWindowView: View {
                 main
                     .transition(.opacity)
             } else {
-                OnboardingView(preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress)
+                OnboardingView(preferences: preferences, shortcuts: context.shortcuts, stats: context.stats, progress: progress)
                     .transition(.opacity)
             }
         }
@@ -117,25 +99,16 @@ struct AppWindowView: View {
             Group {
                 switch section {
                 case .home:
-                    HomeView(
-                        preferences: preferences,
-                        shortcuts: shortcuts,
-                        stats: stats,
-                        shelfSettings: shelfSettings,
-                        shelfStore: shelfStore,
-                        progress: progress,
-                        section: $section,
-                        openLesson: openLesson,
-                        makeLiveModule: makeLiveModule
-                    )
+                    HomeView(context: context, section: $section, openLesson: openLesson)
                 case .modules:
-                    ModulesView(preferences: preferences, shelfSettings: shelfSettings, shelfStore: shelfStore) {
-                        openLesson(.shelf)
-                    }
-                case .learn: LearnView(preferences: preferences, shortcuts: shortcuts, progress: progress, lesson: $lesson)
+                    ModulesView(context: context, openLesson: openLesson)
+                case .learn:
+                    LearnView(context: context, lesson: $lesson)
+                case .statistics:
+                    StatsView(store: context.statsStore, helperPID: { [nowPlaying = context.nowPlaying] in nowPlaying.helperProcessID })
                 case .general: GeneralSettingsView(preferences: preferences)
-                case .notch: NotchSettingsView(preferences: preferences, shelfSettings: shelfSettings)
-                case .keyboard: KeyboardSettingsView(shortcuts: shortcuts)
+                case .notch: NotchSettingsView(context: context) { section = .modules }
+                case .keyboard: KeyboardSettingsView(shortcuts: context.shortcuts)
                 case .about: AboutView(progress: progress)
                 }
             }
@@ -181,6 +154,7 @@ private struct AppSidebar: View {
                 row(.home)
                 row(.modules)
                 row(.learn)
+                row(.statistics)
             }
 
             SectionLabel(title: String(localized: "Settings"))
