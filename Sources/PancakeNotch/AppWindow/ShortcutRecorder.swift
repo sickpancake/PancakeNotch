@@ -8,6 +8,9 @@ struct ShortcutRecorder: View {
     /// Set while recording when a key press can't be a shortcut, to explain why.
     @Binding var hint: String?
     @State private var monitor: Any?
+    @State private var clickMonitor: Any?
+    /// When a click stopped recording: a click on the box itself then mustn't start it again.
+    @State private var stoppedByClick: Date?
     @State private var isHovered = false
 
     var body: some View {
@@ -19,7 +22,9 @@ struct ShortcutRecorder: View {
             .onHover { isHovered = $0 }
             .accessibilityLabel(Text("Open and close the notch shortcut"))
             .accessibilityValue(Text(accessibilityValue))
-            .accessibilityHint(Text(controller.isRecording ? "Press the keys you want, or Esc to cancel." : "Records a new shortcut."))
+            .accessibilityHint(Text(controller.isRecording
+                ? String(localized: "Press the keys you want, or Esc to cancel.")
+                : String(localized: "Records a new shortcut.")))
 
             if controller.shortcut != nil, !controller.isRecording {
                 Button {
@@ -36,6 +41,10 @@ struct ShortcutRecorder: View {
             }
         }
         .onDisappear(perform: stopRecording)
+        // Leaving the window (another app, another window) stops listening too.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            if controller.isRecording { stopRecording() }
+        }
     }
 
     private var field: some View {
@@ -72,21 +81,40 @@ struct ShortcutRecorder: View {
     }
 
     private func toggleRecording() {
-        controller.isRecording ? stopRecording() : startRecording()
+        if controller.isRecording {
+            stopRecording()
+        } else if let stoppedByClick, Date().timeIntervalSince(stoppedByClick) < 0.6 {
+            // This click already stopped recording on its way down.
+            self.stoppedByClick = nil
+        } else {
+            startRecording()
+        }
     }
 
     private func startRecording() {
         hint = nil
+        stoppedByClick = nil
         controller.isRecording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             MainActor.assumeIsolated { handle(event) }
             return nil
         }
+        // Clicking anywhere else stops listening, so a later key press can't become the shortcut.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            MainActor.assumeIsolated {
+                hint = nil
+                stopRecording()
+                stoppedByClick = Date()
+            }
+            return event
+        }
     }
 
     private func stopRecording() {
         if let monitor { NSEvent.removeMonitor(monitor) }
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
         monitor = nil
+        clickMonitor = nil
         controller.isRecording = false
     }
 
@@ -103,6 +131,10 @@ struct ShortcutRecorder: View {
         default:
             guard let hotKey = HotKey(event: event) else {
                 hint = String(localized: "Include ⌘, ⌥ or ⌃ (or use a function key).")
+                return
+            }
+            guard !hotKey.isReservedBySystem else {
+                hint = String(localized: "\(hotKey.displayString) is a system shortcut. Try another, like ⌥⌘N.")
                 return
             }
             hint = nil

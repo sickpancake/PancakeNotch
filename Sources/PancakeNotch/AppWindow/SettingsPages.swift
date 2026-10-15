@@ -1,9 +1,11 @@
+import AppKit
 import ModuleShelf
 import NotchCore
 import SwiftUI
 
 struct GeneralSettingsView: View {
     @Bindable var preferences: Preferences
+    let updates: Updates
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var needsApproval = LaunchAtLogin.needsApproval
     @State private var launchError: String?
@@ -11,7 +13,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         AppPage(
             title: String(localized: "General"),
-            subtitle: String(localized: "How PancakeNotch starts and where you find it.")
+            subtitle: String(localized: "How PancakeNotch starts, where you find it and how it updates.")
         ) {
             SettingsCard(header: String(localized: "Startup"), footer: footer) {
                 SettingsRow(
@@ -43,6 +45,8 @@ struct GeneralSettingsView: View {
                 launchAtLogin = LaunchAtLogin.isEnabled
                 needsApproval = LaunchAtLogin.needsApproval
             }
+
+            UpdatesCard(updates: updates)
         }
     }
 
@@ -53,6 +57,58 @@ struct GeneralSettingsView: View {
             return String(localized: "To come back here, open PancakeNotch again from your Applications folder.")
         }
         return nil
+    }
+}
+
+/// Sparkle's switch and "Check Now" in released builds; builds made on a Mac say they don't update.
+struct UpdatesCard: View {
+    @Bindable var updates: Updates
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if updates.isAvailable {
+            SettingsCard(
+                header: String(localized: "Updates"),
+                footer: String(localized: "Checking asks GitHub whether there's a newer version. Nothing about you or this Mac is sent.")
+            ) {
+                SettingsRow(
+                    title: String(localized: "Check for updates automatically"),
+                    subtitle: String(localized: "Once a day. It asks you before installing anything.")
+                ) {
+                    Toggle(String(localized: "Check for updates automatically"), isOn: $updates.automaticallyChecks)
+                        .labelsHidden()
+                }
+                if let version = updates.pendingVersion {
+                    SettingsRow(
+                        title: String(localized: "Version \(version) is ready"),
+                        subtitle: String(localized: "See what's new, then choose whether to install it.")
+                    ) {
+                        Button(String(localized: "Take a Look")) { updates.checkNow() }
+                            .buttonStyle(ProminentPillButtonStyle())
+                    }
+                } else {
+                    SettingsRow(
+                        title: String(localized: "Check for updates now"),
+                        subtitle: UpdatesText.lastCheck(updates.lastCheck, automatic: updates.automaticallyChecks)
+                    ) {
+                        Button(String(localized: "Check Now")) { updates.checkNow() }
+                            .disabled(!updates.canCheck)
+                    }
+                }
+            }
+        } else {
+            SettingsCard(header: String(localized: "Updates")) {
+                SettingsRow(
+                    title: String(localized: "This copy doesn't update itself"),
+                    subtitle: String(localized: "It was built on this Mac. Released versions from the website update automatically.")
+                ) {
+                    Button { openURL(HelpLinks.website) } label: {
+                        Label(String(localized: "Open Website"), systemImage: "arrow.up.right")
+                            .labelStyle(TrailingIconLabelStyle())
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -146,6 +202,7 @@ struct NotchSettingsView: View {
                         selection: $preferences.fullScreenHiding
                     )
                 }
+                HiddenAppsRows()
             }
 
             SettingsCard(header: String(localized: "Feedback")) {
@@ -158,6 +215,82 @@ struct NotchSettingsView: View {
                 }
             }
         }
+    }
+}
+
+/// Apps (games, say) that hide the notch completely while they're full screen, shortcut included
+/// (ADR-0030). Picked from the Applications folder.
+private struct HiddenAppsRows: View {
+    @State private var bundleIDs = NotchSettings.appsHiddenInFullScreen.sorted()
+
+    var body: some View {
+        SettingsRow(
+            title: String(localized: "Always hide for these apps"),
+            subtitle: String(localized: "While one of them is full screen, the notch is fully hidden, even from your shortcut. Handy for games.")
+        ) {
+            Button(String(localized: "Add App…"), action: addApp)
+        }
+        ForEach(bundleIDs, id: \.self) { bundleID in
+            HiddenAppRow(bundleID: bundleID) { remove(bundleID) }
+        }
+    }
+
+    private func addApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = true
+        panel.prompt = String(localized: "Add")
+        panel.message = String(localized: "Choose apps that should hide the notch completely while they're full screen.")
+        guard panel.runModal() == .OK else { return }
+        let added = panel.urls.compactMap { Bundle(url: $0)?.bundleIdentifier }
+        save(Set(bundleIDs).union(added))
+    }
+
+    private func remove(_ bundleID: String) {
+        save(Set(bundleIDs).subtracting([bundleID]))
+    }
+
+    private func save(_ apps: Set<String>) {
+        NotchSettings.appsHiddenInFullScreen = apps
+        bundleIDs = apps.sorted()
+    }
+}
+
+/// One app on the hide list: its icon and name, and a way to take it off.
+private struct HiddenAppRow: View {
+    let bundleID: String
+    let remove: () -> Void
+
+    private var appURL: URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) }
+
+    private var name: String {
+        guard let appURL else { return bundleID }
+        return FileManager.default.displayName(atPath: appURL.path).replacingOccurrences(of: ".app", with: "")
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let appURL {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
+                        .resizable()
+                        .grayscale(1) // Monochrome: album art is the only colour (ADR-0029).
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.app(size: 16))
+                        .foregroundStyle(AppPalette.secondaryText)
+                }
+            }
+            .frame(width: 24, height: 24)
+            .accessibilityHidden(true)
+            Text(name)
+                .font(.app(size: 13.5, weight: .medium))
+            Spacer(minLength: 8)
+            Button(String(localized: "Remove"), action: remove)
+                .accessibilityLabel(Text("Remove \(name)"))
+        }
+        .settingsRowPadding()
     }
 }
 
@@ -174,7 +307,7 @@ extension NotchSettingsView {
 private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
     switch hiding {
     case .whileWatching:
-        String(localized: "Hidden while the full-screen app plays and you sit still. Scroll or move the pointer and it's back.")
+        String(localized: "Hidden while a full-screen video plays and you're not moving the pointer. Move it and the notch is back.")
     case .always:
         String(localized: "Hidden whenever an app fills the screen, like a video or a game.")
     case .never:
@@ -185,11 +318,11 @@ private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
 private func navigationHint(_ navigation: NotchNavigation) -> String {
     switch navigation {
     case .tabsAndMenu:
-        String(localized: "A Menu button with every module, then a tab for each favorite.")
+        String(localized: "A Module Menu button, then a tab for each favorite.")
     case .tabs:
         String(localized: "A tab for every module, one click apart.")
     case .menu:
-        String(localized: "Just the module's name: click it for the Menu. The tidiest.")
+        String(localized: "Just the module's name: click it for the Module Menu. The simplest look.")
     }
 }
 
@@ -288,9 +421,9 @@ struct KeyboardSettingsView: View {
             SettingsCard(header: String(localized: "In this window")) {
                 SettingsRow(
                     title: String(localized: "Jump to a page"),
-                    subtitle: String(localized: "Home, Modules, Learn, Statistics, General, Notch, Keyboard, About, in sidebar order.")
+                    subtitle: String(localized: "Home, Modules, Learn, Statistics, General, Notch, Keyboard, Help, About, in sidebar order.")
                 ) {
-                    KeyCombo(keys: ["⌘", "1 – 8"])
+                    KeyCombo(keys: ["⌘", "1 – \(AppSection.allCases.count)"])
                 }
                 SettingsRow(
                     title: String(localized: "Close the window"),

@@ -4,10 +4,17 @@ import PackageDescription
 let package = Package(
     name: "PancakeNotch",
     platforms: [.macOS(.v15)],
+    dependencies: [
+        // Automatic updates (ADR-0003, ADR-0005).
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+    ],
     targets: [
         .executableTarget(
             name: "PancakeNotch",
-            dependencies: ["NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats"]
+            dependencies: [
+                "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]
         ),
         .target(name: "NotchCore"),
         .target(name: "HotKey"),

@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The pages of the app window, in sidebar order.
 enum AppSection: String, CaseIterable, Identifiable {
-    case home, modules, learn, statistics, general, notch, keyboard, about
+    case home, modules, learn, statistics, general, notch, keyboard, help, about
 
     var id: Self { self }
 
@@ -18,6 +18,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .general: String(localized: "General")
         case .notch: String(localized: "Notch")
         case .keyboard: String(localized: "Keyboard")
+        case .help: String(localized: "Help")
         case .about: String(localized: "About")
         }
     }
@@ -31,6 +32,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .notch: "rectangle.topthird.inset.filled"
         case .keyboard: "command"
+        case .help: "questionmark.circle"
         case .about: "info.circle"
         }
     }
@@ -46,22 +48,14 @@ enum AppSection: String, CaseIterable, Identifiable {
 /// been seen, the welcome fills the window instead (ADR-0020).
 struct AppWindowView: View {
     let context: AppContext
-    @State private var section: AppSection
-    /// The lesson shown on Learn; other pages pick one before switching there.
-    @State private var lesson: LessonID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let defaultSize = CGSize(width: 1000, height: 780)
     static let minimumSize = CGSize(width: 860, height: 600)
 
-    init(context: AppContext, section: AppSection = .home, lesson: LessonID = .basics) {
-        self.context = context
-        _section = State(initialValue: section)
-        _lesson = State(initialValue: lesson)
-    }
-
     private var progress: LearnProgress { context.progress }
     private var preferences: Preferences { context.preferences }
+    private var navigation: AppNavigation { context.navigation }
 
     var body: some View {
         ZStack {
@@ -69,27 +63,22 @@ struct AppWindowView: View {
                 main
                     .transition(.opacity)
             } else {
-                OnboardingView(preferences: preferences, shortcuts: context.shortcuts, stats: context.stats, progress: progress)
+                OnboardingView(context: context)
                     .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.3), value: progress.onboardingDone)
         // The welcome always ends on Home, also when it was replayed from About.
         .onChange(of: progress.onboardingDone) { _, done in
-            if done { section = .home }
+            if done { navigation.section = .home }
         }
         .appWindowStyle()
     }
 
-    /// Opens a lesson on Learn.
-    private func openLesson(_ id: LessonID) {
-        lesson = id
-        section = .learn
-    }
-
     private var main: some View {
-        HStack(spacing: 0) {
-            AppSidebar(selection: $section)
+        @Bindable var navigation = navigation
+        return HStack(spacing: 0) {
+            AppSidebar(selection: $navigation.section)
                 .frame(width: 232)
                 .background(AppPalette.sidebar)
 
@@ -97,18 +86,19 @@ struct AppWindowView: View {
                 .frame(width: 1)
 
             Group {
-                switch section {
+                switch navigation.section {
                 case .home:
-                    HomeView(context: context, section: $section, openLesson: openLesson)
+                    HomeView(context: context, section: $navigation.section, openLesson: navigation.open)
                 case .modules:
-                    ModulesView(context: context, openLesson: openLesson)
+                    ModulesView(context: context, openLesson: navigation.open)
                 case .learn:
-                    LearnView(context: context, lesson: $lesson)
+                    LearnView(context: context, lesson: $navigation.lesson)
                 case .statistics:
                     StatsView(store: context.statsStore, helperPID: { [nowPlaying = context.nowPlaying] in nowPlaying.helperProcessID })
-                case .general: GeneralSettingsView(preferences: preferences)
-                case .notch: NotchSettingsView(context: context) { section = .modules }
+                case .general: GeneralSettingsView(preferences: preferences, updates: context.updates)
+                case .notch: NotchSettingsView(context: context) { navigation.section = .modules }
                 case .keyboard: KeyboardSettingsView(shortcuts: context.shortcuts)
+                case .help: HelpView(context: context)
                 case .about: AboutView(progress: progress)
                 }
             }
@@ -170,6 +160,7 @@ private struct AppSidebar: View {
             Spacer(minLength: 20)
 
             VStack(alignment: .leading, spacing: 2) {
+                row(.help)
                 row(.about)
                 QuitRow()
             }

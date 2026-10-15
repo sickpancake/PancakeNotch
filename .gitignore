@@ -36,6 +36,13 @@ docs/adr/
 *.cer
 *.key
 .env
+signing-keys/
+update-private-key.txt
+signing-p12-password.txt
+update-public-key.txt
 
 # Extra build folders (parallel builds)
 /.build-*/
+
+# Website design-check scratch folder
+.taste-skill/

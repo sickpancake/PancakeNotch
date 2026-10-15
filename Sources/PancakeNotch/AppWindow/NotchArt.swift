@@ -236,6 +236,11 @@ enum AppInfo {
 
     static let sourceCode = URL(string: "https://github.com/sickpancake/PancakeNotch")!
     static let license = URL(string: "https://github.com/sickpancake/PancakeNotch/blob/main/LICENSE")!
+    /// Sparkle's licence: the copy inside the app, or the project's page when running from `.build`.
+    static var sparkleLicense: URL {
+        Bundle.main.url(forResource: "Sparkle-LICENSE", withExtension: "txt")
+            ?? URL(string: "https://github.com/sparkle-project/Sparkle/blob/2.x/LICENSE")!
+    }
     /// Now Playing's helper licence: the copy inside the app, or the project's page when running from `.build`.
     static var nowPlayingHelperLicense: URL {
         Bundle.main.url(forResource: "mediaremote-adapter-LICENSE", withExtension: "txt")

@@ -472,7 +472,13 @@ struct ShelfPromptCard: View {
             .accessibilityAddTraits(.isToggle)
             .accessibilityValue(Text(remember ? "On" : "Off"))
         case .full, .choosing:
-            ShelfPillButton(title: String(localized: "Clear all"), prominent: true) { module.clearForPending() }
+            let count = module.store.items.count
+            ShelfPillButton(
+                title: !module.confirmingClear ? String(localized: "Clear all")
+                    : count == 1 ? String(localized: "Clear 1 item?")
+                    : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                prominent: true
+            ) { module.clearForPending() }
             ShelfPillButton(title: String(localized: "Choose items to remove")) { module.startChoosing() }
         }
     }

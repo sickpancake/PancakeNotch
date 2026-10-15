@@ -3,14 +3,19 @@ import AppKit
 /// The app's menu bar menus, visible while the settings window is in front.
 @MainActor
 enum MainMenu {
-    static func make(settingsTarget: AnyObject, settingsAction: Selector) -> NSMenu {
+    /// `updatesAction` adds "Check for Updates…" (released builds only).
+    static func make(target: AnyObject, settingsAction: Selector, updatesAction: Selector?) -> NSMenu {
         let main = NSMenu()
 
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About PancakeNotch"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        if let updatesAction {
+            let updates = appMenu.addItem(withTitle: String(localized: "Check for Updates…"), action: updatesAction, keyEquivalent: "")
+            updates.target = target
+        }
         appMenu.addItem(.separator())
         let settings = appMenu.addItem(withTitle: String(localized: "Settings…"), action: settingsAction, keyEquivalent: ",")
-        settings.target = settingsTarget
+        settings.target = target
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Hide PancakeNotch"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())

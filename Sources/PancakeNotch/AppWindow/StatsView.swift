@@ -14,6 +14,8 @@ struct StatsView: View {
 
     @State private var range: StatsRange = .week
     @State private var summary: StatsSummary?
+    /// Clear Statistics just ran: says so until the page is left.
+    @State private var justCleared = false
     /// Bumped after Clear, so the summary loads again.
     @State private var generation = 0
     @State private var apps: [String: ListeningApp] = [:]
@@ -51,13 +53,17 @@ struct StatsView: View {
             SettingsCard {
                 SettingsRow(
                     title: String(localized: "Your statistics"),
-                    subtitle: String(localized: "Kept for 90 days, only on this Mac. Nothing is ever sent anywhere.")
+                    subtitle: justCleared
+                        ? String(localized: "Cleared. New statistics start from now.")
+                        : String(localized: "Kept for 90 days, only on this Mac. Nothing is ever sent anywhere.")
                 ) {
                     // Two clicks, like Clear Shelf.
                     Button(confirmingClear ? String(localized: "Clear All Statistics?") : String(localized: "Clear Statistics")) {
                         if confirmingClear {
                             store.clear()
                             generation += 1
+                            justCleared = true
+                            AccessibilityNotification.Announcement(String(localized: "Statistics cleared")).post()
                         }
                         confirmingClear.toggle()
                     }
@@ -321,7 +327,7 @@ private struct HealthContent: View {
                     .padding(AppMetrics.cardInset)
             }
             .glassPanel()
-            Text("Memory is what macOS sets aside for PancakeNotch, including the Now Playing helper: the same figure Activity Monitor shows. The goal is to stay under 50 MB while it sits in the background; with this window open it uses more. CPU is the share of one processor core, so near 0% means it's resting. The history is noted now and then when the notch opens, never on a timer.")
+            Text("Memory is how much PancakeNotch uses, music helper included (Activity Monitor shows the same number). In the background it should stay under 50 MB; with this window open it uses a bit more. CPU near 0% means it's resting. A reading is saved now and then when the notch opens.")
                 .font(.app(size: 12.5))
                 .foregroundStyle(AppPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -422,8 +428,8 @@ private struct LiveHealth: View {
             ? String(localized: "App \(StatsFormat.megabytes(latest.footprintBytes)), Now Playing helper \(StatsFormat.megabytes(latest.helperFootprintBytes)).")
             : ""
         let budgetLine = total > StatsFormat.idleBudgetBytes
-            ? String(localized: "Above the \(budget) idle budget while this window is open.")
-            : String(localized: "Within the \(budget) idle budget.")
+            ? String(localized: "Over the \(budget) background limit, because this window is open.")
+            : String(localized: "Under the \(budget) background limit.")
         return parts.isEmpty ? budgetLine : "\(parts) \(budgetLine)"
     }
 }
@@ -481,11 +487,11 @@ private struct MemoryHistory: View {
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .foregroundStyle(AppPalette.ink.opacity(0.85))
             }
-            RuleMark(y: .value("Idle budget", budgetMB))
+            RuleMark(y: .value("Background limit", budgetMB))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .foregroundStyle(AppPalette.secondaryText)
                 .annotation(position: .top, alignment: .leading, spacing: 3) {
-                    Text("Idle budget")
+                    Text("Background limit")
                         .font(.app(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppPalette.secondaryText)
                 }

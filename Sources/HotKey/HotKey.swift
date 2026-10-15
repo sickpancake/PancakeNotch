@@ -56,6 +56,30 @@ public struct HotKey: Codable, Equatable, Sendable {
         return result
     }
 
+    /// Shortcuts macOS or every app already uses (Quit, Close, Copy, screenshots, Spotlight, Mission
+    /// Control, …). Taking one system-wide would break it everywhere, so the recorder refuses them.
+    public var isReservedBySystem: Bool {
+        let flags = modifierFlags
+        return Self.reserved.contains { $0.keyCode == keyCode && $0.modifiers == flags }
+    }
+
+    private static let reserved: [(keyCode: UInt32, modifiers: NSEvent.ModifierFlags)] = {
+        let command: [Int] = [
+            kVK_ANSI_Q, kVK_ANSI_W, kVK_ANSI_H, kVK_ANSI_M, kVK_ANSI_Comma, kVK_Tab, kVK_Space, kVK_ANSI_Grave,
+            kVK_ANSI_A, kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_X, kVK_ANSI_Z, kVK_ANSI_S, kVK_ANSI_O, kVK_ANSI_N, kVK_ANSI_P,
+            kVK_ANSI_F, kVK_ANSI_T,
+        ]
+        let shiftCommand: [Int] = [kVK_ANSI_Q, kVK_ANSI_Z, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_Tab]
+        let optionCommand: [Int] = [kVK_Escape, kVK_ANSI_D, kVK_ANSI_H, kVK_Space]
+        let control: [Int] = [kVK_Space, kVK_UpArrow, kVK_DownArrow, kVK_LeftArrow, kVK_RightArrow]
+        let controlCommand: [Int] = [kVK_ANSI_Q, kVK_ANSI_F, kVK_Space]
+        func list(_ keys: [Int], _ modifiers: NSEvent.ModifierFlags) -> [(keyCode: UInt32, modifiers: NSEvent.ModifierFlags)] {
+            keys.map { (UInt32($0), modifiers) }
+        }
+        return list(command, .command) + list(shiftCommand, [.shift, .command]) + list(optionCommand, [.option, .command])
+            + list(control, .control) + list(controlCommand, [.control, .command])
+    }()
+
     private static let functionKeyLabels: [UInt32: String] = [
         UInt32(kVK_F1): "F1", UInt32(kVK_F2): "F2", UInt32(kVK_F3): "F3", UInt32(kVK_F4): "F4",
         UInt32(kVK_F5): "F5", UInt32(kVK_F6): "F6", UInt32(kVK_F7): "F7", UInt32(kVK_F8): "F8",

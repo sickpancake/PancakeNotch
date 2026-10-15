@@ -105,7 +105,13 @@ struct ShelfModuleTests {
         let fixture = try ShelfFixture()
         let (module, _) = makeModule(fixture)
         module.offer(try fixture.files(25))
+        // The first click only asks; nothing is removed yet.
         module.clearForPending()
+        #expect(module.confirmingClear)
+        #expect(module.store.items.count == 20)
+        #expect(module.prompt != nil)
+        module.clearForPending()
+        #expect(!module.confirmingClear)
         #expect(module.prompt == nil)
         #expect(module.store.items.count == 5)
     }

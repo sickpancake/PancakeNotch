@@ -183,6 +183,27 @@ struct LearnProgressTests {
         }
     }
 
+    @Test func pausedWelcomeResumesAtItsStep() {
+        withDefaults { defaults in
+            let progress = LearnProgress(defaults: defaults)
+            progress.onboardingShown = true
+            progress.onboardingStep = 3
+            let reloaded = LearnProgress(defaults: defaults)
+            #expect(reloaded.onboardingShown)
+            #expect(reloaded.onboardingStep == 3)
+            #expect(!reloaded.onboardingDone)
+
+            reloaded.finishWelcome()
+            #expect(reloaded.onboardingDone)
+            #expect(reloaded.onboardingStep == 0)
+
+            reloaded.onboardingStep = 2
+            reloaded.showWelcomeAgain()
+            #expect(!reloaded.onboardingDone)
+            #expect(reloaded.onboardingStep == 0)
+        }
+    }
+
     @Test func allDoneAndReset() {
         withDefaults { defaults in
             let progress = LearnProgress(defaults: defaults)

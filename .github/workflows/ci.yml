@@ -20,3 +20,45 @@ jobs:
         run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
       - name: Shelf peak memory budget (ADR-0006)
         run: ./scripts/check-shelf-memory.sh build/PancakeNotch.app 20 100
+
+  # The release pipeline end to end with throwaway keys (nothing is published): certificate import
+  # and trust, signing, the update signature, the feed, the privacy check, and the idle memory of a
+  # build that can update itself (Sparkle running).
+  release-dry-run:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Throwaway signing keys
+        run: ./scripts/make-signing-keys.sh "$RUNNER_TEMP/keys" --throwaway
+      - name: Signing certificate
+        id: cert
+        run: echo "identity=$(./scripts/import-signing-cert.sh "$RUNNER_TEMP/keys/signing.p12" "$(cat "$RUNNER_TEMP/keys/signing-p12-password.txt")")" >> "$GITHUB_OUTPUT"
+      - name: Sparkle tools
+        id: sparkle
+        run: echo "bin=$(./scripts/get-sparkle-tools.sh "$RUNNER_TEMP/sparkle")" >> "$GITHUB_OUTPUT"
+      - name: Build, sign and package
+        run: |
+          export PANCAKENOTCH_VERSION="$(sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CHANGELOG.md | head -1)"
+          export PANCAKENOTCH_BUILD="$(git rev-list --count HEAD)"
+          export CODESIGN_IDENTITY="${{ steps.cert.outputs.identity }}"
+          export SPARKLE_PUBLIC_ED_KEY="$(cat "$RUNNER_TEMP/keys/update-public-key.txt")"
+          export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/keys/update-private-key.txt"
+          export SPARKLE_BIN="${{ steps.sparkle.outputs.bin }}"
+          export DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/dry-run/PancakeNotch.zip"
+          ./scripts/package-release.sh
+      - name: Signed with the project certificate
+        run: |
+          codesign -dvv build/PancakeNotch.app 2>&1 | grep -E '^(Authority|Identifier|TeamIdentifier)='
+          codesign -d -r- build/PancakeNotch.app 2>&1 | grep 'certificate leaf'
+      - name: Idle memory budget with updates on (ADR-0006)
+        run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
+      - name: Website
+        run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: |
+            build/release/
+          retention-days: 3

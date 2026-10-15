@@ -38,12 +38,13 @@ private struct YourModulesCard: View {
     @State private var dragging: String?
     /// The row a reorder drag is over right now (nil once it leaves, is dropped or is cancelled).
     @State private var dropTarget: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let arrangement = context.arrangement
         SettingsCard(
             header: String(localized: "Your modules"),
-            footer: String(localized: "Drag to change the order: the first two that are active get the small spots beside the notch. Starred modules are tabs in the open notch.")
+            footer: String(localized: "Drag a module or use its arrows to change the order: the first two that are active get the small spots beside the notch. Favorites (★) are tabs in the open notch.")
         ) {
             ForEach(arrangement.order, id: \.self) { moduleID in
                 ModuleListRow(context: context, moduleID: moduleID, dragging: $dragging, dropTarget: $dropTarget)
@@ -59,7 +60,7 @@ private struct YourModulesCard: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: arrangement.order)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: arrangement.order)
         .onDisappear { dragging = nil; dropTarget = nil }
     }
 }
@@ -71,6 +72,7 @@ private struct ModuleListRow: View {
     @Binding var dragging: String?
     @Binding var dropTarget: String?
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let arrangement = context.arrangement
@@ -78,12 +80,12 @@ private struct ModuleListRow: View {
         let rank = arrangement.rank(of: moduleID)
         let isOn = context.isEnabled(moduleID)
         HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .font(.app(size: 12, weight: .semibold))
-                .foregroundStyle(isHovered ? AppPalette.primaryText : AppPalette.tertiaryText)
-                .frame(width: 16)
-                .help(Text("Drag to change the order"))
-                .accessibilityHidden(true)
+            // Up and down arrows, so the order can change without dragging (keyboard, Full Keyboard Access).
+            VStack(spacing: 0) {
+                moveButton(up: true, title: info.title, isEnabled: rank > 0)
+                moveButton(up: false, title: info.title, isEnabled: rank < arrangement.order.count - 1)
+            }
+            .help(Text("Drag the row or use the arrows to change the order"))
             Text((rank + 1).formatted())
                 .font(.app(size: 11.5, weight: .bold))
                 .monospacedDigit()
@@ -106,7 +108,7 @@ private struct ModuleListRow: View {
             }
             Spacer(minLength: 8)
             Button {
-                withAnimation(.snappy(duration: 0.2)) { arrangement.toggleFavorite(moduleID) }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { arrangement.toggleFavorite(moduleID) }
             } label: {
                 Image(systemName: arrangement.isFavorite(moduleID) ? "star.fill" : "star")
                     .font(.app(size: 13, weight: .semibold))
@@ -122,7 +124,7 @@ private struct ModuleListRow: View {
                 : String(localized: "Add \(info.title) to favorites")))
             Toggle(info.title, isOn: Binding(
                 get: { context.isEnabled(moduleID) },
-                set: { enabled in withAnimation(.easeInOut(duration: 0.25)) { context.setEnabled(moduleID, enabled) } }
+                set: { enabled in withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .easeInOut(duration: 0.25)) { context.setEnabled(moduleID, enabled) } }
             ))
             .labelsHidden()
         }
@@ -139,15 +141,16 @@ private struct ModuleListRow: View {
             dragging = moduleID
             return NSItemProvider(object: moduleID as NSString)
         }
-        .onDrop(of: [.text], delegate: ModuleReorderDrop(target: moduleID, arrangement: arrangement, dragging: $dragging, dropTarget: $dropTarget))
+        .onDrop(of: [.text], delegate: ModuleReorderDrop(target: moduleID, arrangement: arrangement, reduceMotion: reduceMotion,
+                                                         dragging: $dragging, dropTarget: $dropTarget))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("\(info.title), number \(rank + 1)"))
         .accessibilityActions {
             if rank > 0 {
-                Button(String(localized: "Move up")) { move(by: -1) }
+                Button(String(localized: "Move Up")) { move(by: -1) }
             }
             if rank < arrangement.order.count - 1 {
-                Button(String(localized: "Move down")) { move(by: 1) }
+                Button(String(localized: "Move Down")) { move(by: 1) }
             }
         }
         .contextMenu {
@@ -158,9 +161,23 @@ private struct ModuleListRow: View {
         }
     }
 
+    private func moveButton(up: Bool, title: String, isEnabled: Bool) -> some View {
+        Button { move(by: up ? -1 : 1) } label: {
+            Image(systemName: up ? "chevron.up" : "chevron.down")
+                .font(.app(size: 9.5, weight: .bold))
+                .foregroundStyle(isHovered ? AppPalette.primaryText : AppPalette.tertiaryText)
+                .frame(width: 18, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.3)
+        .accessibilityLabel(Text(up ? String(localized: "Move \(title) up") : String(localized: "Move \(title) down")))
+    }
+
     /// Moves the module one place and tells VoiceOver where it is now.
     private func move(by step: Int) {
-        withAnimation(.snappy(duration: 0.2)) { context.arrangement.move(moduleID, by: step) }
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { context.arrangement.move(moduleID, by: step) }
         let title = AppContext.moduleInfo(moduleID).title
         let rank = context.arrangement.rank(of: moduleID)
         AccessibilityNotification.Announcement(String(localized: "\(title), now number \(rank + 1)")).post()
@@ -177,7 +194,7 @@ private struct ModuleListRow: View {
         case (0, true): return String(localized: "Right of the notch when active")
         case (1, false): return String(localized: "Right of the notch when active, or left when it's the only one")
         case (1, true): return String(localized: "Left of the notch when active, or right when it's the only one")
-        default: return String(localized: "In the open notch, and beside it when one above is idle")
+        default: return String(localized: "In the open notch. Beside it too when a module above has nothing to show")
         }
     }
 }
@@ -186,6 +203,7 @@ private struct ModuleListRow: View {
 private struct ModuleReorderDrop: DropDelegate {
     let target: String
     let arrangement: ModuleArrangement
+    let reduceMotion: Bool
     @Binding var dragging: String?
     @Binding var dropTarget: String?
 
@@ -200,7 +218,7 @@ private struct ModuleReorderDrop: DropDelegate {
         guard dragging != target else { return }
         let index = arrangement.rank(of: target)
         Task { @MainActor in
-            withAnimation(.snappy(duration: 0.2)) { arrangement.move(dragging, to: index) }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { arrangement.move(dragging, to: index) }
         }
     }
 
@@ -220,6 +238,7 @@ private struct ModuleReorderDrop: DropDelegate {
 /// A tiny notch with the first two modules' symbols where their ears go.
 private struct EarsDiagram: View {
     let context: AppContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let ranked = context.arrangement.order.filter { context.isEnabled($0) }.prefix(2).map { AppContext.moduleInfo($0).symbol }
@@ -238,7 +257,7 @@ private struct EarsDiagram: View {
             UnevenRoundedRectangle(bottomLeadingRadius: 7, bottomTrailingRadius: 7, style: .continuous)
                 .strokeBorder(AppPalette.hairlineStrong)
         }
-        .animation(.snappy(duration: 0.25), value: [left, right])
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25), value: [left, right])
         .accessibilityHidden(true)
     }
 
@@ -248,7 +267,7 @@ private struct EarsDiagram: View {
                 Image(systemName: symbol)
                     .font(.app(size: 9, weight: .semibold))
                     .foregroundStyle(.white)
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
             }
         }
         .frame(width: 22)
@@ -399,9 +418,9 @@ struct NowPlayingSettingsRows: View {
         case .connected:
             String(localized: "Connected: shows music and videos from every app.")
         case .limited:
-            String(localized: "Limited: macOS isn't sharing what's playing, so only Music and Spotify show (Spotify without album art).")
-        case .unavailable(let reason):
-            String(localized: "\(reason). PancakeNotch can't see what's playing right now.")
+            String(localized: "Limited: macOS isn't sharing what's playing, so only Music and Spotify show (Spotify without album art). Trying again often fixes it.")
+        case .unavailable:
+            String(localized: "PancakeNotch can't see what's playing right now. Trying again often fixes it.")
         case .starting:
             String(localized: "Connecting…")
         case .practice:
@@ -542,7 +561,7 @@ private struct SoundBarsAccessRow: View {
         }
         switch settings.soundBarsAccess {
         case .allowed:
-            return String(localized: "The bars follow the music. After PancakeNotch updates, macOS may ask once more.")
+            return String(localized: "The bars follow the music.")
         case .denied:
             return String(localized: "Not allowed — the bars use Gentle motion instead. Turn on PancakeNotch under System Audio Recording, then click Try Again.")
         case .unknown:
@@ -953,14 +972,14 @@ private struct ShelfSettingsRows: View {
                 .labelsHidden()
         }
         SettingsRow(
-            title: String(localized: "Show in the notch when nearly full and after drops"),
-            subtitle: String(localized: "From \(ShelfStore.nearlyFullCount) items the notch shows a small tray with the count, and it shows the new count for a moment after you drop something.")
+            title: String(localized: "Show the Shelf's count beside the notch"),
+            subtitle: String(localized: "When it holds \(ShelfStore.nearlyFullCount) items or more, and for a moment after you drop something.")
         ) {
-            Toggle(String(localized: "Show in the notch when nearly full and after drops"), isOn: $settings.showsInEars)
+            Toggle(String(localized: "Show the Shelf's count beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
         }
         SettingsRow(
-            title: String(localized: "Mission Control opens when dropping?"),
+            title: String(localized: "Mission Control gets in the way of drops"),
             subtitle: String(localized: "macOS opens Mission Control when you drag to the very top of the screen. The notch opens before that, so drop a little lower, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
         ) {
             Button(String(localized: "Open Desktop & Dock")) {

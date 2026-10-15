@@ -1,0 +1,38 @@
+name: Website
+
+# Publishes site/ to GitHub Pages whenever it changes on main. The update feed is carried over from
+# the live site (releases add to it; see release.yml).
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/build-site.sh"]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Put the site together
+        run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

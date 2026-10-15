@@ -25,7 +25,7 @@ struct AboutView: View {
                     .font(.app(size: 13, weight: .medium))
                     .foregroundStyle(AppPalette.secondaryText)
                     .padding(.top, 4)
-                Text("A free, open-source app that puts your MacBook's notch to work.")
+                Text(String(localized: "A free, open-source app that puts your MacBook's notch to work."))
                     .font(.app(size: 14))
                     .foregroundStyle(AppPalette.secondaryText)
                     .multilineTextAlignment(.center)
@@ -58,14 +58,14 @@ struct AboutView: View {
                     title: String(localized: "Welcome"),
                     subtitle: String(localized: "The short first-run tour of the notch basics.")
                 ) {
-                    Button(String(localized: "Show Welcome Again")) { progress.onboardingDone = false }
+                    Button(String(localized: "Show Welcome Again")) { progress.showWelcomeAgain() }
                 }
                 SettingsRow(
                     title: String(localized: "License"),
                     subtitle: String(localized: "Free and open source under the GPL-3.0 license.")
                 ) {
                     Button { openURL(AppInfo.license) } label: {
-                        Label(String(localized: "Read License"), systemImage: "arrow.up.right")
+                        Label(String(localized: "View License"), systemImage: "arrow.up.right")
                             .labelStyle(TrailingIconLabelStyle())
                     }
                 }
@@ -74,6 +74,15 @@ struct AboutView: View {
                     subtitle: String(localized: "Now Playing uses mediaremote-adapter by Jonas van den Berg, under the BSD 3-Clause license.")
                 ) {
                     Button { openURL(AppInfo.nowPlayingHelperLicense) } label: {
+                        Label(String(localized: "View License"), systemImage: "arrow.up.right")
+                            .labelStyle(TrailingIconLabelStyle())
+                    }
+                }
+                SettingsRow(
+                    title: String(localized: "Automatic updates"),
+                    subtitle: String(localized: "Updates use Sparkle by the Sparkle Project, under the MIT license.")
+                ) {
+                    Button { openURL(AppInfo.sparkleLicense) } label: {
                         Label(String(localized: "View License"), systemImage: "arrow.up.right")
                             .labelStyle(TrailingIconLabelStyle())
                     }

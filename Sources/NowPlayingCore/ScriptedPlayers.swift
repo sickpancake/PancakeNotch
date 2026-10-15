@@ -219,6 +219,9 @@ final class ScriptedPlayers {
         isActive = false
         entries = [:]
         recent = []
+        // Asked again on the next start: a stale "denied" would hide a later denial (the guard in
+        // setNeedsPermission) and leave "Allow Control…" missing.
+        setNeedsPermission(false)
         // Tokens keep counting, so answers to questions asked before a restart are still dropped.
     }
 
