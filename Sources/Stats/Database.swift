@@ -97,6 +97,11 @@ final class Database: @unchecked Sendable {
             sqlite3_close_v2(db)
             return nil
         }
+        // Write-ahead logging: each write appends to a small log instead of creating, syncing and
+        // deleting a journal file. A power cut can lose the last moments of statistics, not the file.
+        _ = exec(db, "PRAGMA journal_mode = WAL")
+        _ = exec(db, "PRAGMA synchronous = NORMAL")
+        _ = exec(db, "PRAGMA journal_size_limit = 1048576")
         return db
     }
 

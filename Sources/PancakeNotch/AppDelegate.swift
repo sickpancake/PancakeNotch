@@ -107,11 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notchController.onModuleShown = { [weak self] moduleID in self?.statistics.recordModuleShown(moduleID) }
         notchController.openSettings = { [weak self] in self?.showSettings() }
-        removeOldStatisticsDaily()
         observePreferences()
-        ShelfModule.removeTemporaryFiles()
-        PracticeShelf.removeLeftovers()
-        shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
         observeModules()
         _ = shortcuts // registers the saved shortcut
@@ -146,6 +142,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates.onPendingChange = { [weak self] in self?.menuBar.updatePending() }
         updates.start()
         showWelcomeIfNeeded()
+        // Housekeeping waits until the notch has drawn. Old statistics go on the first open of the day
+        // (removeOldStatisticsDaily), so the statistics file isn't opened at launch.
+        DispatchQueue.main.async { [shelfStore] in
+            ShelfModule.removeTemporaryFiles()
+            PracticeShelf.removeLeftovers()
+            shelfStore.removeOrphanedFiles()
+        }
     }
 
     /// The first launch (or the first since the welcome was added) opens the window on the welcome.
@@ -259,8 +262,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Statistics older than 90 days go at launch and then on the first notch open of each day (the app
-    /// can run for weeks), never on a timer.
+    /// Statistics older than 90 days go on the first notch open of each day (the app can run for
+    /// weeks), never on a timer.
     private func removeOldStatisticsDaily() {
         let today = Calendar.current.startOfDay(for: Date())
         guard lastStatisticsCleanup != today else { return }

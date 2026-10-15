@@ -130,6 +130,8 @@ public final class StatsStore: Sendable {
         queue.async { [database] in
             database.execute("DELETE FROM counters; DELETE FROM plays; DELETE FROM health;")
             database.execute("VACUUM")
+            // Empties the write-ahead log too, so no old row waits there either.
+            database.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         }
     }
 

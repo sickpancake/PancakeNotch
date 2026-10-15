@@ -236,6 +236,25 @@ struct StatsStoreTests {
         #expect(await reopened.summary(days: 1, now: now).totalOpens == 1)
     }
 
+    @Test func clearLeavesNothingOnDisk() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "StatsTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "statistics.sqlite")
+        let now = date(2026, 10, 11)
+        let store = StatsStore(url: url, calendar: calendar)
+        store.recordListening(title: "A Very Private Song", artist: "", album: "", bundleID: nil, started: now, seconds: 60)
+        _ = await store.summary(days: 1, now: now)
+        store.clear()
+        store.waitForWrites()
+
+        // Neither the file nor its write-ahead log still holds the title.
+        for path in [url.path, url.path + "-wal"] {
+            let bytes = FileManager.default.contents(atPath: path) ?? Data()
+            #expect(bytes.range(of: Data("A Very Private Song".utf8)) == nil, "\(path)")
+        }
+    }
+
     @Test func aCorruptFileIsStartedOver() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "StatsTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
