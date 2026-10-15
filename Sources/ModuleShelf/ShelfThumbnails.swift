@@ -4,19 +4,22 @@ import QuickLookThumbnailing
 
 /// Small previews for file tiles, made by macOS's Quick Look service (outside our process).
 ///
-/// Memory: one 56 pt @2x image per file item, so at most 20 (~1–2 MB). They exist only while the notch
-/// is open; `clear()` drops them and cancels pending requests when it closes (ADR-0006).
+/// Memory: one 56 pt @2x image per file item shown, so at most 20 (~1–2 MB). Tiles ask for theirs as
+/// they scroll into view. They exist only while the notch is open; `clear()` drops them and cancels
+/// pending requests when it closes (ADR-0006).
 @MainActor
 @Observable
 final class ShelfThumbnails {
     static let pointSize = CGSize(width: 56, height: 56)
+    /// Tiles that fit the open notch without scrolling (and one more), asked for as it opens.
+    static let firstVisible = 8
 
     private(set) var images: [UUID: NSImage] = [:]
     @ObservationIgnored private var requests: [UUID: QLThumbnailGenerator.Request] = [:]
     @ObservationIgnored private var generation = 0
 
     /// Requests previews for file items that don't have one yet.
-    func load(_ items: [ShelfItem], scale: CGFloat) {
+    func load(_ items: some Sequence<ShelfItem>, scale: CGFloat) {
         let current = generation
         for item in items where images[item.id] == nil && requests[item.id] == nil {
             guard let url = item.fileURL else { continue }
