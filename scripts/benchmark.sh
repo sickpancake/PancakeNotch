@@ -71,12 +71,24 @@ for pair in "$@"; do
     [[ -x "$app/Contents/MacOS/PancakeNotch" ]] || { echo "No app at $app"; exit 1; }
     record "$label" bundle "$(du -sk "$app" | awk '{ print $1 }')"
     record "$label" binary "$(( $(stat -f %z "$app/Contents/MacOS/PancakeNotch") / 1024 ))"
-    ditto -c -k --norsrc --noextattr --keepParent "$app" "$WORK/$label.zip"
-    record "$label" zip "$(( $(stat -f %z "$WORK/$label.zip") / 1024 ))"
+    mkdir -p "$WORK/zips"
+    ditto -c -k --norsrc --noextattr --noacl --keepParent "$app" "$WORK/zips/$label.zip"
+    record "$label" zip "$(( $(stat -f %z "$WORK/zips/$label.zip") / 1024 ))"
+    # A warm-up launch, so no build pays for loading system libraries from disk first.
+    launch "$app"
+    sleep 5
+    stop_app
 done
 
+PAIRS=("$@")
 for run in $(seq "$RUNS"); do
-    for pair in "$@"; do
+    # Alternate the order, so neither build always goes first.
+    ORDER=("${PAIRS[@]}")
+    if (( run % 2 == 0 )); then
+        ORDER=()
+        for (( i = ${#PAIRS[@]} - 1; i >= 0; i-- )); do ORDER+=("${PAIRS[$i]}"); done
+    fi
+    for pair in "${ORDER[@]}"; do
         label="${pair%%=*}"
         app="${pair#*=}"
         echo "Run $run/$RUNS: $label" >&2
@@ -110,7 +122,7 @@ for run in $(seq "$RUNS"); do
     done
 done
 
-median() { sort -n "$1" | awk '{ v[NR] = $1 } END { print (NR % 2) ? v[(NR + 1) / 2] : int((v[NR / 2] + v[NR / 2 + 1]) / 2) }'; }
+median() { LC_ALL=C sort -n "$1" | awk '{ v[NR] = $1 } END { print (NR % 2) ? v[(NR + 1) / 2] : int((v[NR / 2] + v[NR / 2 + 1]) / 2) }'; }
 
 METRICS=(launch startup_cpu idle idle_app idle_cpu open shelf binary bundle zip)
 NAMES=("Launch to notch on screen (ms)" "CPU used in the first 5 s (ms)" "Idle memory, app + helper (KiB)"
