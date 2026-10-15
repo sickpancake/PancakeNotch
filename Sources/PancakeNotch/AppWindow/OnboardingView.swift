@@ -1,19 +1,18 @@
 import Learn
 import NotchCore
+import NowPlayingCore
 import SwiftUI
 
 /// The first-run welcome (ADR-0020): fills the window, without the sidebar, and covers only the
-/// notch basics. Welcome → the basics lesson → try the real notch → launch at login → where the
-/// lessons live. Shown once; "Show welcome again" in About brings it back.
+/// notch basics. Welcome → the basics lesson → try the real notch → play a song → your setup
+/// (launch at login, updates) → where the lessons live. Opens by itself once; closing the window
+/// pauses it at the current step. "Show Welcome Again" in About or Help brings it back.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, basics, realNotch, launch, learn
+        case welcome, basics, realNotch, music, setup, learn
     }
 
-    @Bindable var preferences: Preferences
-    let shortcuts: ShortcutController
-    let stats: UsageStats
-    let progress: LearnProgress
+    let context: AppContext
     @State private var step: Step
     /// Real notch opens counted when the "try the real one" step appeared.
     @State private var opensAtStart: Int?
@@ -22,13 +21,18 @@ struct OnboardingView: View {
     @State private var launchError: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(preferences: Preferences, shortcuts: ShortcutController, stats: UsageStats, progress: LearnProgress, step: Step = .welcome) {
-        self.preferences = preferences
-        self.shortcuts = shortcuts
-        self.stats = stats
-        self.progress = progress
-        _step = State(initialValue: step)
+    @Environment(\.openURL) private var openURL
+
+    /// Starts at `step`, or where the welcome was paused.
+    init(context: AppContext, step: Step? = nil) {
+        self.context = context
+        _step = State(initialValue: step ?? Step(rawValue: context.progress.onboardingStep) ?? .welcome)
     }
+
+    private var preferences: Preferences { context.preferences }
+    private var progress: LearnProgress { context.progress }
+    private var stats: UsageStats { context.stats }
+    private var nowPlaying: NowPlayingCenter { context.nowPlaying }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,6 +50,8 @@ struct OnboardingView: View {
             bottomBar
         }
         .background(AppPalette.background)
+        .onAppear { progress.onboardingShown = true }
+        .onChange(of: step) { _, step in progress.onboardingStep = step.rawValue }
     }
 
     // MARK: Chrome
@@ -67,11 +73,11 @@ struct OnboardingView: View {
         }
         .overlay(alignment: .trailing) {
             if step != .learn {
-                Button(String(localized: "Skip welcome"), action: finish)
+                Button(String(localized: "Skip Welcome"), action: finish)
                     .buttonStyle(.plain)
                     .font(.app(size: 12.5, weight: .medium))
                     .foregroundStyle(AppPalette.secondaryText)
-                    .accessibilityHint(Text("Goes straight to the app. You can see the welcome again from About."))
+                    .accessibilityHint(Text("Goes straight to the app. You can see the welcome again from About or Help."))
             }
         }
         .padding(.horizontal, 24)
@@ -105,6 +111,7 @@ struct OnboardingView: View {
         case .welcome: String(localized: "Get Started")
         case .basics: progress.isDone(.basics) ? String(localized: "Continue") : String(localized: "Skip for Now")
         case .realNotch: realNotchOpened ? String(localized: "Continue") : String(localized: "Skip for Now")
+        case .music: songFound ? String(localized: "Continue") : String(localized: "Skip for Now")
         default: String(localized: "Continue")
         }
     }
@@ -115,7 +122,7 @@ struct OnboardingView: View {
     }
 
     private func finish() {
-        progress.onboardingDone = true
+        progress.finishWelcome()
     }
 
     // MARK: Pages
@@ -126,7 +133,8 @@ struct OnboardingView: View {
         case .welcome: welcome
         case .basics: basics
         case .realNotch: realNotch
-        case .launch: launch
+        case .music: music
+        case .setup: setup
         case .learn: learn
         }
     }
@@ -157,7 +165,7 @@ struct OnboardingView: View {
             LessonPlayer(
                 lesson: .basics,
                 behavior: preferences.notchBehavior,
-                shortcuts: shortcuts,
+                shortcuts: context.shortcuts,
                 onFinish: { progress.markDone(.basics) }
             )
         }
@@ -185,12 +193,12 @@ struct OnboardingView: View {
                 Text(realNotchOpened ? String(localized: "It works. Nicely done!") : String(localized: "Waiting for the notch to open…"))
                     .font(.app(size: 15, weight: .semibold))
                 if !preferences.notchEnabled {
-                    Text("The notch is switched off.")
+                    Text(String(localized: "The notch is switched off."))
                         .font(.app(size: 12.5))
                         .foregroundStyle(AppPalette.secondaryText)
                     Button(String(localized: "Turn It On")) { preferences.notchEnabled = true }
                 } else if !realNotchOpened {
-                    Text("Nothing happening? The notch lives on your MacBook's built-in screen. If the pointer is on another display, move it across first.")
+                    Text(String(localized: "Nothing happening? The notch is on your MacBook's own screen. If the pointer is on another display, move it across first."))
                         .font(.app(size: 12.5))
                         .foregroundStyle(AppPalette.secondaryText)
                         .multilineTextAlignment(.center)
@@ -209,16 +217,112 @@ struct OnboardingView: View {
         }
     }
 
-    private var launch: some View {
+    // MARK: Play a song
+
+    /// Something is playing (or paused) in an app Now Playing can see.
+    private var songFound: Bool {
+        context.nowPlayingSettings.isEnabled && nowPlaying.track != nil
+    }
+
+    private var music: some View {
         VStack(spacing: 0) {
             heading(
-                String(localized: "Start with your Mac?"),
-                String(localized: "PancakeNotch can open by itself when you log in, so the notch is always there.")
+                String(localized: "Play a song"),
+                String(localized: "Play something in Music, Spotify or your browser. It shows up beside the notch, and in it when you open it.")
+            )
+            VStack(spacing: 14) {
+                if songFound, let track = nowPlaying.track {
+                    FoundSong(track: track, artwork: nowPlaying.artwork)
+                    Text(String(localized: "Found it. Now Playing works."))
+                        .font(.app(size: 15, weight: .semibold))
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 22, weight: .bold))
+                        .frame(width: 58, height: 58)
+                        .background(AppPalette.selection, in: .rect(cornerRadius: 15, style: .continuous))
+                        .accessibilityHidden(true)
+                    musicStatus
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: .infinity)
+            .glassPanel()
+            .padding(.top, 28)
+            .accessibilityElement(children: .contain)
+        }
+        .onChange(of: songFound) { _, found in
+            if found { AccessibilityNotification.Announcement(String(localized: "Found the song. Now Playing works.")).post() }
+        }
+    }
+
+    /// Waiting for a song, or why one can't show, with the fix that applies.
+    @ViewBuilder
+    private var musicStatus: some View {
+        if !context.nowPlayingSettings.isEnabled {
+            Text(String(localized: "Now Playing is switched off."))
+                .font(.app(size: 15, weight: .semibold))
+            Button(String(localized: "Turn It On")) { context.nowPlayingSettings.isEnabled = true }
+        } else {
+            switch nowPlaying.connection {
+            case .limited:
+                Text(String(localized: "Only Music and Spotify can show right now."))
+                    .font(.app(size: 15, weight: .semibold))
+                hint(String(localized: "macOS isn't sharing what other apps play. Trying again often fixes it."))
+                HStack(spacing: 8) {
+                    Button(String(localized: "Try Again")) { nowPlaying.retryConnection() }
+                    helpButton(.musicNotDetected)
+                }
+            case .unavailable:
+                Text(String(localized: "PancakeNotch can't see what's playing."))
+                    .font(.app(size: 15, weight: .semibold))
+                hint(String(localized: "Trying again often fixes it. You can also skip this for now."))
+                HStack(spacing: 8) {
+                    Button(String(localized: "Try Again")) { nowPlaying.retryConnection() }
+                    helpButton(.musicNotDetected)
+                }
+            case .starting, .connected, .practice:
+                Text(String(localized: "Waiting for a song…"))
+                    .font(.app(size: 15, weight: .semibold))
+                hint(String(localized: "Nothing showing up? Make sure it's playing on this Mac, then give it a second."))
+                if nowPlaying.needsAutomationPermission {
+                    Button(String(localized: "Allow Control…")) { HelpLinks.openAutomationSettings() }
+                }
+                helpButton(.musicNotDetected)
+            }
+        }
+    }
+
+    private func hint(_ text: String) -> some View {
+        Text(text)
+            .font(.app(size: 12.5))
+            .foregroundStyle(AppPalette.secondaryText)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The website's answer for a topic (the app's Help page sits behind the welcome).
+    private func helpButton(_ topic: HelpTopic) -> some View {
+        Button { openURL(HelpLinks.url(topic)) } label: {
+            Label(String(localized: "Get Help"), systemImage: "arrow.up.right")
+                .labelStyle(TrailingIconLabelStyle())
+        }
+    }
+
+    // MARK: Your setup
+
+    private var setup: some View {
+        @Bindable var updates = context.updates
+        return VStack(spacing: 0) {
+            heading(
+                String(localized: "Your setup"),
+                updates.isAvailable
+                    ? String(localized: "Two quick choices. You can change both later in General.")
+                    : String(localized: "One quick choice. You can change it later in General.")
             )
             SettingsCard(footer: launchError) {
                 SettingsRow(
                     title: String(localized: "Launch at login"),
-                    subtitle: String(localized: "You can change this later in General.")
+                    subtitle: String(localized: "PancakeNotch opens by itself when you log in, so the notch is always there.")
                 ) {
                     Toggle(String(localized: "Launch at login"), isOn: $launchAtLogin)
                         .labelsHidden()
@@ -229,6 +333,15 @@ struct OnboardingView: View {
                         subtitle: String(localized: "Allow PancakeNotch in Login Items to finish turning this on.")
                     ) {
                         Button(String(localized: "Open Login Items")) { LaunchAtLogin.openSystemSettings() }
+                    }
+                }
+                if updates.isAvailable {
+                    SettingsRow(
+                        title: String(localized: "Check for updates automatically"),
+                        subtitle: String(localized: "Once a day it asks GitHub for a newer version, and asks you before installing. Nothing about you is sent.")
+                    ) {
+                        Toggle(String(localized: "Check for updates automatically"), isOn: $updates.automaticallyChecks)
+                            .labelsHidden()
                     }
                 }
             }
@@ -307,5 +420,53 @@ private struct SidebarPeek: View {
         .overlay {
             if highlighted { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.white.opacity(0.5)) }
         }
+    }
+}
+
+/// The song Now Playing found: its artwork (the one colour allowed) and its title.
+private struct FoundSong: View {
+    let track: NowPlayingTrack
+    let artwork: NSImage?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Group {
+                if let artwork {
+                    Image(nsImage: artwork)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(AppPalette.selection)
+                }
+            }
+            .frame(width: 58, height: 58)
+            .clipShape(.rect(cornerRadius: 12, style: .continuous))
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.app(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                if !track.artist.isEmpty {
+                    Text(track.artist)
+                        .font(.app(size: 12.5))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+            Image(systemName: "checkmark")
+                .font(.app(size: 11, weight: .bold))
+                .foregroundStyle(Color.black)
+                .frame(width: 22, height: 22)
+                .background(Color.white, in: .circle)
+                .accessibilityHidden(true)
+        }
+        .padding(12)
+        .padding(.trailing, 4)
+        .background(AppPalette.hover, in: .rect(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }

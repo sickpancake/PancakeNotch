@@ -479,9 +479,16 @@ public final class ShelfModule: NotchModule {
         store.remove(chosen)
     }
 
+    /// The full card's Clear all: asks first, like the header's, since it removes everything.
     func clearForPending() {
+        guard confirmingClear else {
+            confirmingClear = true
+            return
+        }
+        confirmingClear = false
         selection = []
         store.clear()
+        onEvent?(.cleared)
     }
 
     /// Room was made while items were waiting: add as many as now fit.

@@ -156,9 +156,15 @@ private struct ArtworkButton: View {
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
         }
-        .help(Text("Open the app that's playing"))
+        .help(isPractice ? Text("In your notch, this opens the app that's playing") : Text("Open the app that's playing"))
         .accessibilityLabel(track.isAdvertisement ? Text("Album art, ad") : Text("Album art"))
-        .accessibilityHint(Text("Opens the app that's playing."))
+        .accessibilityHint(isPractice
+            ? Text("Practice: says what this does in your real notch.")
+            : Text("Opens the app that's playing."))
+    }
+
+    private var isPractice: Bool {
+        module.center.connection == .practice
     }
 }
 
@@ -540,7 +546,7 @@ private struct NowPlayingNothing: View {
                             .help(Text("Plays \(name) again"))
                     case .needsPermission(let bundleID)?:
                         let name = PlayerApp(bundleID: bundleID)?.name ?? bundleID
-                        NotchPill(title: String(localized: "Allow control"), symbol: "lock", prominent: true) {
+                        NotchPill(title: String(localized: "Allow Control…"), symbol: "lock", prominent: true) {
                             NowPlayingPermissions.openAutomationSettings()
                         }
                         .help(Text("PancakeNotch needs permission to control \(name). Opens System Settings."))
@@ -696,7 +702,7 @@ private struct NowPlayingUnavailable: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(reason)
                     .font(.system(size: 15, weight: .semibold))
-                Text("PancakeNotch can't see what's playing on this Mac right now.")
+                Text("Trying again often fixes it. Help in the PancakeNotch window has more.")
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -705,7 +711,7 @@ private struct NowPlayingUnavailable: View {
                         module.center.retryConnection()
                     }
                     if module.center.needsAutomationPermission {
-                        NotchPill(title: String(localized: "Allow in Settings"), symbol: "lock.open") {
+                        NotchPill(title: String(localized: "Allow Control…"), symbol: "lock") {
                             NowPlayingPermissions.openAutomationSettings()
                         }
                     }
@@ -782,16 +788,16 @@ private struct SourceAppPill: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help(Text("Open \(app?.name ?? bundleID)"))
+        .help(isPractice ? Text("In your notch, this opens the app that's playing") : Text("Open \(app?.name ?? bundleID)"))
         .accessibilityLabel(Text(isPractice ? String(localized: "Playing in the practice player") : String(localized: "Playing in \(app?.name ?? bundleID)")))
-        .accessibilityHint(Text("Opens the app."))
+        .accessibilityHint(isPractice ? Text("Practice: says what this does in your real notch.") : Text("Opens the app."))
     }
 }
 
 /// The Music/Spotify fallback needs the Automation permission: a way to it.
 private struct PermissionPill: View {
     var body: some View {
-        NotchPill(title: String(localized: "Allow control"), symbol: "lock") {
+        NotchPill(title: String(localized: "Allow Control…"), symbol: "lock") {
             NowPlayingPermissions.openAutomationSettings()
         }
         .help(Text("PancakeNotch needs permission to control Music and Spotify. Opens System Settings."))

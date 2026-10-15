@@ -22,7 +22,9 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         self.context = context
     }
 
-    func show() {
+    /// Opens the window, on `section` when given (otherwise the page it was on).
+    func show(section: AppSection? = nil) {
+        if let section { context.navigation.section = section }
         onShow?()
         let window = self.window ?? makeWindow()
         self.window = window
@@ -66,8 +68,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Closing the window during the welcome counts as having seen it: it shows once (ADR-0020).
-        context.progress.onboardingDone = true
+        // Closing the window during the welcome pauses it: it carries on at the same step next time
+        // the window opens, but doesn't open by itself again (ADR-0020).
         NSApp.setActivationPolicy(.accessory)
         // Release after AppKit finishes closing, so the SwiftUI view tree is freed (unless it was
         // opened again straight away).
@@ -110,6 +112,7 @@ extension AppWindowController {
         let nowPlaying = NowPlayingCenter.practiceSnapshot(playing: true, elapsed: 74)
         let statsStore = StatsStore(url: nil)
         sampleStatistics(statsStore)
+        let updates = Updates(snapshotPendingVersion: nil, lastCheck: Date().addingTimeInterval(-3 * 3600))
         let context = AppContext(
             preferences: preferences,
             shortcuts: noShortcut,
@@ -121,6 +124,7 @@ extension AppWindowController {
             nowPlayingSettings: nowPlayingSettings,
             nowPlaying: nowPlaying,
             statsStore: statsStore,
+            updates: updates,
             makeLiveModules: {
                 var modules: [any NotchModule] = []
                 if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
@@ -134,9 +138,11 @@ extension AppWindowController {
             let pageContext = shortcuts === noShortcut ? context : AppContext(
                 preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
-                nowPlaying: nowPlaying, statsStore: statsStore, makeLiveModules: context.makeLiveModules
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
             )
-            try render(name, rootView: AppWindowView(context: pageContext, section: section, lesson: lesson), size: size)
+            pageContext.navigation.section = section
+            pageContext.navigation.lesson = lesson
+            try render(name, rootView: AppWindowView(context: pageContext), size: size)
         }
 
         /// `then` runs once the page has settled, before a second wait (e.g. to open an item).
@@ -191,10 +197,25 @@ extension AppWindowController {
 
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
-            try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(
-                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, step: step
-            ).appWindowStyle())
+            try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(context: context, step: step).appWindowStyle())
         }
+
+        // The welcome's song check while nothing plays, and the pages in other update states.
+        func variant(nowPlaying: NowPlayingCenter = nowPlaying, updates: Updates = updates) -> AppContext {
+            AppContext(
+                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement,
+                shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
+            )
+        }
+        let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))
+        try render("onboarding-music-waiting", rootView: OnboardingView(context: waiting, step: .music).appWindowStyle())
+        let pending = variant(updates: Updates(snapshotPendingVersion: "0.2.0", lastCheck: Date()))
+        try render("home-update", rootView: AppWindowView(context: pending))
+        let unbundled = variant(updates: Updates(bundle: Bundle(for: SnapshotWindow.self)))
+        unbundled.navigation.section = .general
+        try render("general-unbundled", rootView: AppWindowView(context: unbundled))
+        try render("onboarding-setup-unbundled", rootView: OnboardingView(context: unbundled, step: .setup).appWindowStyle())
 
         // The practice Shelf working: open with the example items, then with one item opened.
         let practice = PracticeShelf(seeded: true)

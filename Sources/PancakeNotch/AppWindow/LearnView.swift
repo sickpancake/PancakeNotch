@@ -197,6 +197,13 @@ struct LessonPlayer: View {
                     .disabled(runner.stepIndex == 0)
                 Button(String(localized: "Skip Step"), action: skip)
                     .accessibilityHint(Text("Moves on without doing this step."))
+                // Ticks the step by hand: drags and hovers need a pointer, this doesn't. The shortcut
+                // step has its own recorder.
+                if lesson.steps.indices.contains(runner.stepIndex), case let current = lesson.steps[runner.stepIndex],
+                   current.signal != .shortcutSet {
+                    Button(String(localized: "Mark as Done")) { runner.receive(current.signal) }
+                        .accessibilityHint(Text("Ticks this step off, as if you'd done it."))
+                }
             }
             .padding(.bottom, 12)
             ForEach(Array(lesson.steps.enumerated()), id: \.element.id) { index, step in
@@ -439,7 +446,7 @@ private struct StepRow<Extra: View>: View {
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityActions {
             if status == .current {
-                Button(String(localized: "Mark as done"), action: markDone)
+                Button(String(localized: "Mark as Done"), action: markDone)
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: status)

@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var shortcuts = ShortcutController { [weak self] in self?.notchController.toggle() }
     /// Finished lessons and whether the welcome has been seen.
     private let learnProgress = LearnProgress()
+    /// Sparkle's daily update check (released builds only).
+    private let updates = Updates()
     private lazy var appWindow: AppWindowController = {
         let controller = AppWindowController(context: AppContext(
             preferences: preferences,
@@ -66,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nowPlayingSettings: nowPlayingSettings,
             nowPlaying: nowPlaying,
             statsStore: statistics,
+            updates: updates,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
@@ -73,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }()
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
+        updates: updates,
         openApp: { [weak self] in self?.showAppWindow() }
     )
 
@@ -92,7 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        NSApp.mainMenu = MainMenu.make(settingsTarget: self, settingsAction: #selector(showAppWindow))
+        NSApp.mainMenu = MainMenu.make(target: self, settingsAction: #selector(showSettings),
+                                       updatesAction: updates.isAvailable ? #selector(checkForUpdates) : nil)
         notchController.onOpen = { [weak self] in
             guard let self else { return }
             self.stats.recordOpen()
@@ -101,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.removeOldStatisticsDaily()
         }
         notchController.onModuleShown = { [weak self] moduleID in self?.statistics.recordModuleShown(moduleID) }
-        notchController.openSettings = { [weak self] in self?.showAppWindow() }
+        notchController.openSettings = { [weak self] in self?.showSettings() }
         removeOldStatisticsDaily()
         observePreferences()
         ShelfModule.removeTemporaryFiles()
@@ -138,19 +143,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.fullScreen.update() }
         }
         updateGeometry()
+        updates.onPendingChange = { [weak self] in self?.menuBar.updatePending() }
+        updates.start()
         showWelcomeIfNeeded()
     }
 
     /// The first launch (or the first since the welcome was added) opens the window on the welcome.
+    /// Only once: a welcome paused by closing the window waits until the window is opened again.
     /// `PANCAKENOTCH_SKIP_ONBOARDING=1` keeps it closed, e.g. for the idle memory check.
     private func showWelcomeIfNeeded() {
-        guard !learnProgress.onboardingDone,
+        guard !learnProgress.onboardingDone, !learnProgress.onboardingShown,
               ProcessInfo.processInfo.environment["PANCAKENOTCH_SKIP_ONBOARDING"] == nil else { return }
         showAppWindow()
     }
 
-    /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
-    /// when the menu bar icon is hidden.
     /// Writes text typed in the Shelf's editor that's still waiting to be saved.
     func applicationWillTerminate(_ notification: Notification) {
         shelfStore.saveEdits()
@@ -159,6 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statistics.waitForWrites()
     }
 
+    /// Opening the app again (Finder, Spotlight, Launchpad) shows the app window — the way back
+    /// when the menu bar icon is hidden.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showAppWindow()
         return false
@@ -166,6 +174,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAppWindow() {
         appWindow.show()
+    }
+
+    /// Settings… (⌘,) and the notch's gear: the window on General.
+    @objc private func showSettings() {
+        appWindow.show(section: .general)
+    }
+
+    @objc private func checkForUpdates() {
+        updates.checkNow()
     }
 
     /// Applies preferences now and again whenever one changes (no polling). Only the preferences are

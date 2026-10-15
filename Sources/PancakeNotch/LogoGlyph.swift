@@ -29,12 +29,23 @@ struct LogoGlyph: Shape {
     }
 
     /// The mark as a template image, which macOS tints for the menu bar (light, dark, highlighted).
+    /// `dot` adds a small badge at the top right, cut free of the mark (an update is waiting).
     @MainActor
-    static func templateImage(pointSize: CGFloat = 18) -> NSImage {
+    static func templateImage(pointSize: CGFloat = 18, dot: Bool = false) -> NSImage {
         let size = CGSize(width: pointSize, height: pointSize)
         let image = NSImage(size: size, flipped: true) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            context.addPath(LogoGlyph().path(in: rect).cgPath)
+            var path = LogoGlyph().path(in: rect)
+            if dot {
+                let scale = rect.width / 18
+                let center = CGPoint(x: rect.minX + 15.2 * scale, y: rect.minY + 2.8 * scale)
+                func circle(_ radius: CGFloat) -> Path {
+                    Path(ellipseIn: CGRect(x: center.x - radius * scale, y: center.y - radius * scale,
+                                           width: 2 * radius * scale, height: 2 * radius * scale))
+                }
+                path = path.subtracting(circle(3.6)).union(circle(2.5))
+            }
+            context.addPath(path.cgPath)
             context.setFillColor(NSColor.black.cgColor)
             context.fillPath()
             return true

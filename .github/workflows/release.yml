@@ -1,0 +1,123 @@
+name: Release
+
+# Pushing a version tag (e.g. v0.1.0) builds, signs and publishes that version: the GitHub Release
+# with PancakeNotch.zip, and the update feed on the website (ADR-0005). The version's notes come
+# from CHANGELOG.md.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the build number counts commits
+
+      - name: Check the signing keys are set up
+        env:
+          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          missing=()
+          [[ -n "$SIGNING_CERT_P12" ]] || missing+=(SIGNING_CERT_P12)
+          [[ -n "$SIGNING_CERT_PASSWORD" ]] || missing+=(SIGNING_CERT_PASSWORD)
+          [[ -n "$SPARKLE_PRIVATE_KEY" ]] || missing+=(SPARKLE_PRIVATE_KEY)
+          [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || missing+=("SPARKLE_PUBLIC_ED_KEY (a variable)")
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing: ${missing[*]}. Make them with scripts/make-signing-keys.sh."
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md needs a '## $version' section."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Test
+        run: ./scripts/swift.sh test
+
+      - name: Signing certificate
+        id: cert
+        env:
+          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          echo "$SIGNING_CERT_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          echo "identity=$(./scripts/import-signing-cert.sh "$RUNNER_TEMP/signing.p12" "$SIGNING_CERT_PASSWORD")" >> "$GITHUB_OUTPUT"
+          rm "$RUNNER_TEMP/signing.p12"
+
+      - name: Sparkle tools
+        id: sparkle
+        run: echo "bin=$(./scripts/get-sparkle-tools.sh "$RUNNER_TEMP/sparkle")" >> "$GITHUB_OUTPUT"
+
+      - name: Current update feed
+        id: feed
+        run: |
+          ./scripts/build-site.sh "$RUNNER_TEMP/current-site"
+          if [[ -f "$RUNNER_TEMP/current-site/appcast.xml" ]]; then
+            echo "existing=$RUNNER_TEMP/current-site/appcast.xml" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build, sign and package
+        env:
+          PANCAKENOTCH_VERSION: ${{ steps.version.outputs.version }}
+          PANCAKENOTCH_BUILD: ${{ steps.version.outputs.build }}
+          CODESIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
+          DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/PancakeNotch.zip
+          EXISTING_APPCAST: ${{ steps.feed.outputs.existing }}
+        run: |
+          export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/update-key.txt"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_PRIVATE_KEY_FILE"
+          ./scripts/package-release.sh
+          rm "$SPARKLE_PRIVATE_KEY_FILE"
+
+      - name: Idle memory budget (ADR-0006)
+        run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/release/PancakeNotch.zip build/release/appcast.xml \
+            --title "PancakeNotch $VERSION" --notes-file build/release/notes.md --verify-tag
+
+      - name: Website with the new update feed
+        run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+  website:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

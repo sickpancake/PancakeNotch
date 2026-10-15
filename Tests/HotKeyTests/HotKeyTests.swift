@@ -14,6 +14,22 @@ struct HotKeyTests {
         #expect(hotKey.carbonModifiers == UInt32(cmdKey | optionKey))
     }
 
+    @Test func systemShortcutsAreReserved() throws {
+        let quit = try #require(HotKey(keyCode: UInt32(kVK_ANSI_Q), modifiers: .command, keyLabel: "Q"))
+        let screenshot = try #require(HotKey(keyCode: UInt32(kVK_ANSI_4), modifiers: [.shift, .command], keyLabel: "4"))
+        let spotlight = try #require(HotKey(keyCode: UInt32(kVK_Space), modifiers: .command, keyLabel: "Space"))
+        #expect(quit.isReservedBySystem)
+        #expect(screenshot.isReservedBySystem)
+        #expect(spotlight.isReservedBySystem)
+    }
+
+    @Test func freeShortcutsAreNotReserved() throws {
+        let notch = try #require(HotKey(keyCode: UInt32(kVK_ANSI_N), modifiers: [.option, .command], keyLabel: "N"))
+        let quitWithOption = try #require(HotKey(keyCode: UInt32(kVK_ANSI_Q), modifiers: [.option, .control], keyLabel: "Q"))
+        #expect(!notch.isReservedBySystem)
+        #expect(!quitWithOption.isReservedBySystem)
+    }
+
     @Test func plainLettersAreRejected() {
         #expect(HotKey(keyCode: UInt32(kVK_ANSI_N), modifiers: [], keyLabel: "N") == nil)
         #expect(HotKey(keyCode: UInt32(kVK_ANSI_N), modifiers: [.shift], keyLabel: "N") == nil)

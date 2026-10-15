@@ -13,6 +13,11 @@ struct HomeView: View {
     var body: some View {
         PageScroll {
             HomeHeader()
+            if let version = context.updates.pendingVersion {
+                UpdateBox(version: version, updates: context.updates)
+                    .padding(.top, 26)
+                    .transition(.opacity)
+            }
             if !context.progress.homeBoxHidden {
                 LearnBox(progress: context.progress, openLesson: openLesson)
                     .padding(.top, 26)
@@ -58,6 +63,38 @@ private struct HomeHeader: View {
         case 17..<22: String(localized: "Good evening")
         default: String(localized: "Hello, night owl")
         }
+    }
+}
+
+/// A background check found an update: what it is and a way to look at it (Sparkle's window).
+private struct UpdateBox: View {
+    let version: String
+    let updates: Updates
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.black)
+                .frame(width: 42, height: 42)
+                .background(Color.white, in: .rect(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "PancakeNotch \(version) is ready"))
+                    .font(.app(size: 15, weight: .bold))
+                Text(String(localized: "See what's new, then choose whether to install it."))
+                    .font(.app(size: 12.5))
+                    .foregroundStyle(AppPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            Button(String(localized: "Take a Look")) { updates.checkNow() }
+                .buttonStyle(ProminentPillButtonStyle())
+        }
+        .padding(.horizontal, AppMetrics.cardInset)
+        .padding(.vertical, 16)
+        .glassPanel()
     }
 }
 
@@ -254,7 +291,7 @@ private struct StatsRow: View {
                 caption: Self.opens(stats.opensTotal)
             )
             StatTile(
-                label: String(localized: "Together"),
+                label: String(localized: "Using it"),
                 symbol: "calendar",
                 value: daysTogether.formatted(),
                 caption: daysTogether == 1
@@ -264,10 +301,10 @@ private struct StatsRow: View {
             StatTile(
                 label: String(localized: "Shelf"),
                 symbol: "tray",
-                value: shelfStore.items.count.formatted(),
+                value: shelfSettings.isEnabled ? shelfStore.items.count.formatted() : String(localized: "Off"),
                 caption: shelfSettings.isEnabled
                     ? String(localized: "of \(ShelfStore.capacity) on the Shelf")
-                    : String(localized: "Shelf is off")
+                    : String(localized: "Turn it on in Modules")
             )
         }
         .fixedSize(horizontal: false, vertical: true)

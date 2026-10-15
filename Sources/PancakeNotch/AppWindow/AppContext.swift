@@ -3,7 +3,24 @@ import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
 import NowPlayingCore
+import Observation
 import Stats
+
+/// Which page the app window shows, and the lesson open on Learn. Lives with the app so menus and
+/// the notch can open the window on a particular page.
+@MainActor
+@Observable
+final class AppNavigation {
+    var section: AppSection = .home
+    /// The lesson shown on Learn; other pages pick one before switching there.
+    var lesson: LessonID = .basics
+
+    /// Opens a lesson on Learn.
+    func open(_ lesson: LessonID) {
+        self.lesson = lesson
+        section = .learn
+    }
+}
 
 /// Everything the app window's pages share: the settings, the real modules' data and the statistics.
 /// Made once by the app; the window's views come and go around it.
@@ -21,6 +38,9 @@ final class AppContext {
     /// What's playing, shared with the real notch (one helper process).
     let nowPlaying: NowPlayingCenter
     let statsStore: StatsStore
+    /// Sparkle's update checks (released builds only).
+    let updates: Updates
+    let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
 
@@ -35,6 +55,7 @@ final class AppContext {
         nowPlayingSettings: NowPlayingSettings,
         nowPlaying: NowPlayingCenter,
         statsStore: StatsStore,
+        updates: Updates,
         makeLiveModules: @escaping () -> [any NotchModule]
     ) {
         self.preferences = preferences
@@ -47,6 +68,7 @@ final class AppContext {
         self.nowPlayingSettings = nowPlayingSettings
         self.nowPlaying = nowPlaying
         self.statsStore = statsStore
+        self.updates = updates
         self.makeLiveModules = makeLiveModules
     }
 

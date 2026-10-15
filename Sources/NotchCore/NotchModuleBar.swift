@@ -88,7 +88,7 @@ struct NotchModuleBar: View {
         BarButton(symbol: "square.grid.2x2", isSelected: model.showsMenu, highlight: highlight) {
             model.toggleMenu()
         }
-        .help(Text("All modules"))
+        .help(Text("Module Menu"))
         .accessibilityLabel(Text("Module Menu"))
         .accessibilityAddTraits(model.showsMenu ? [.isSelected] : [])
         .accessibilityHint(Text("Shows every module, your favorites and a way to the settings."))
@@ -124,13 +124,15 @@ struct NotchModuleBar: View {
     }
 }
 
-/// One icon button in the bar. The selected one sits on a soft capsule that slides between buttons.
+/// One icon button in the bar. The selected one sits on a soft capsule that slides between buttons
+/// (with Reduce Motion it fades from one to the next instead).
 private struct BarButton: View {
     let symbol: String
     let isSelected: Bool
     let highlight: Namespace.ID
     let action: () -> Void
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -142,7 +144,8 @@ private struct BarButton: View {
                     if isSelected {
                         Capsule()
                             .fill(.white.opacity(0.16))
-                            .matchedGeometryEffect(id: "selection", in: highlight)
+                            .modifier(SelectionSlide(namespace: highlight, slides: !reduceMotion))
+                            .transition(.opacity)
                     } else if isHovered {
                         Capsule().fill(.white.opacity(0.07))
                     }
@@ -211,7 +214,7 @@ struct NotchMenuView: View {
         VStack(alignment: .leading, spacing: 7) {
             MenuLabel(title: String(localized: "Favorites"))
             if favoriteModules.isEmpty {
-                Text("Star a module to keep it here and in the tabs.")
+                Text("Make a module a favorite (★) to keep it here and in the tabs.")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
@@ -383,5 +386,19 @@ private struct GearButton: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .accessibilityHint(Text("Opens the PancakeNotch window."))
+    }
+}
+
+/// The selection capsule glides between bar buttons, unless Reduce Motion is on.
+private struct SelectionSlide: ViewModifier {
+    let namespace: Namespace.ID
+    let slides: Bool
+
+    func body(content: Content) -> some View {
+        if slides {
+            content.matchedGeometryEffect(id: "selection", in: namespace)
+        } else {
+            content
+        }
     }
 }
