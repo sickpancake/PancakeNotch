@@ -1,0 +1,30 @@
+name: Benchmark
+
+# Builds main and this branch on the same machine and measures both (scripts/benchmark.sh):
+# launch time, memory, CPU and download size. The table appears on the run's summary page.
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per build (the table shows medians)
+        default: "3"
+
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Build this branch
+        run: ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/branch.app"
+      - name: Build main
+        run: |
+          git worktree add "$RUNNER_TEMP/main" origin/main
+          cd "$RUNNER_TEMP/main" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/main.app"
+      - name: Measure
+        run: |
+          ./scripts/benchmark.sh "${{ inputs.runs || '3' }}" main="$RUNNER_TEMP/main.app" branch="$RUNNER_TEMP/branch.app" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
