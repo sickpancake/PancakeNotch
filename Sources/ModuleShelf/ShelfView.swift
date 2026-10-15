@@ -278,7 +278,8 @@ struct ShelfTile: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(.white.opacity(0.1))
                 .overlay(alignment: .topLeading) {
-                    Text(text)
+                    // Five tiny lines show; only their worth of a long text is laid out.
+                    Text(text.prefix(500))
                         .font(.system(size: 7.5))
                         .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(5)
