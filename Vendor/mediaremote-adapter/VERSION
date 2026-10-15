@@ -1,6 +1,6 @@
 ungive/mediaremote-adapter v0.7.7 (e3ff5021eb0875858bd05f48d2e9ba2e962d1cf6)
 https://github.com/ungive/mediaremote-adapter
-Copied unmodified: LICENSE, bin/, include/, src/adapter, src/private, src/utility, except the patch below.
+Copied unmodified: LICENSE, bin/, include/, src/adapter, src/private, src/utility, except the patches below.
 The test client (src/test) is left out, apart from the header test.m includes. scripts/build-adapter.sh builds the framework with clang
 (no CMake needed), the way the project's CMakeLists.txt does, for arm64 only.
 
@@ -9,3 +9,9 @@ now playing app accepts right now (4 next, 5 previous, 24 change position…), s
 ignore (e.g. skipping during an ad). New files src/adapter/enabled_commands.{h,m}; marked hooks in src/adapter/stream.m
 (asked after every now playing info change and on MediaRemote's "supported commands changed" notifications) and
 src/adapter/get.m. To update the adapter: copy the new release over, then re-apply these lines.
+
+PancakeNotch efficiency patches (marked "PancakeNotch patch" in the code), to re-apply on update as well:
+- bin/mediaremote-adapter.pl boots DynaLoader's built-in functions and splits the framework path itself instead of loading
+  the warnings, DynaLoader, File::Spec and File::Basename modules (about 1.6 MiB less memory per helper process).
+- src/adapter/stream.m quits the stream when its parent process (the app) exits, so a crash can't leave it running.
+- src/utility/helpers.m printOutUnique keeps a SHA-256 of the last line, not the line (which can hold the album cover).

@@ -3,9 +3,11 @@
 
 #import "helpers.h"
 
+#include <CommonCrypto/CommonDigest.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #import <ImageIO/ImageIO.h>
 #if __has_include(<UniformTypeIdentifiers/UniformTypeIdentifiers.h>)
@@ -21,12 +23,20 @@ void printOut(NSString *message) {
     fflush(stdout);
 }
 
+// PancakeNotch patch: remembers a digest of the last line instead of the line itself, which can
+// hold a whole album cover as base64 and would otherwise stay in memory until the next line.
 void printOutUnique(NSString *message) {
-    static NSString *previous = nil;
-    if (![previous isEqualToString:message]) {
-        printOut(message);
-        previous = [message copy];
+    static unsigned char previous[CC_SHA256_DIGEST_LENGTH];
+    static bool hasPrevious = false;
+    NSData *bytes = [message dataUsingEncoding:NSUTF8StringEncoding];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(bytes.bytes, (CC_LONG)bytes.length, digest);
+    if (hasPrevious && memcmp(previous, digest, sizeof digest) == 0) {
+        return;
     }
+    memcpy(previous, digest, sizeof digest);
+    hasPrevious = true;
+    printOut(message);
 }
 
 void printErr(NSString *message) {
