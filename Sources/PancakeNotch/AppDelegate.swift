@@ -32,7 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shelf: ShelfModule?
     private let nowPlayingSettings = NowPlayingSettings()
     /// What's playing. Its helper process runs only while Now Playing is switched on.
+    /// `PANCAKENOTCH_DEBUG_PLAYER=practice` plays the silent practice songs instead (benchmark: CI has
+    /// no music), without recording them in the statistics.
     private lazy var nowPlaying: NowPlayingCenter = {
+        if ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_PLAYER"] == "practice" { return .practice() }
         let center = NowPlayingCenter.live(settings: nowPlayingSettings)
         center.onListened = { [weak self] record in
             self?.statistics.recordListening(
@@ -110,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observePreferences()
         seedShelfIfRequested()
         observeModules()
+        cycleNotchIfRequested()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -210,6 +214,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else { return }
         let inputs = files.sorted { $0.path < $1.path }.map { ShelfInput.file($0, owned: false) }
         shelfStore.add(inputs, duplicates: .addAgain)
+    }
+
+    /// `PANCAKENOTCH_DEBUG_CYCLE=<seconds>` opens and closes the notch on that beat (benchmark: what the
+    /// animations cost). A debug switch only: normal use has no such loop (AGENTS.md rule 2).
+    private func cycleNotchIfRequested() {
+        guard let value = ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_CYCLE"],
+              let seconds = Double(value), seconds > 0 else { return }
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(seconds))
+                guard let self else { return }
+                guard let model = notchController.model else { continue }
+                if model.state == .expanded { model.close() } else { model.open() }
+            }
+        }
     }
 
     /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.

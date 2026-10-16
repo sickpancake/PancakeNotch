@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Measures one or more app builds side by side and prints a Markdown table of medians:
 # launch time, CPU used while starting, idle memory and CPU, memory with the notch open and with a
-# full Shelf, and the download size. Runs alternate between the builds so they share the machine's
-# conditions. Shows the notch on screen, so it runs in CI (benchmark.yml), not on a working Mac.
+# full Shelf, CPU while a (practice) song plays and while the notch opens and closes, and the download
+# size. Runs alternate between the builds so they share the machine's conditions. Shows the notch on
+# screen, so it runs in CI (benchmark.yml), not on a working Mac.
 # Usage: scripts/benchmark.sh <runs> <label>=<path/to/PancakeNotch.app> [<label>=<app> ...]
-# Settle times (seconds) can be changed with BENCH_IDLE, BENCH_CPU_WINDOW, BENCH_OPEN, BENCH_SHELF.
+# Settle times (seconds) can be changed with BENCH_IDLE, BENCH_CPU_WINDOW, BENCH_OPEN, BENCH_SHELF,
+# BENCH_ACTIVE (each music phase) and BENCH_CYCLE (open/close beat).
 set -euo pipefail
 
 RUNS="${1:?usage: benchmark.sh <runs> <label>=<app> ...}"
@@ -13,6 +15,8 @@ IDLE="${BENCH_IDLE:-30}"
 CPU_WINDOW="${BENCH_CPU_WINDOW:-30}"
 OPEN="${BENCH_OPEN:-15}"
 SHELF="${BENCH_SHELF:-20}"
+ACTIVE="${BENCH_ACTIVE:-20}"
+CYCLE="${BENCH_CYCLE:-1.5}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 WORK="$(mktemp -d)"
@@ -54,6 +58,26 @@ launch() {   # <app> [env...]: starts the app, sets PID and LAUNCH_MS
         "$WORK/launch-probe" "$app/Contents/MacOS/PancakeNotch")" || { echo "Launch failed: $result" >&2; exit 1; }
     PID="${result%% *}"
     LAUNCH_MS="${result##* }"
+}
+
+# Builds from before the debug player was added can't play music: their music rows show "–".
+plays_music() { grep -aq PANCAKENOTCH_DEBUG_PLAYER "$1/Contents/MacOS/PancakeNotch"; }
+
+# A practice song playing: settles 5 s, then CPU over ACTIVE seconds, for the app and for WindowServer
+# (Core Animation draws the moving parts there, outside the app), then memory.
+measure_music() {   # <label> <metric> <app> [env...]
+    local label="$1" metric="$2" app="$3" server before server_before
+    shift 3
+    launch "$app" PANCAKENOTCH_DEBUG_PLAYER=practice "$@"
+    sleep 5
+    server="$(pgrep -x WindowServer | head -1)"
+    before="$(family_cpu "$PID")"
+    server_before="$(cpu_ms "$server")"
+    sleep "$ACTIVE"
+    record "$label" "${metric}_cpu" "$(( $(family_cpu "$PID") - before ))"
+    record "$label" "${metric}_server" "$(( $(cpu_ms "$server") - server_before ))"
+    record "$label" "${metric}_memory" "$(family_footprint "$PID")"
+    stop_app
 }
 
 swiftc -O -o "$WORK/launch-probe" "$ROOT/scripts/bench/LaunchProbe.swift"
@@ -119,15 +143,29 @@ for run in $(seq "$RUNS"); do
         sleep "$SHELF"
         record "$label" shelf "$(family_footprint "$PID")"
         stop_app
+
+        if plays_music "$app"; then
+            measure_music "$label" closed "$app"   # the compact notch: ears and dancing sound bars
+            measure_music "$label" playing "$app" PANCAKENOTCH_DEBUG_STATE=expanded   # progress, 1 Hz
+            measure_music "$label" cycle "$app" PANCAKENOTCH_DEBUG_CYCLE="$CYCLE"
+        fi
     done
 done
 
-median() { LC_ALL=C sort -n "$1" | awk '{ v[NR] = $1 } END { print (NR % 2) ? v[(NR + 1) / 2] : int((v[NR / 2] + v[NR / 2 + 1]) / 2) }'; }
+median() { [[ -s "$1" ]] || { echo "–"; return; }; LC_ALL=C sort -n "$1" | awk '{ v[NR] = $1 } END { print (NR % 2) ? v[(NR + 1) / 2] : int((v[NR / 2] + v[NR / 2 + 1]) / 2) }'; }
 
-METRICS=(launch startup_cpu idle idle_app idle_cpu open shelf binary bundle zip)
+METRICS=(launch startup_cpu idle idle_app idle_cpu open shelf
+    closed_cpu closed_server closed_memory playing_cpu playing_server playing_memory cycle_cpu cycle_server
+    binary bundle zip)
 NAMES=("Launch to notch on screen (ms)" "CPU used in the first 5 s (ms)" "Idle memory, app + helper (KiB)"
     "Idle memory, app only (KiB)" "Idle CPU over ${CPU_WINDOW} s (ms)" "Notch open (KiB)"
-    "Shelf open, 20 large images (KiB)" "App executable (KiB)" "App bundle (KiB)" "Zipped download (KiB)")
+    "Shelf open, 20 large images (KiB)"
+    "Music, notch closed: app CPU over ${ACTIVE} s (ms)" "Music, notch closed: WindowServer CPU (ms)"
+    "Music, notch closed (KiB)"
+    "Music, notch open: app CPU over ${ACTIVE} s (ms)" "Music, notch open: WindowServer CPU (ms)"
+    "Music, notch open (KiB)"
+    "Opening and closing every ${CYCLE} s: app CPU over ${ACTIVE} s (ms)" "Opening and closing: WindowServer CPU (ms)"
+    "App executable (KiB)" "App bundle (KiB)" "Zipped download (KiB)")
 
 header="| Measurement (median of $RUNS) |"
 rule="|---|"
@@ -143,7 +181,9 @@ for i in "${!METRICS[@]}"; do
         values+=("$value")
         row+=" $value |"
     done
-    if (( ${#LABELS[@]} == 2 )); then
+    if (( ${#LABELS[@]} == 2 )) && [[ "${values[0]}" == "–" || "${values[1]}" == "–" ]]; then
+        row+=" n/a |"
+    elif (( ${#LABELS[@]} == 2 )); then
         row+=" $(awk -v a="${values[0]}" -v b="${values[1]}" 'BEGIN { if (a == 0) print "n/a"; else printf "%+.0f%%\n", (b - a) * 100 / a }') |"
     fi
     echo "$row"
