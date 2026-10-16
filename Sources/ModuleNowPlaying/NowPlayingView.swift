@@ -311,6 +311,8 @@ private struct ProgressScrubber: View {
     @State private var isHovered = false
     /// The position drawn last, to tell a normal step from a jump.
     @State private var lastElapsed: TimeInterval?
+    /// Lets go of the dropped position shortly after a release; a new press cancels it.
+    @State private var release: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// A normal step forward: no more than a second and a half of playing (at the song's speed).
@@ -350,14 +352,17 @@ private struct ProgressScrubber: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { drag in
+                        release?.cancel()
                         module.scrubTime = duration * min(max(drag.location.x / max(width, 1), 0), 1)
                     }
                     .onEnded { drag in
                         let time = duration * min(max(drag.location.x / max(width, 1), 0), 1)
                         module.seek(to: time)
                         // Keep showing where it was dropped until the player reports the jump.
-                        Task { @MainActor in
+                        release?.cancel()
+                        release = Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(250))
+                            guard !Task.isCancelled else { return }
                             module.scrubTime = nil
                         }
                     },
@@ -369,6 +374,13 @@ private struct ProgressScrubber: View {
         .onHover { isHovered = $0 }
         .onAppear { lastElapsed = elapsed }
         .onChange(of: elapsed) { _, value in lastElapsed = value }
+        // A drag cut short (the bar goes away or seeking stops being possible) never ends: let go of
+        // its position, or the clock would stay stopped there.
+        .onChange(of: canSeek) { _, canSeek in if !canSeek { module.scrubTime = nil } }
+        .onDisappear {
+            release?.cancel()
+            module.scrubTime = nil
+        }
         .help(canSeek ? Text("") : Text(blockedReason))
         .accessibilityElement()
         .accessibilityLabel(Text("Song position"))
@@ -495,12 +507,23 @@ private struct ModeButton: View {
     }
 }
 
-/// Buttons shrink a touch while pressed.
+/// Buttons shrink a touch while pressed (dim instead with Reduce Motion).
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+        Pressable(label: configuration.label, isPressed: configuration.isPressed)
+    }
+
+    private struct Pressable: View {
+        let label: Configuration.Label
+        let isPressed: Bool
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            label
+                .scaleEffect(isPressed && !reduceMotion ? 0.9 : 1)
+                .opacity(isPressed && reduceMotion ? 0.6 : 1)
+                .animation(reduceMotion ? .easeOut(duration: 0.1) : .spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
+        }
     }
 }
 
