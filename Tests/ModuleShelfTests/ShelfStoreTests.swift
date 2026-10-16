@@ -108,6 +108,21 @@ struct ShelfStoreTests {
         #expect(FileManager.default.fileExists(atPath: userFile.path))
     }
 
+    @Test func removingAfterDragOutKeepsTheFileUntilTheNextLaunch() throws {
+        let fixture = try ShelfFixture()
+        let store = fixture.makeStore()
+        let ownedFolder = try store.newFilesFolder()
+        try Data([1]).write(to: ownedFolder.appending(path: "Photo.png"))
+        store.add([.file(ownedFolder.appending(path: "Photo.png"), owned: true)], duplicates: .ask)
+
+        // The app it was dragged to may still be copying it.
+        store.remove(store.items.map(\.id), keepingFiles: true)
+        #expect(store.items.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: ownedFolder.path))
+        fixture.makeStore().removeOrphanedFiles()
+        #expect(!FileManager.default.fileExists(atPath: ownedFolder.path))
+    }
+
     @Test func ownedFileMovedOutIsNotDeleted() throws {
         let fixture = try ShelfFixture()
         let store = fixture.makeStore()

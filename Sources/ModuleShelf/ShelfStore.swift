@@ -35,6 +35,8 @@ public final class ShelfStore {
     /// preview on the app window's Home), keyed by the Shelf.
     @ObservationIgnored private var observers: [ObjectIdentifier: () -> Void] = [:]
     @ObservationIgnored private let now: @Sendable () -> Date
+    /// The index couldn't be read nor set aside: its items' files would look orphaned.
+    @ObservationIgnored private var keepsOrphanedFiles = false
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
 
     /// Loads the saved items. Only reads our own JSON: no bookmark is resolved at launch, so macOS
@@ -42,15 +44,16 @@ public final class ShelfStore {
     public init(directory: URL = ShelfStore.defaultDirectory, now: @escaping @Sendable () -> Date = Date.init) {
         self.directory = directory
         self.now = now
-        if let data = try? Data(contentsOf: indexURL) {
-            do {
-                items = try JSONDecoder().decode([ShelfItem].self, from: data)
-            } catch {
-                // Kept aside rather than overwritten by the next save, and its files are kept too.
-                let aside = directory.appending(path: "items-unreadable-\(Int(now().timeIntervalSince1970)).json")
-                try? FileManager.default.moveItem(at: indexURL, to: aside)
-                logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .private)")
-            }
+        guard FileManager.default.fileExists(atPath: indexURL.path) else { return }
+        do {
+            let data = try Data(contentsOf: indexURL)
+            items = try JSONDecoder().decode([ShelfItem].self, from: data)
+        } catch {
+            // Can't be read or decoded: kept aside rather than overwritten by the next save, and its
+            // files are kept too.
+            let aside = directory.appending(path: "items-unreadable-\(Int(now().timeIntervalSince1970)).json")
+            if (try? FileManager.default.moveItem(at: indexURL, to: aside)) == nil { keepsOrphanedFiles = true }
+            logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -118,10 +121,11 @@ public final class ShelfStore {
 
     // MARK: Removing
 
-    public func remove(_ ids: some Collection<UUID>) {
+    /// `keepingFiles`: owned files stay until the launch sweep (`removeOrphanedFiles`).
+    public func remove(_ ids: some Collection<UUID>, keepingFiles: Bool = false) {
         let ids = Set(ids)
         guard !ids.isEmpty else { return }
-        for item in items where ids.contains(item.id) && item.isOwnedFile {
+        for item in items where ids.contains(item.id) && item.isOwnedFile && !keepingFiles {
             if let url = item.fileURL { deleteOwnedFile(at: url) }
         }
         items.removeAll { ids.contains($0.id) }
@@ -152,6 +156,7 @@ public final class ShelfStore {
     /// Only looks inside our own `Files` folder, so it's safe at launch. Does nothing while an
     /// unreadable index is kept aside: its items' files would look orphaned.
     public func removeOrphanedFiles() {
+        guard !keepsOrphanedFiles else { return }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         guard !names.contains(where: { $0.hasPrefix("items-unreadable-") }) else { return }
         let files = filesDirectory.resolvingSymlinksInPath().path + "/"

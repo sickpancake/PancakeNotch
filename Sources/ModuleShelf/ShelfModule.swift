@@ -514,9 +514,11 @@ public final class ShelfModule: NotchModule {
     /// Promised files arrive later on a background queue; each is moved into its own folder and offered.
     private func receive(_ promises: [NSFilePromiseReceiver]) {
         guard !promises.isEmpty else { return }
-        // Received into a temporary folder first: all promises of one drop share a destination.
-        guard let destination = try? ShelfSharing.makeTemporaryFolder() else { return }
+        // Each into its own temporary folder first. They stay (empty) until the next launch clears
+        // them: a promise can deliver several files, and deleting the folder once it looked empty
+        // could pull it from under a slower app still writing one.
         for promise in promises {
+            guard let destination = try? ShelfSharing.makeTemporaryFolder() else { return }
             logger.info("Receiving promised file \(promise.fileNames, privacy: .private)")
             ShelfDropReader.receive(promise, into: destination, queue: promiseQueue) { [weak self] url in
                 Task { @MainActor in self?.promisedFileArrived(url) }
@@ -528,13 +530,6 @@ public final class ShelfModule: NotchModule {
         guard let url else {
             logger.error("A promised file didn't arrive")
             return
-        }
-        defer {
-            // The drop's temporary folder, once its last file has moved out.
-            let folder = url.deletingLastPathComponent()
-            if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true {
-                try? FileManager.default.removeItem(at: folder)
-            }
         }
         do {
             let target = try store.newFilesFolder().appending(path: url.lastPathComponent)
@@ -778,7 +773,8 @@ public final class ShelfModule: NotchModule {
 
     func dragOutEnded(_ ids: [UUID], operation: NSDragOperation) {
         if settings.removeAfterDragOut, !operation.isEmpty {
-            store.remove(ids)
+            // The other app may still be copying (or moving) the file: its folder goes at next launch.
+            store.remove(ids, keepingFiles: true)
         }
         setDraggingOut(false)
         onEvent?(.dragOutEnded(accepted: !operation.isEmpty))
