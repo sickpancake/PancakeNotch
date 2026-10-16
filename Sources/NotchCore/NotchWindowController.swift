@@ -222,8 +222,9 @@ public final class NotchWindowController {
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             MainActor.assumeIsolated {
-                guard let self, let panel = self.panel, event.window === panel, let model = self.model,
-                      model.state == .expanded else { return }
+                // Also while closed: `handleScroll` marks a swipe that starts before the notch opens
+                // so its rest doesn't switch modules.
+                guard let self, let panel = self.panel, event.window === panel, let model = self.model else { return }
                 let point = self.bodyPoint(screen: NSEvent.mouseLocation, layout: model.layout)
                 model.handleScroll(event, at: point)
             }
