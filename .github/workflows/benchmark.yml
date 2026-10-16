@@ -1,6 +1,6 @@
 name: Benchmark
 
-# Builds main and this branch on the same machine and measures both (scripts/benchmark.sh):
+# Builds main (or another base) and this branch on the same machine and measures both (scripts/benchmark.sh):
 # launch time, memory, CPU and download size. The table appears on the run's summary page.
 on:
   pull_request:
@@ -31,11 +31,16 @@ jobs:
         run: echo "SPARKLE_PUBLIC_ED_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
       - name: Build this branch
         run: ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/branch.app"
-      - name: Build main
+      # An experiment can compare against another branch and take more runs: a `.benchmark-base`
+      # file holding "<branch> [runs]".
+      - name: Build the comparison
         run: |
-          git worktree add "$RUNNER_TEMP/main" origin/main
-          cd "$RUNNER_TEMP/main" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/main.app"
+          read -r BASE RUNS < .benchmark-base 2>/dev/null || true
+          echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
+          echo "RUNS=${{ inputs.runs }}${RUNS:-}" >> "$GITHUB_ENV"
+          git worktree add "$RUNNER_TEMP/base" "origin/${BASE:-main}"
+          cd "$RUNNER_TEMP/base" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/base.app"
       - name: Measure
         run: |
-          ./scripts/benchmark.sh "${{ inputs.runs || '3' }}" main="$RUNNER_TEMP/main.app" branch="$RUNNER_TEMP/branch.app" \
+          ./scripts/benchmark.sh "${RUNS:-3}" "$BASE=$RUNNER_TEMP/base.app" branch="$RUNNER_TEMP/branch.app" \
             | tee -a "$GITHUB_STEP_SUMMARY"
