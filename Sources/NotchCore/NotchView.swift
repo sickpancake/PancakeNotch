@@ -45,7 +45,8 @@ struct NotchView: View {
             Color.black
             content(layout: layout, state: state)
             if ears.left != nil || ears.right != nil {
-                CompactEarsView(left: ears.left, right: ears.right, layout: layout, state: state, reduceMotion: reduceMotion)
+                CompactEarsView(left: ears.left, right: ears.right, isAsleep: model.earsAsleep,
+                                layout: layout, state: state, reduceMotion: reduceMotion)
             }
             if state == .compact, let peek = model.peekView {
                 peek
@@ -220,6 +221,9 @@ private struct SlideBlurModifier: ViewModifier {
 private struct CompactEarsView: View {
     let left: NotchViewModel.EarSlot?
     let right: NotchViewModel.EarSlot?
+    /// Settled in Closed: the frames stay (so waking slides the ears out as before) but hold nothing,
+    /// and waking isn't a change of ears to animate.
+    let isAsleep: Bool
     let layout: NotchLayout
     let state: NotchState
     let reduceMotion: Bool
@@ -248,7 +252,7 @@ private struct CompactEarsView: View {
 
     private func ear(_ slot: NotchViewModel.EarSlot?, width: CGFloat, height: CGFloat) -> some View {
         ZStack {
-            if let slot {
+            if let slot, !isAsleep {
                 slot.view
                     .id(slot.id)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.5).combined(with: .opacity))
