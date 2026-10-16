@@ -41,10 +41,10 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 ditto -c -k --norsrc --noextattr --noacl --keepParent "$APP" "$OUT/PancakeNotch.zip"
 
-# Sign the download for Sparkle, then check the signature with the same key.
+# Sign the download for Sparkle, then check the signature with the public key inside the app.
 read -r SIGNATURE LENGTH < <("$SPARKLE_BIN/sign_update" --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" "$OUT/PancakeNotch.zip" \
   | sed -E 's/.*sparkle:edSignature="([^"]+)" length="([0-9]+)".*/\1 \2/')
-"$SPARKLE_BIN/sign_update" --verify --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" "$OUT/PancakeNotch.zip" "$SIGNATURE" >/dev/null
+swift "$ROOT/scripts/verify-update-signature.swift" "$OUT/PancakeNotch.zip" "$SIGNATURE" "$SPARKLE_PUBLIC_ED_KEY"
 
 # Release notes: the CHANGELOG section for this version ("## 0.1.0 …" up to the next "## ").
 awk -v version="$PANCAKENOTCH_VERSION" '

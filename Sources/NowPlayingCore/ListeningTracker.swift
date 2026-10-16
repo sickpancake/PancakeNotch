@@ -1,7 +1,7 @@
 import Foundation
 
 /// Measures how long each song actually plays, by the clock. A stretch starts when a song starts playing
-/// and ends when it pauses, another song starts, nothing plays any more, or Now Playing stops.
+/// and ends when it pauses, another song (or an ad) starts, nothing plays any more, or Now Playing stops.
 struct ListeningTracker: Sendable {
     /// Shorter stretches (skipping through songs) aren't worth counting.
     static let minimumSeconds: TimeInterval = 5
@@ -17,6 +17,8 @@ struct ListeningTracker: Sendable {
 
     /// Tells the tracker what's shown now; returns the stretch that just ended, if it counts.
     mutating func update(_ track: NowPlayingTrack?, at date: Date) -> ListeningRecord? {
+        // An ad isn't listening: it ends the song's stretch and starts none.
+        let track = track?.isAdvertisement == true ? nil : track
         var record: ListeningRecord?
         if let current = stretch, track?.isPlaying != true || track?.identity != current.track.identity {
             // Paused: the player says when (it may be told late, e.g. after the Mac slept).

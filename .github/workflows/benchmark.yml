@@ -32,15 +32,20 @@ jobs:
       - name: Build this branch
         run: ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/branch.app"
       # An experiment can compare against another branch and take more runs: a `.benchmark-base`
-      # file holding "<branch> [runs]".
+      # file holding "<branch, tag or commit> [runs]".
       - name: Build the comparison
         run: |
           read -r BASE RUNS < .benchmark-base 2>/dev/null || true
           echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
           echo "RUNS=${RUNS:-${{ inputs.runs }}}" >> "$GITHUB_ENV"
-          git worktree add "$RUNNER_TEMP/base" "origin/${BASE:-main}"
+          COMPARISON="${BASE:-main}"
+          if git show-ref --verify --quiet "refs/remotes/origin/$COMPARISON"; then
+            COMPARISON="refs/remotes/origin/$COMPARISON"
+          fi
+          git worktree add "$RUNNER_TEMP/base" "$COMPARISON"
           cd "$RUNNER_TEMP/base" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/base.app"
       - name: Measure
+        shell: bash   # adds pipefail: a failed benchmark fails the step instead of passing through tee
         run: |
           ./scripts/benchmark.sh "${RUNS:-3}" "$BASE=$RUNNER_TEMP/base.app" branch="$RUNNER_TEMP/branch.app" \
             | tee -a "$GITHUB_STEP_SUMMARY"

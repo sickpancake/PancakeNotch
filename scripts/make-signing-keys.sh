@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # macOS's own OpenSSL (LibreSSL): its .p12 files import into the Keychain without extra flags.
 OPENSSL=/usr/bin/openssl
 
-if [[ -e "$OUT/signing.p12" && "$THROWAWAY" != "--throwaway" ]]; then
+if [[ ( -e "$OUT/signing.p12" || -e "$OUT/update-private-key.txt" ) && "$THROWAWAY" != "--throwaway" ]]; then
   echo "$OUT already has keys; refusing to replace them." >&2
   exit 1
 fi

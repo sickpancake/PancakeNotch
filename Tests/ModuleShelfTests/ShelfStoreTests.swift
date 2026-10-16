@@ -108,6 +108,21 @@ struct ShelfStoreTests {
         #expect(FileManager.default.fileExists(atPath: userFile.path))
     }
 
+    @Test func removingAfterDragOutKeepsTheFileUntilTheNextLaunch() throws {
+        let fixture = try ShelfFixture()
+        let store = fixture.makeStore()
+        let ownedFolder = try store.newFilesFolder()
+        try Data([1]).write(to: ownedFolder.appending(path: "Photo.png"))
+        store.add([.file(ownedFolder.appending(path: "Photo.png"), owned: true)], duplicates: .ask)
+
+        // The app it was dragged to may still be copying it.
+        store.remove(store.items.map(\.id), keepingFiles: true)
+        #expect(store.items.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: ownedFolder.path))
+        fixture.makeStore().removeOrphanedFiles()
+        #expect(!FileManager.default.fileExists(atPath: ownedFolder.path))
+    }
+
     @Test func ownedFileMovedOutIsNotDeleted() throws {
         let fixture = try ShelfFixture()
         let store = fixture.makeStore()
@@ -200,6 +215,49 @@ struct ShelfOrphanTests {
         #expect(FileManager.default.fileExists(atPath: kept.path))
         #expect(!FileManager.default.fileExists(atPath: orphan.path))
     }
+    @Test(arguments: [0o000, 0o500])
+    func failedIndexRecoveryIsRetriedBeforeSaving(permissions: Int) throws {
+        let fixture = try ShelfFixture()
+        let directory = fixture.shelfDirectory
+        let index = directory.appending(path: "items.json")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let unreadable = Data("unreadable index".utf8)
+        try unreadable.write(to: index)
+        // Neither looking up the index nor moving it aside may work until access is restored.
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+        let reopened = fixture.makeStore()
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        #expect(try Data(contentsOf: index) == unreadable)
+        reopened.add([.text("new note")], duplicates: .ask)
+
+        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("items-unreadable-") }
+        #expect(try backups.map { try Data(contentsOf: $0) }.contains(unreadable))
+        #expect(fixture.makeStore().items.map(\.displayName) == ["new note"])
+    }
+
+    @Test func repeatedUnreadableIndexesAreEachPreserved() throws {
+        let fixture = try ShelfFixture()
+        let index = fixture.shelfDirectory.appending(path: "items.json")
+        try FileManager.default.createDirectory(at: fixture.shelfDirectory, withIntermediateDirectories: true)
+        let first = Data("first unreadable index".utf8)
+        let second = Data("second unreadable index".utf8)
+        try first.write(to: index)
+        _ = fixture.makeStore()
+        // The fixture's clock is unchanged: a second recovery in the same second mustn't collide.
+        try second.write(to: index)
+        let reopened = fixture.makeStore()
+        reopened.add([.text("new note")], duplicates: .ask)
+
+        let backups = try FileManager.default.contentsOfDirectory(at: fixture.shelfDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("items-unreadable-") }
+        let saved = try backups.map { try Data(contentsOf: $0) }
+        #expect(saved.contains(first))
+        #expect(saved.contains(second))
+        #expect(fixture.makeStore().items.map(\.displayName) == ["new note"])
+    }
+
     @Test func unreadableIndexKeepsItsFiles() throws {
         let fixture = try ShelfFixture()
         let store = fixture.makeStore()

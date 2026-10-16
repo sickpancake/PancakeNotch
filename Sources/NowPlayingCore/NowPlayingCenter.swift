@@ -416,7 +416,10 @@ public final class NowPlayingCenter {
     /// Brings the playing app (or the last one) to the front, launching it if needed.
     public func openPlayerApp() {
         guard connection != .practice else { return }
-        openApp(track?.bundleID ?? lastPlayerBundleID ?? "com.apple.Music")
+        // Some players report only their process: find its app before falling back to the last one.
+        let playing = track?.bundleID
+            ?? track?.processID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+        openApp(playing ?? lastPlayerBundleID ?? "com.apple.Music")
     }
 
     /// Brings an app to the front, launching it if needed. Goes through Launch Services like the Dock:

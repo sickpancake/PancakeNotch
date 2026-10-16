@@ -21,6 +21,20 @@ struct HotKeyTests {
         #expect(quit.isReservedBySystem)
         #expect(screenshot.isReservedBySystem)
         #expect(spotlight.isReservedBySystem)
+        let firstTab = try #require(HotKey(keyCode: UInt32(kVK_ANSI_1), modifiers: .command, keyLabel: "1"))
+        let trash = try #require(HotKey(keyCode: UInt32(kVK_Delete), modifiers: .command, keyLabel: "⌫"))
+        #expect(firstTab.isReservedBySystem)
+        #expect(trash.isReservedBySystem)
+    }
+
+    @Test func systemShortcutsAreReservedOnOtherLayouts() throws {
+        // Dvorak types C on the US I key; AZERTY types M on the US semicolon key.
+        let dvorakCopy = try #require(HotKey(keyCode: UInt32(kVK_ANSI_I), modifiers: .command, keyLabel: "C"))
+        let azertyMinimize = try #require(HotKey(keyCode: UInt32(kVK_ANSI_Semicolon), modifiers: .command, keyLabel: "M"))
+        let dvorakFree = try #require(HotKey(keyCode: UInt32(kVK_ANSI_I), modifiers: [.option, .command], keyLabel: "C"))
+        #expect(dvorakCopy.isReservedBySystem)
+        #expect(azertyMinimize.isReservedBySystem)
+        #expect(!dvorakFree.isReservedBySystem)
     }
 
     @Test func freeShortcutsAreNotReserved() throws {

@@ -113,6 +113,8 @@ final class AdapterProcess {
                     self.outputHandle?.readabilityHandler = nil
                     self.outputHandle = nil
                     self.process = nil
+                    // Output still on its way from this helper mustn't count after its exit.
+                    self.generation += 1
                     self.onExit?(status)
                 }
             }

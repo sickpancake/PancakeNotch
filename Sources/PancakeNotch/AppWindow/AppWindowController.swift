@@ -257,6 +257,8 @@ extension AppWindowController {
                 try render("home-shortcut", section: .home, shortcuts: withShortcut)
                 try render("keyboard-shortcut", section: .keyboard, shortcuts: withShortcut)
                 try render("notch-long-shortcut", section: .notch, shortcuts: withShortcut, size: CGSize(width: 1000, height: 2000))
+                // Unregisters it: the system hot key mustn't outlive its controller.
+                withShortcut.set(nil)
             }
         }
     }

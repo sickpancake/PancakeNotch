@@ -12,7 +12,10 @@ final class ShortcutController {
 
     /// Pauses the shortcut while the user records a new one, so pressing it doesn't fire.
     var isRecording = false {
-        didSet { _ = register(shortcut) }
+        didSet {
+            // Another app may have taken the shortcut while it was paused.
+            if let problem = register(shortcut) { errorMessage = problem }
+        }
     }
 
     @ObservationIgnored private let hotKey: GlobalHotKey
