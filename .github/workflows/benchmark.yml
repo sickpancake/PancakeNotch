@@ -37,7 +37,7 @@ jobs:
         run: |
           read -r BASE RUNS < .benchmark-base 2>/dev/null || true
           echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
-          echo "RUNS=${{ inputs.runs }}${RUNS:-}" >> "$GITHUB_ENV"
+          echo "RUNS=${RUNS:-${{ inputs.runs }}}" >> "$GITHUB_ENV"
           git worktree add "$RUNNER_TEMP/base" "origin/${BASE:-main}"
           cd "$RUNNER_TEMP/base" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/base.app"
       - name: Measure
