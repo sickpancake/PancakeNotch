@@ -75,21 +75,27 @@ jobs:
             echo "existing=$RUNNER_TEMP/current-site/appcast.xml" >> "$GITHUB_OUTPUT"
           fi
 
+      # Its own step, so the build (and everything it runs) never sees the private key.
+      - name: Update key file
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/update-key.txt"
+
       - name: Build, sign and package
         env:
           PANCAKENOTCH_VERSION: ${{ steps.version.outputs.version }}
           PANCAKENOTCH_BUILD: ${{ steps.version.outputs.build }}
           CODESIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PRIVATE_KEY_FILE: ${{ runner.temp }}/update-key.txt
           SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
           DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/PancakeNotch.zip
           EXISTING_APPCAST: ${{ steps.feed.outputs.existing }}
-        run: |
-          export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/update-key.txt"
-          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_PRIVATE_KEY_FILE"
-          ./scripts/package-release.sh
-          rm "$SPARKLE_PRIVATE_KEY_FILE"
+        run: ./scripts/package-release.sh
+
+      - name: Remove the update key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/update-key.txt"
 
       - name: Idle memory budget (ADR-0006)
         run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
