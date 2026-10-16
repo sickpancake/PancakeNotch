@@ -225,6 +225,16 @@ struct ListeningTrackerTests {
         #expect(record.started == start)
     }
 
+    @Test func adsArentListening() throws {
+        var tracker = ListeningTracker()
+        _ = tracker.update(song, at: start)
+        var ad = NowPlayingTrack(title: "Ad", isPlaying: true, bundleID: "com.spotify.client")
+        ad.isAdvertisement = true
+        let ended = tracker.update(ad, at: start.addingTimeInterval(30))
+        #expect(try #require(ended).title == "Song")
+        #expect(tracker.update(nil, at: start.addingTimeInterval(60)) == nil)
+    }
+
     @Test func aLatePauseCountsOnlyUntilThePause() throws {
         var tracker = ListeningTracker()
         _ = tracker.update(song, at: start)
