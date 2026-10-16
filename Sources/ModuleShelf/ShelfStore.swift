@@ -51,8 +51,8 @@ public final class ShelfStore {
         } catch {
             // Can't be read or decoded: kept aside rather than overwritten by the next save, and its
             // files are kept too.
-            let aside = directory.appending(path: "items-unreadable-\(Int(now().timeIntervalSince1970)).json")
-            if (try? FileManager.default.moveItem(at: indexURL, to: aside)) == nil { keepsOrphanedFiles = true }
+            keepsOrphanedFiles = true
+            try? preserveUnreadableIndex()
             logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .private)")
         }
     }
@@ -246,9 +246,18 @@ public final class ShelfStore {
 
     // MARK: Saving
 
+    private func preserveUnreadableIndex() throws {
+        let aside = directory.appending(path: "items-unreadable-\(Int(now().timeIntervalSince1970))-\(UUID().uuidString).json")
+        try FileManager.default.moveItem(at: indexURL, to: aside)
+        keepsOrphanedFiles = false
+    }
+
     private func save() {
         hasUnsavedEdits = false
         do {
+            // If recovery failed at launch, retry before writing: never overwrite the only copy of
+            // an unreadable index. Unique backup names also preserve repeated recoveries in one second.
+            if keepsOrphanedFiles { try preserveUnreadableIndex() }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(items).write(to: indexURL, options: .atomic)
         } catch {
