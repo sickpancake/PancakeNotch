@@ -372,7 +372,7 @@ struct KeyboardSettingsView: View {
         ) {
             SettingsCard(
                 header: String(localized: "Shortcuts"),
-                footer: String(localized: "Click the box, then press the keys you want. Esc cancels, Delete clears.")
+                footer: String(localized: "Click the button on the right, then press the keys you want. Esc cancels, Delete clears.")
             ) {
                 SettingsRow(
                     title: String(localized: "Open and close the notch"),

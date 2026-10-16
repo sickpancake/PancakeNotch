@@ -224,7 +224,8 @@ struct ShelfTile: View {
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.white.opacity(isSelected ? 1 : 0.8))
                 .lineLimit(2)
-                .truncationMode(.middle)
+                // File names keep their extension in view; notes and links read from the start.
+                .truncationMode(item.isFile ? .middle : .tail)
                 .multilineTextAlignment(.center)
                 .frame(width: ShelfLayout.tileSize.width - 8, height: 26, alignment: .top)
         }

@@ -146,7 +146,9 @@ struct NotchGlow: View {
             )
             .frame(width: 340 * scale, height: 120 * scale)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Takes the space it's given and lets the haze spill over: in a narrow window it mustn't
+        // widen the stage's background (the menu bar sketch would be cut off at both ends).
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
