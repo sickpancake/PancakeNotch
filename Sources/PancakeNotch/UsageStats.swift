@@ -10,12 +10,14 @@ final class UsageStats {
 
     /// Times the notch opened, ever.
     private(set) var opensTotal: Int
-    /// Times the notch opened today.
-    private(set) var opensToday: Int
+    /// Times the notch opened today. Reads 0 after midnight even before the next open.
+    var opensToday: Int { Self.dayKey(now()) == day ? countOnDay : 0 }
     /// When PancakeNotch first ran on this Mac.
     let firstLaunch: Date
 
     private var day: String
+    /// Opens counted on `day`.
+    private var countOnDay: Int
 
     init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
         self.defaults = defaults
@@ -23,7 +25,7 @@ final class UsageStats {
         let today = Self.dayKey(now())
         opensTotal = defaults.integer(forKey: Keys.opensTotal)
         let savedDay = defaults.string(forKey: Keys.day)
-        opensToday = savedDay == today ? defaults.integer(forKey: Keys.opensToday) : 0
+        countOnDay = savedDay == today ? defaults.integer(forKey: Keys.opensToday) : 0
         day = today
         if let saved = defaults.object(forKey: Keys.firstLaunch) as? Date {
             firstLaunch = saved
@@ -37,12 +39,12 @@ final class UsageStats {
         let today = Self.dayKey(now())
         if today != day {
             day = today
-            opensToday = 0
+            countOnDay = 0
         }
         opensTotal += 1
-        opensToday += 1
+        countOnDay += 1
         defaults.set(opensTotal, forKey: Keys.opensTotal)
-        defaults.set(opensToday, forKey: Keys.opensToday)
+        defaults.set(countOnDay, forKey: Keys.opensToday)
         defaults.set(day, forKey: Keys.day)
     }
 
