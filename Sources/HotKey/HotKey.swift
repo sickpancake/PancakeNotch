@@ -58,10 +58,24 @@ public struct HotKey: Codable, Equatable, Sendable {
 
     /// Shortcuts macOS or every app already uses (Quit, Close, Copy, screenshots, Spotlight, Mission
     /// Control, …). Taking one system-wide would break it everywhere, so the recorder refuses them.
+    /// Matches the key's position and, for letters and symbols, what it types: app menus match ⌘C by
+    /// the letter, so on Dvorak or AZERTY Copy sits on another key than on a US keyboard.
     public var isReservedBySystem: Bool {
         let flags = modifierFlags
-        return Self.reserved.contains { $0.keyCode == keyCode && $0.modifiers == flags }
+        return Self.reserved.contains { reserved in
+            guard reserved.modifiers == flags else { return false }
+            return reserved.keyCode == keyCode || Self.usLabels[reserved.keyCode] == keyLabel
+        }
     }
+
+    /// What the reserved letter and symbol keys type on a US keyboard.
+    private static let usLabels: [UInt32: String] = [
+        UInt32(kVK_ANSI_Q): "Q", UInt32(kVK_ANSI_W): "W", UInt32(kVK_ANSI_H): "H", UInt32(kVK_ANSI_M): "M",
+        UInt32(kVK_ANSI_Comma): ",", UInt32(kVK_ANSI_Grave): "`", UInt32(kVK_ANSI_A): "A", UInt32(kVK_ANSI_C): "C",
+        UInt32(kVK_ANSI_V): "V", UInt32(kVK_ANSI_X): "X", UInt32(kVK_ANSI_Z): "Z", UInt32(kVK_ANSI_S): "S",
+        UInt32(kVK_ANSI_O): "O", UInt32(kVK_ANSI_N): "N", UInt32(kVK_ANSI_P): "P", UInt32(kVK_ANSI_F): "F",
+        UInt32(kVK_ANSI_T): "T", UInt32(kVK_ANSI_D): "D",
+    ]
 
     private static let reserved: [(keyCode: UInt32, modifiers: NSEvent.ModifierFlags)] = {
         let command: [Int] = [

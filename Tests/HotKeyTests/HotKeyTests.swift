@@ -23,6 +23,16 @@ struct HotKeyTests {
         #expect(spotlight.isReservedBySystem)
     }
 
+    @Test func systemShortcutsAreReservedOnOtherLayouts() throws {
+        // Dvorak types C on the US I key; AZERTY types M on the US semicolon key.
+        let dvorakCopy = try #require(HotKey(keyCode: UInt32(kVK_ANSI_I), modifiers: .command, keyLabel: "C"))
+        let azertyMinimize = try #require(HotKey(keyCode: UInt32(kVK_ANSI_Semicolon), modifiers: .command, keyLabel: "M"))
+        let dvorakFree = try #require(HotKey(keyCode: UInt32(kVK_ANSI_I), modifiers: [.option, .command], keyLabel: "C"))
+        #expect(dvorakCopy.isReservedBySystem)
+        #expect(azertyMinimize.isReservedBySystem)
+        #expect(!dvorakFree.isReservedBySystem)
+    }
+
     @Test func freeShortcutsAreNotReserved() throws {
         let notch = try #require(HotKey(keyCode: UInt32(kVK_ANSI_N), modifiers: [.option, .command], keyLabel: "N"))
         let quitWithOption = try #require(HotKey(keyCode: UInt32(kVK_ANSI_Q), modifiers: [.option, .control], keyLabel: "Q"))
