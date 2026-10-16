@@ -5,10 +5,9 @@
 # For usage information read below or run the script without arguments.
 
 use strict;
-use warnings;
-use DynaLoader;
-use File::Spec;
-use File::Basename;
+# PancakeNotch patch: boot only DynaLoader's built-in functions instead of loading the DynaLoader,
+# File::Spec, File::Basename and warnings modules (the helper uses about 1.6 MiB less).
+DynaLoader::boot_DynaLoader("DynaLoader") unless defined &DynaLoader::dl_load_file;
 
 sub print_help() {
   print <<'HELP';
@@ -106,11 +105,12 @@ if (!defined $ARGV[0]) {
   print_help();
 }
 
-my $framework_basename = File::Basename::basename($framework_path);
+(my $framework_basename = $framework_path) =~ s{/+$}{};
+$framework_basename =~ s{.*/}{};
 fail "Provided path is not a framework: $framework_path"
   unless $framework_basename =~ s/\.framework$//;
 
-my $framework = File::Spec->catfile($framework_path, $framework_basename);
+(my $framework = "$framework_path/$framework_basename") =~ s{//+}{/}g;
 fail "Framework not found at $framework" unless -e $framework;
 
 my $handle = DynaLoader::dl_load_file($framework, 0)

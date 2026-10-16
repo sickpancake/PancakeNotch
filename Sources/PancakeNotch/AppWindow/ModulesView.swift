@@ -797,7 +797,8 @@ private struct ShelfModuleCard: View {
                 behavior: preferences.notchBehavior,
                 arrangement: arrangement,
                 isActive: settings.isEnabled,
-                practice: [.shelf],
+                // The example Shelf (files written to a temporary folder) only while the Shelf is on.
+                practice: settings.isEnabled ? [.shelf] : [],
                 inactiveHint: String(localized: "Turn on the Shelf to try it here."),
                 activeHint: String(localized: "Hover the notch, then click an item to open it. These are example items.")
             )

@@ -158,24 +158,34 @@ private struct ShelfTileRow: View {
             // Off-screen renders can't scroll: show what fits.
             tiles(limit: 7).frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            ScrollView(.horizontal, showsIndicators: false) { tiles() }
+            ScrollView(.horizontal, showsIndicators: false) { tiles(lazy: true) }
         }
     }
 
-    private func tiles(limit: Int = ShelfStore.capacity) -> some View {
-            HStack(spacing: ShelfLayout.tileSpacing) {
-                ForEach(module.store.items.prefix(limit)) { item in
-                    ShelfTile(
-                        module: module,
-                        item: item,
-                        thumbnail: module.thumbnails.images[item.id],
-                        isSelected: module.selection.contains(item.id),
-                        isChoosing: module.isChoosing,
-                        isCopied: module.copiedID == item.id
-                    )
-                }
+    /// Lazy in the scroll view: tiles past the edge (and their previews) are made when scrolled to.
+    private func tiles(limit: Int = ShelfStore.capacity, lazy: Bool = false) -> some View {
+        Group {
+            if lazy {
+                LazyHStack(spacing: ShelfLayout.tileSpacing) { tileViews(limit: limit) }
+            } else {
+                HStack(spacing: ShelfLayout.tileSpacing) { tileViews(limit: limit) }
             }
-            .frame(maxHeight: .infinity)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func tileViews(limit: Int) -> some View {
+        ForEach(module.store.items.prefix(limit)) { item in
+            ShelfTile(
+                module: module,
+                item: item,
+                thumbnail: module.thumbnails.images[item.id],
+                isSelected: module.selection.contains(item.id),
+                isChoosing: module.isChoosing,
+                isCopied: module.copiedID == item.id
+            )
+            .onAppear { module.thumbnails.load(CollectionOfOne(item), scale: 2) }
+        }
     }
 }
 
@@ -268,7 +278,8 @@ struct ShelfTile: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(.white.opacity(0.1))
                 .overlay(alignment: .topLeading) {
-                    Text(text)
+                    // Five tiny lines show; only their worth of a long text is laid out.
+                    Text(text.prefix(500))
                         .font(.system(size: 7.5))
                         .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(5)

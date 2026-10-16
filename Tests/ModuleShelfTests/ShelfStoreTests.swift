@@ -200,4 +200,24 @@ struct ShelfOrphanTests {
         #expect(FileManager.default.fileExists(atPath: kept.path))
         #expect(!FileManager.default.fileExists(atPath: orphan.path))
     }
+    @Test func unreadableIndexKeepsItsFiles() throws {
+        let fixture = try ShelfFixture()
+        let store = fixture.makeStore()
+        let owned = try store.newFilesFolder()
+        try Data([1]).write(to: owned.appending(path: "a.png"))
+        store.add([.file(owned.appending(path: "a.png"), owned: true)], duplicates: .ask)
+        let index = fixture.shelfDirectory.appending(path: "items.json")
+        try Data("not json".utf8).write(to: index)
+
+        // Starts empty, keeps the unreadable list aside and doesn't sweep the files it points to,
+        // in this launch or later ones.
+        let reopened = fixture.makeStore()
+        #expect(reopened.items.isEmpty)
+        reopened.removeOrphanedFiles()
+        reopened.add(try fixture.files(1), duplicates: .ask)
+        fixture.makeStore().removeOrphanedFiles()
+        #expect(FileManager.default.fileExists(atPath: owned.path))
+        let names = try FileManager.default.contentsOfDirectory(atPath: fixture.shelfDirectory.path)
+        #expect(names.contains { $0.hasPrefix("items-unreadable-") })
+    }
 }

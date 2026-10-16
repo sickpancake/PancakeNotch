@@ -38,7 +38,9 @@ public struct ShelfItem: Codable, Identifiable, Equatable, Sendable {
         case .file:
             return path.map { FileManager.default.displayName(atPath: $0) } ?? String(localized: "File")
         case .text(let text):
-            let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+            // The first non-empty line, without splitting the whole text (it can be 100 KB).
+            let first = text.drop(while: \.isNewline).prefix { !$0.isNewline }
+            let line = first.isEmpty ? Substring(text) : first
             return String(line.trimmingCharacters(in: .whitespaces).prefix(60))
         case .link(let url):
             return url.host(percentEncoded: false) ?? url.absoluteString

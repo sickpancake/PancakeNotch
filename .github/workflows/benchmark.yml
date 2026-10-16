@@ -1,0 +1,48 @@
+name: Benchmark
+
+# Builds main (or another base) and this branch on the same machine and measures both (scripts/benchmark.sh):
+# launch time, memory, CPU and download size. The table appears on the run's summary page.
+on:
+  pull_request:
+  push:
+    branches: ["perf-exp-*"]   # experiments, measured without a pull request
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per build (the table shows medians)
+        default: "3"
+
+# A newer push replaces a measurement still running for the same branch.
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Both builds get an update key, so Sparkle runs as in a real release. A random key: nothing is
+      # signed or published.
+      - name: Update key
+        run: echo "SPARKLE_PUBLIC_ED_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Build this branch
+        run: ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/branch.app"
+      # An experiment can compare against another branch and take more runs: a `.benchmark-base`
+      # file holding "<branch> [runs]".
+      - name: Build the comparison
+        run: |
+          read -r BASE RUNS < .benchmark-base 2>/dev/null || true
+          echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
+          echo "RUNS=${RUNS:-${{ inputs.runs }}}" >> "$GITHUB_ENV"
+          git worktree add "$RUNNER_TEMP/base" "origin/${BASE:-main}"
+          cd "$RUNNER_TEMP/base" && ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/base.app"
+      - name: Measure
+        run: |
+          ./scripts/benchmark.sh "${RUNS:-3}" "$BASE=$RUNNER_TEMP/base.app" branch="$RUNNER_TEMP/branch.app" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Where this branch's idle memory goes
+        run: ./scripts/diagnose-memory.sh "$RUNNER_TEMP/branch.app" 30

@@ -46,6 +46,9 @@ public final class ShelfStore {
             do {
                 items = try JSONDecoder().decode([ShelfItem].self, from: data)
             } catch {
+                // Kept aside rather than overwritten by the next save, and its files are kept too.
+                let aside = directory.appending(path: "items-unreadable-\(Int(now().timeIntervalSince1970)).json")
+                try? FileManager.default.moveItem(at: indexURL, to: aside)
                 logger.error("Shelf index unreadable, starting empty: \(error.localizedDescription, privacy: .private)")
             }
         }
@@ -146,8 +149,11 @@ public final class ShelfStore {
     }
 
     /// Deletes owned files no item points to (e.g. waiting files when the app quit with a card open).
-    /// Only looks inside our own `Files` folder, so it's safe at launch.
+    /// Only looks inside our own `Files` folder, so it's safe at launch. Does nothing while an
+    /// unreadable index is kept aside: its items' files would look orphaned.
     public func removeOrphanedFiles() {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        guard !names.contains(where: { $0.hasPrefix("items-unreadable-") }) else { return }
         let files = filesDirectory.resolvingSymlinksInPath().path + "/"
         let used = Set(items.compactMap { item -> String? in
             guard item.isOwnedFile, let path = item.path else { return nil }

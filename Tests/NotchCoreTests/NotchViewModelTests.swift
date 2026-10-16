@@ -28,6 +28,21 @@ struct NotchViewModelTests {
         )
     }
 
+    @Test func earsSleepOnlyWhileClosed() {
+        #expect(makeModel().earsAsleep)
+        #expect(!makeModel(state: .compact).earsAsleep)
+        // Any way out of Closed wakes them before it animates.
+        let opened = makeModel()
+        opened.open()
+        #expect(opened.state == .expanded && !opened.earsAsleep)
+        let tapped = makeModel()
+        tapped.tap()
+        #expect(tapped.state != .closed && !tapped.earsAsleep)
+        // Back to rest without animating (e.g. the display changed): asleep again.
+        opened.reset()
+        #expect(opened.state == .closed && opened.earsAsleep)
+    }
+
     @Test func knowsWhetherAClickChangedTheState() async throws {
         let model = makeModel()
         model.hoverChanged(true)

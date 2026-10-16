@@ -32,7 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shelf: ShelfModule?
     private let nowPlayingSettings = NowPlayingSettings()
     /// What's playing. Its helper process runs only while Now Playing is switched on.
+    /// `PANCAKENOTCH_DEBUG_PLAYER=practice` plays the silent practice songs instead (benchmark: CI has
+    /// no music), without recording them in the statistics.
     private lazy var nowPlaying: NowPlayingCenter = {
+        if ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_PLAYER"] == "practice" { return .practice() }
         let center = NowPlayingCenter.live(settings: nowPlayingSettings)
         center.onListened = { [weak self] record in
             self?.statistics.recordListening(
@@ -107,13 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notchController.onModuleShown = { [weak self] moduleID in self?.statistics.recordModuleShown(moduleID) }
         notchController.openSettings = { [weak self] in self?.showSettings() }
-        removeOldStatisticsDaily()
         observePreferences()
-        ShelfModule.removeTemporaryFiles()
-        PracticeShelf.removeLeftovers()
-        shelfStore.removeOrphanedFiles()
         seedShelfIfRequested()
         observeModules()
+        cycleNotchIfRequested()
         _ = shortcuts // registers the saved shortcut
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -146,6 +146,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates.onPendingChange = { [weak self] in self?.menuBar.updatePending() }
         updates.start()
         showWelcomeIfNeeded()
+        // Housekeeping waits until the notch has drawn. Old statistics go on the first open of the day
+        // (removeOldStatisticsDaily), so the statistics file isn't opened at launch.
+        DispatchQueue.main.async { [shelfStore] in
+            ShelfModule.removeTemporaryFiles()
+            PracticeShelf.removeLeftovers()
+            shelfStore.removeOrphanedFiles()
+        }
     }
 
     /// The first launch (or the first since the welcome was added) opens the window on the welcome.
@@ -209,6 +216,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shelfStore.add(inputs, duplicates: .addAgain)
     }
 
+    /// `PANCAKENOTCH_DEBUG_CYCLE=<seconds>` opens and closes the notch on that beat (benchmark: what the
+    /// animations cost). A debug switch only: normal use has no such loop (AGENTS.md rule 2).
+    private func cycleNotchIfRequested() {
+        guard let value = ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_CYCLE"],
+              let seconds = Double(value), seconds > 0 else { return }
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(seconds))
+                guard let self else { return }
+                guard let model = notchController.model else { continue }
+                if model.state == .expanded { model.close() } else { model.open() }
+            }
+        }
+    }
+
     /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.
     /// Each copy has its own open/selected state; items, the song and settings are shared.
     private func makeLiveModules() -> [any NotchModule] {
@@ -259,8 +281,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Statistics older than 90 days go at launch and then on the first notch open of each day (the app
-    /// can run for weeks), never on a timer.
+    /// Statistics older than 90 days go on the first notch open of each day (the app can run for
+    /// weeks), never on a timer.
     private func removeOldStatisticsDaily() {
         let today = Calendar.current.startOfDay(for: Date())
         guard lastStatisticsCleanup != today else { return }

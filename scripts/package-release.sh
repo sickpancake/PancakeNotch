@@ -39,7 +39,7 @@ echo "Designated requirement: $(codesign -d -r- "$APP" 2>&1 | sed -nE 's/^(# )?d
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/PancakeNotch.zip"
+ditto -c -k --norsrc --noextattr --noacl --keepParent "$APP" "$OUT/PancakeNotch.zip"
 
 # Sign the download for Sparkle, then check the signature with the same key.
 read -r SIGNATURE LENGTH < <("$SPARKLE_BIN/sign_update" --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" "$OUT/PancakeNotch.zip" \

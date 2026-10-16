@@ -158,7 +158,13 @@ struct AdapterStreamParser {
             lineStart = buffer.index(after: newline)
             searchFrom = lineStart
         }
-        buffer.removeSubrange(buffer.startIndex..<lineStart)
+        // A fresh buffer when everything was used: removing from the front keeps the storage an
+        // artwork line grew it to.
+        if lineStart == buffer.endIndex {
+            buffer = Data()
+        } else {
+            buffer.removeSubrange(buffer.startIndex..<lineStart)
+        }
         scanned = buffer.count
         if buffer.count > Self.maxLineLength {
             buffer = Data()

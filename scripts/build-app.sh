@@ -46,6 +46,24 @@ cp "$ROOT/Vendor/mediaremote-adapter/LICENSE" "$APP/Contents/Resources/mediaremo
 ditto "$BIN_DIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/PancakeNotch"
+
+# A smaller download: Apple Silicon code only (ADR-0021), English only (ADR-0022), no header files,
+# and no debug symbols or build-machine paths in the release app (the debug build keeps its symbols).
+SPARKLE_DIR="$APP/Contents/Frameworks/Sparkle.framework"
+for BINARY in "$SPARKLE_DIR/Versions/B/Sparkle" "$SPARKLE_DIR/Versions/B/Autoupdate" \
+    "$SPARKLE_DIR/Versions/B/Updater.app/Contents/MacOS/Updater"; do
+  if lipo "$BINARY" -verify_arch x86_64 2>/dev/null; then lipo "$BINARY" -thin arm64 -output "$BINARY"; fi
+done
+find "$SPARKLE_DIR/Versions/B" -name '*.lproj' ! -name 'Base.lproj' ! -name 'en.lproj' -prune -exec rm -rf {} +
+rm -rf "$SPARKLE_DIR/Versions/B/Headers" "$SPARKLE_DIR/Versions/B/PrivateHeaders" "$SPARKLE_DIR/Versions/B/Modules" \
+  "$SPARKLE_DIR/Headers" "$SPARKLE_DIR/PrivateHeaders" "$SPARKLE_DIR/Modules"
+if [[ "$CONFIG" == "release" ]]; then
+  strip -S -x "$APP/Contents/MacOS/PancakeNotch" 2>/dev/null
+  # Toolchain paths baked in at link time (they don't exist on people's Macs; Swift lives in /usr/lib/swift).
+  otool -l "$APP/Contents/MacOS/PancakeNotch" | awk '/LC_RPATH/ { getline; getline; print $2 }' | while read -r RPATH; do
+    case "$RPATH" in /usr/lib/*|@*) ;; *) install_name_tool -delete_rpath "$RPATH" "$APP/Contents/MacOS/PancakeNotch" ;; esac
+  done
+fi
 SPARKLE_LICENSE="$(find "$ROOT/.build/checkouts/Sparkle" "$ROOT/.build/artifacts" -maxdepth 3 -name LICENSE -path '*parkle*' 2>/dev/null | head -1)"
 if [[ -n "$SPARKLE_LICENSE" ]]; then
   cp "$SPARKLE_LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"

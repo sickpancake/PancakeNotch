@@ -348,10 +348,12 @@ private struct LiveHealth: View {
     var body: some View {
         let total = latest?.totalFootprintBytes ?? 0
         let budgetFraction = Double(total) / Double(StatsFormat.idleBudgetBytes)
+        let memoryText = latest.map { StatsFormat.megabytes($0.totalFootprintBytes) } ?? "–"
+        let cpuText = latest.map { StatsFormat.percent($0.cpuPercent) } ?? "–"
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 TileHeading(label: String(localized: "Memory now"), symbol: "memorychip")
-                Text(latest.map { StatsFormat.megabytes($0.totalFootprintBytes) } ?? "–")
+                Text(memoryText)
                     .font(.app(size: 34, weight: .bold))
                     .kerning(-0.8)
                     .monospacedDigit()
@@ -376,7 +378,7 @@ private struct LiveHealth: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 TileHeading(label: String(localized: "CPU now"), symbol: "cpu")
-                Text(latest.map { StatsFormat.percent($0.cpuPercent) } ?? "–")
+                Text(cpuText)
                     .font(.app(size: 34, weight: .bold))
                     .kerning(-0.8)
                     .monospacedDigit()
@@ -396,7 +398,8 @@ private struct LiveHealth: View {
             .accessibilityValue(Text(latest.map { StatsFormat.percent($0.cpuPercent) } ?? ""))
         }
         .fixedSize(horizontal: false, vertical: true)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: latest)
+        // Animates when a shown number changes, not on every reading (each one has a new time).
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: [memoryText, cpuText])
         .task(id: isVisible) {
             guard isVisible else { return }
             var sampler = HealthSampler(interval: 0)

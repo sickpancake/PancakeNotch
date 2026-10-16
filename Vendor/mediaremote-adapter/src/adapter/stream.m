@@ -526,6 +526,20 @@ extern void adapter_stream() {
 
     g_mediaRemote.registerForNowPlayingNotifications(g_serialdispatchQueue);
 
+    // PancakeNotch patch: quit when the app that started the stream goes away (a crash or force
+    // quit), instead of lingering until the next write fails, which never comes while nothing plays.
+    pid_t parent = getppid();
+    if (parent == 1) {
+        exit(0);
+    }
+    dispatch_source_t parent_exit = dispatch_source_create(
+        DISPATCH_SOURCE_TYPE_PROC, parent, DISPATCH_PROC_EXIT,
+        dispatch_get_main_queue());
+    dispatch_source_set_event_handler(parent_exit, ^{
+      exit(0);
+    });
+    dispatch_resume(parent_exit);
+
     CFRunLoopRun();
 
     g_mediaRemote.unregisterForNowPlayingNotifications();

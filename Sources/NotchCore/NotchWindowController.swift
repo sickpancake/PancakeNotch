@@ -203,7 +203,9 @@ public final class NotchWindowController {
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak self, weak panel, weak model] state in
             guard let panel, let model else { return }
-            panel.setFrame(model.layout.windowFrame(for: state), display: true)
+            let frame = model.layout.windowFrame(for: state)
+            // Called before and after every transition: a frame that didn't change needs no redraw.
+            if panel.frame != frame { panel.setFrame(frame, display: true) }
             // A transition's end (the size asked for is the state it settled in) after the shortcut's reveal.
             if state == model.state { self?.hideAfterReveal() }
         }

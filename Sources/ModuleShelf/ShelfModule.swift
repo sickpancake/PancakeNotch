@@ -219,7 +219,7 @@ public final class ShelfModule: NotchModule {
     }
 
     public func notchDidOpen() {
-        thumbnails.load(store.items, scale: 2)
+        thumbnails.load(store.items.prefix(ShelfThumbnails.firstVisible), scale: 2)
         Task {
             await store.prune(maxAge: settings.autoClear.maxAge)
         }
@@ -576,7 +576,7 @@ public final class ShelfModule: NotchModule {
         selection.formIntersection(ids)
         if let detailID, !ids.contains(detailID) { setHold { $0.detailID = nil } }
         thumbnails.keepOnly(ids)
-        if notch?.state == .expanded { thumbnails.load(store.items, scale: 2) }
+        if notch?.state == .expanded { thumbnails.load(store.items.prefix(ShelfThumbnails.firstVisible), scale: 2) }
         if store.items.isEmpty { confirmingClear = false }
         refill()
         updateRestingState()
