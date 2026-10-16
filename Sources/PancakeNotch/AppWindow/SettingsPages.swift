@@ -45,6 +45,11 @@ struct GeneralSettingsView: View {
                 launchAtLogin = LaunchAtLogin.isEnabled
                 needsApproval = LaunchAtLogin.needsApproval
             }
+            // Approved or turned off in System Settings meanwhile: show what's true now.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                launchAtLogin = LaunchAtLogin.isEnabled
+                needsApproval = LaunchAtLogin.needsApproval
+            }
 
             UpdatesCard(updates: updates)
         }
