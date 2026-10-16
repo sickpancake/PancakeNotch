@@ -75,13 +75,18 @@ public struct HotKey: Codable, Equatable, Sendable {
         UInt32(kVK_ANSI_V): "V", UInt32(kVK_ANSI_X): "X", UInt32(kVK_ANSI_Z): "Z", UInt32(kVK_ANSI_S): "S",
         UInt32(kVK_ANSI_O): "O", UInt32(kVK_ANSI_N): "N", UInt32(kVK_ANSI_P): "P", UInt32(kVK_ANSI_F): "F",
         UInt32(kVK_ANSI_T): "T", UInt32(kVK_ANSI_D): "D",
+        UInt32(kVK_ANSI_1): "1", UInt32(kVK_ANSI_2): "2", UInt32(kVK_ANSI_3): "3", UInt32(kVK_ANSI_4): "4",
+        UInt32(kVK_ANSI_5): "5", UInt32(kVK_ANSI_6): "6", UInt32(kVK_ANSI_7): "7", UInt32(kVK_ANSI_8): "8",
+        UInt32(kVK_ANSI_9): "9",
     ]
 
     private static let reserved: [(keyCode: UInt32, modifiers: NSEvent.ModifierFlags)] = {
         let command: [Int] = [
             kVK_ANSI_Q, kVK_ANSI_W, kVK_ANSI_H, kVK_ANSI_M, kVK_ANSI_Comma, kVK_Tab, kVK_Space, kVK_ANSI_Grave,
             kVK_ANSI_A, kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_X, kVK_ANSI_Z, kVK_ANSI_S, kVK_ANSI_O, kVK_ANSI_N, kVK_ANSI_P,
-            kVK_ANSI_F, kVK_ANSI_T,
+            kVK_ANSI_F, kVK_ANSI_T, kVK_Delete, // ⌘⌫: Move to Trash
+            // ⌘1…⌘9: tabs in browsers and Terminal, pages in this app's window.
+            kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8, kVK_ANSI_9,
         ]
         let shiftCommand: [Int] = [kVK_ANSI_Q, kVK_ANSI_Z, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_Tab]
         let optionCommand: [Int] = [kVK_Escape, kVK_ANSI_D, kVK_ANSI_H, kVK_Space]
