@@ -525,14 +525,16 @@ struct ShelfEar: View {
         let to = module.store.items.count
         guard from != to else { return }
         shownCount = from
+        // Cancelled (the notch opened or closed meanwhile): show the real count straight away.
+        defer { shownCount = nil }
         try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
         withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.5)) {
             shownCount = to
             bounce = true
         }
         try? await Task.sleep(for: .milliseconds(180))
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { bounce = false }
-        shownCount = nil
+        withAnimation(Task.isCancelled ? nil : .spring(response: 0.3, dampingFraction: 0.7)) { bounce = false }
     }
 }
 
