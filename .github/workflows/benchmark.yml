@@ -44,3 +44,5 @@ jobs:
         run: |
           ./scripts/benchmark.sh "${RUNS:-3}" "$BASE=$RUNNER_TEMP/base.app" branch="$RUNNER_TEMP/branch.app" \
             | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Where this branch's idle memory goes
+        run: ./scripts/diagnose-memory.sh "$RUNNER_TEMP/branch.app" 30
