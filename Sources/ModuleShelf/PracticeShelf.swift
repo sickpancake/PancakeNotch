@@ -101,6 +101,8 @@ public final class PracticeShelf {
         guard !isClosed else { return }
         isClosed = true
         module.onEvent = nil
+        // Quick Look doesn't retain its data source: it mustn't outlive this Shelf.
+        module.quickLook.closeIfShowing()
         // An open note saves when its view closes: do that first, so the save can't bring the folder back.
         module.clickedOutsidePreview()
         Self.openFolders.remove(folder.lastPathComponent)
