@@ -424,7 +424,8 @@ private struct LiveHealth: View {
         }
         // Minimised, hidden (⌘H) or covered: the window's still there, but nobody sees the numbers.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { note in
-            guard let window = note.object as? NSWindow, window.contentView != nil, !(window is NSPanel) else { return }
+            // Only the app window: Sparkle's update window or others would stop (or restart) the readings.
+            guard let window = note.object as? NSWindow, window.frameAutosaveName == "AppWindow" else { return }
             let visible = window.occlusionState.contains(.visible)
             if visible != isVisible { isVisible = visible }
         }
