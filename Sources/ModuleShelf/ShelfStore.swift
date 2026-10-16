@@ -44,10 +44,13 @@ public final class ShelfStore {
     public init(directory: URL = ShelfStore.defaultDirectory, now: @escaping @Sendable () -> Date = Date.init) {
         self.directory = directory
         self.now = now
-        guard FileManager.default.fileExists(atPath: indexURL.path) else { return }
         do {
             let data = try Data(contentsOf: indexURL)
             items = try JSONDecoder().decode([ShelfItem].self, from: data)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            // Only a genuinely missing index starts fresh. fileExists also returns false when
+            // directory access is denied, so it can't safely distinguish these cases.
+            return
         } catch {
             // Can't be read or decoded: kept aside rather than overwritten by the next save, and its
             // files are kept too.

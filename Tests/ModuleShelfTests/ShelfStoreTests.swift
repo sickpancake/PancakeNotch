@@ -215,19 +215,20 @@ struct ShelfOrphanTests {
         #expect(FileManager.default.fileExists(atPath: kept.path))
         #expect(!FileManager.default.fileExists(atPath: orphan.path))
     }
-    @Test func failedIndexRecoveryIsRetriedBeforeSaving() throws {
+    @Test(arguments: [0o000, 0o500])
+    func failedIndexRecoveryIsRetriedBeforeSaving(permissions: Int) throws {
         let fixture = try ShelfFixture()
         let directory = fixture.shelfDirectory
         let index = directory.appending(path: "items.json")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let unreadable = Data("unreadable index".utf8)
         try unreadable.write(to: index)
-        // Reading works, but moving the index aside doesn't, until the directory is writable again.
-        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        // Neither looking up the index nor moving it aside may work until access is restored.
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: directory.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
         let reopened = fixture.makeStore()
-        #expect(try Data(contentsOf: index) == unreadable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        #expect(try Data(contentsOf: index) == unreadable)
         reopened.add([.text("new note")], duplicates: .ask)
 
         let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
