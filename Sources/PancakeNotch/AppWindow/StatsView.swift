@@ -14,6 +14,8 @@ struct StatsView: View {
 
     @State private var range: StatsRange = .week
     @State private var summary: StatsSummary?
+    /// The listening and usage sections fade in once the first summary has loaded.
+    @State private var isShown = false
     /// Clear Statistics just ran: says so until the page is left.
     @State private var justCleared = false
     /// Bumped after Clear, so the summary loads again.
@@ -37,14 +39,14 @@ struct StatsView: View {
             } content: {
                 ListeningContent(summary: data, range: range, apps: apps)
             }
-            .opacity(summary == nil ? 0 : 1)
-            .accessibilityHidden(summary == nil)
+            .opacity(isShown ? 1 : 0)
+            .accessibilityHidden(!isShown)
 
             StatsSection(title: String(localized: "Usage")) {
                 UsageContent(summary: data, range: range)
             }
-            .opacity(summary == nil ? 0 : 1)
-            .accessibilityHidden(summary == nil)
+            .opacity(isShown ? 1 : 0)
+            .accessibilityHidden(!isShown)
 
             StatsSection(title: String(localized: "App health")) {
                 HealthContent(samples: data.health, range: range, helperPID: helperPID)
@@ -81,8 +83,12 @@ struct StatsView: View {
                 resolved[app.id] = ListeningApp.resolve(app.id)
             }
             apps = resolved
+            // The first summary fills the sections while they're still hidden, so their "Nothing yet"
+            // cards don't cross-fade with the real numbers as the page appears.
+            if summary == nil { summary = loaded }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                 summary = loaded
+                isShown = true
             }
         }
         .onChange(of: range) { confirmingClear = false }

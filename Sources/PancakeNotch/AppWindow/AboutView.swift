@@ -71,7 +71,7 @@ struct AboutView: View {
                 }
                 SettingsRow(
                     title: String(localized: "Acknowledgements"),
-                    subtitle: String(localized: "Now Playing uses mediaremote-adapter by Jonas van den Berg, under the BSD 3-Clause license.")
+                    subtitle: String(localized: "Now Playing uses mediaremote-adapter by Jonas van den Berg, under the BSD 3‑Clause license.")
                 ) {
                     Button { openURL(AppInfo.nowPlayingHelperLicense) } label: {
                         Label(String(localized: "View License"), systemImage: "arrow.up.right")
