@@ -211,7 +211,8 @@ struct LessonPlayer: View {
                     step: step,
                     number: index + 1,
                     status: status(of: step, at: index),
-                    markDone: { runner.receive(step.signal) }
+                    // The shortcut step is done by setting one, with its recorder.
+                    markDone: step.signal == .shortcutSet ? nil : { runner.receive(step.signal) }
                 ) {
                     if step.signal == .shortcutSet, index == runner.stepIndex {
                         HStack(spacing: 10) {
@@ -401,7 +402,7 @@ private struct StepRow<Extra: View>: View {
     let number: Int
     let status: StepStatus
     /// Ticks the step without doing it, for VoiceOver users (drags are hard without a pointer).
-    let markDone: () -> Void
+    let markDone: (() -> Void)?
     @ViewBuilder var extra: Extra
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -442,10 +443,11 @@ private struct StepRow<Extra: View>: View {
                     }
             }
         }
-        .accessibilityElement(children: .combine)
+        // A row with its own control (the shortcut recorder) keeps it reachable for VoiceOver.
+        .accessibilityElement(children: markDone == nil && status == .current ? .contain : .combine)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityActions {
-            if status == .current {
+            if status == .current, let markDone {
                 Button(String(localized: "Mark as Done"), action: markDone)
             }
         }
