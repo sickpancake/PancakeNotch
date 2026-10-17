@@ -18,13 +18,13 @@ func settle(_ delay: Duration, until condition: () -> Bool) async throws {
 struct NotchViewModelTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
 
-    /// The pointer sits away from the notch, so hover exits count.
-    func makeModel(state: NotchState = .closed) -> NotchViewModel {
+    /// Defaults away from the notch so hover exits count; hover-entry tests put it inside.
+    func makeModel(state: NotchState = .closed, pointer: CGPoint = CGPoint(x: 5, y: 5)) -> NotchViewModel {
         NotchViewModel(
             layout: layout,
             state: state,
             behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
-            pointerLocation: { CGPoint(x: 5, y: 5) }
+            pointerLocation: { pointer }
         )
     }
 
@@ -44,7 +44,7 @@ struct NotchViewModelTests {
     }
 
     @Test func knowsWhetherAClickChangedTheState() async throws {
-        let model = makeModel()
+        let model = makeModel(pointer: CGPoint(x: 756, y: 975))
         model.hoverChanged(true)
         try await settle(.milliseconds(300)) { model.state == .expanded }
         #expect(!model.lastChangeWasClick)
@@ -56,7 +56,7 @@ struct NotchViewModelTests {
     }
 
     @Test func hoverOpensAfterDelay() async throws {
-        let model = makeModel()
+        let model = makeModel(pointer: CGPoint(x: 756, y: 975))
         model.hoverChanged(true)
         #expect(model.state == .closed)
         try await settle(.milliseconds(300)) { model.state == .expanded }
@@ -265,7 +265,13 @@ struct NotchClickTests {
     /// A click shrinks the open panel to Compact, which then stays: hovering opens it (once the pointer
     /// has left after the click), leaving shrinks it back. The next click on the open panel closes it fully.
     @Test func clickShrinksToCompactUntilClickedAgain() async throws {
-        let model = makeModel(state: .expanded, pointer: CGPoint(x: 756, y: 300))
+        let pointer = PointerBox(CGPoint(x: 756, y: 300))
+        let model = NotchViewModel(
+            layout: layout,
+            state: .expanded,
+            behavior: NotchBehavior(openDelay: .milliseconds(10), closeDelay: .milliseconds(10)),
+            pointerLocation: { pointer.location }
+        )
         model.tap()
         #expect(model.state == .compact)
         // Still under the pointer from the click: no reopening yet.
@@ -277,18 +283,22 @@ struct NotchClickTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.state == .compact)
         // Back on it: it opens; leaving shrinks it to Compact again.
+        pointer.location = CGPoint(x: 756, y: 975)
         model.hoverChanged(true)
         try await settle(.milliseconds(100)) { model.state == .expanded }
         #expect(model.state == .expanded)
+        pointer.location = CGPoint(x: 756, y: 300)
         model.hoverChanged(false)
         try await settle(.milliseconds(100)) { model.state == .compact }
         #expect(model.state == .compact)
         // Clicking the open panel again: it closes all the way when left.
+        pointer.location = CGPoint(x: 756, y: 975)
         model.hoverChanged(true)
         try await settle(.milliseconds(100)) { model.state == .expanded }
         model.tap()
         #expect(model.state == .closed)
         model.open()
+        pointer.location = CGPoint(x: 756, y: 300)
         model.hoverChanged(false)
         try await settle(.milliseconds(100)) { model.state == .closed }
         #expect(model.state == .closed)
