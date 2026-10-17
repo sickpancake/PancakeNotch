@@ -104,8 +104,8 @@ struct UpdatesCard: View {
         } else {
             SettingsCard(header: String(localized: "Updates")) {
                 SettingsRow(
-                    title: String(localized: "This copy doesn't update itself"),
-                    subtitle: String(localized: "It was built on this Mac. Released versions from the website update automatically.")
+                    title: String(localized: "This copy can't check for updates"),
+                    subtitle: String(localized: "It was built on this Mac. Released versions from the website check for updates and ask before installing.")
                 ) {
                     Button { openURL(HelpLinks.website) } label: {
                         Label(String(localized: "Open Website"), systemImage: "arrow.up.right")
@@ -139,7 +139,7 @@ struct NotchSettingsView: View {
             title: String(localized: "Notch"),
             subtitle: String(localized: "How the notch reacts to your pointer. Try your changes right here.")
         ) {
-            NotchStage(behavior: preferences.notchBehavior, arrangement: context.arrangement, practice: practice)
+            NotchStage(behavior: preferences.notchBehavior, arrangement: context.arrangement, practice: practice, badge: .practice)
                 .background(Color.black)
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))
                 .overlay {
@@ -156,13 +156,15 @@ struct NotchSettingsView: View {
                     title: String(localized: "Open after hovering for"),
                     subtitle: String(localized: "How long the pointer rests on the notch before it opens."),
                     value: $preferences.openDelayMilliseconds,
-                    range: 0...1000
+                    range: 0...1000,
+                    recommended: Preferences.defaultOpenDelay
                 )
                 DelayRow(
                     title: String(localized: "Close after leaving for"),
                     subtitle: String(localized: "How long the notch stays open after the pointer leaves."),
                     value: $preferences.closeDelayMilliseconds,
-                    range: 100...1500
+                    range: 100...1500,
+                    recommended: Preferences.defaultCloseDelay
                 )
             }
 
@@ -212,10 +214,10 @@ struct NotchSettingsView: View {
 
             SettingsCard(header: String(localized: "Feedback")) {
                 SettingsRow(
-                    title: String(localized: "Tap the trackpad when the notch opens"),
-                    subtitle: String(localized: "A light click you feel on Force Touch trackpads.")
+                    title: String(localized: "Feel a light tap when the notch opens"),
+                    subtitle: String(localized: "On Force Touch trackpads, like a soft click under your finger.")
                 ) {
-                    Toggle(String(localized: "Tap the trackpad when the notch opens"), isOn: $preferences.hapticOnOpen)
+                    Toggle(String(localized: "Feel a light tap when the notch opens"), isOn: $preferences.hapticOnOpen)
                         .labelsHidden()
                 }
             }
@@ -300,12 +302,12 @@ private struct HiddenAppRow: View {
 }
 
 extension NotchSettingsView {
-    /// While it's hidden, the keyboard shortcut is the way in.
+    /// While it's hidden, the keyboard shortcut is the way in, except over the apps on the hide list.
     private var fullScreenFooter: String? {
         guard preferences.fullScreenHiding != .never else { return nil }
         return context.shortcuts.shortcut == nil
             ? String(localized: "Set a shortcut on the Keyboard page to open the notch while it's hidden.")
-            : String(localized: "Your keyboard shortcut still opens the notch while it's hidden.")
+            : String(localized: "Your keyboard shortcut still opens the notch while it's hidden, except while one of the apps above is full screen.")
     }
 }
 
@@ -336,19 +338,30 @@ private struct DelayRow: View {
     let subtitle: String
     @Binding var value: Double
     let range: ClosedRange<Double>
+    /// The default; a way back to it shows once the value moves away.
+    let recommended: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 24) {
                 SettingsRowLabel(title: title, subtitle: subtitle)
-                Text(label)
-                    .font(.app(size: 13, weight: .semibold))
-                    .monospacedDigit()
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(AppPalette.hover, in: Capsule())
-                    .overlay(PillOutline(color: AppPalette.hairline))
-                    .accessibilityHidden(true)
+                HStack(spacing: 8) {
+                    if value != recommended {
+                        Button(String(localized: "Reset")) {
+                            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { value = recommended }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.app(size: 12.5, weight: .medium))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .help(Text("Back to the recommended \(Int(recommended)) ms"))
+                        .accessibilityLabel(Text("Reset \(title)"))
+                        .accessibilityHint(Text("Goes back to the recommended \(Int(recommended)) milliseconds."))
+                        .transition(.opacity)
+                    }
+                    valuePill
+                }
+                .animation(.easeInOut(duration: 0.15), value: value == recommended)
             }
             MonochromeSlider(
                 value: $value,
@@ -359,6 +372,17 @@ private struct DelayRow: View {
         }
         .padding(.bottom, 4)
         .settingsRowPadding()
+    }
+
+    private var valuePill: some View {
+        Text(label)
+            .font(.app(size: 13, weight: .semibold))
+            .monospacedDigit()
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(AppPalette.hover, in: Capsule())
+            .overlay(PillOutline(color: AppPalette.hairline))
+            .accessibilityHidden(true)
     }
 
     private var label: String {

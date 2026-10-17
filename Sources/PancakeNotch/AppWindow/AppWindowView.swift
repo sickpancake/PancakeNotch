@@ -68,9 +68,11 @@ struct AppWindowView: View {
             }
         }
         .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.3), value: progress.onboardingDone)
-        // The welcome always ends on Home, also when it was replayed from About.
+        // The welcome ends on Home (also when it was replayed from About), or on Learn if asked.
         .onChange(of: progress.onboardingDone) { _, done in
-            if done { navigation.section = .home }
+            guard done else { return }
+            navigation.section = navigation.sectionAfterWelcome
+            navigation.sectionAfterWelcome = .home
         }
         .appWindowStyle()
     }
