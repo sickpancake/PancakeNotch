@@ -293,7 +293,7 @@ public final class NotchViewModel {
         // When the window shrinks (e.g. after a click shrinks the panel), AppKit reports the pointer
         // leaving and coming straight back. A "left" while it's still on the notch isn't real: ignoring it
         // keeps the click's "don't reopen" in place.
-        if !isHovering, layout.outlineFrame(for: state).contains(pointerLocation()) { return }
+        if !isHovering, layout.outline(for: state, contains: pointerLocation()) { return }
         hoverTask?.cancel()
         guard !isPinned else { return }
         if isHovering {
@@ -332,7 +332,7 @@ public final class NotchViewModel {
     /// Control took it). AppKit sends no hover events during a drag, so check where the pointer is now.
     /// Over the notch, the window's own drag events handle the drop (and may not have arrived yet).
     public func approachingDragEnded() {
-        guard !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
+        guard !layout.outline(for: state, contains: pointerLocation()) else { return }
         modules.forEach { $0.dragEnded() }
         scheduleCloseIfIdle()
     }
@@ -376,7 +376,7 @@ public final class NotchViewModel {
     /// Something may have moved the pointer away without a hover exit, e.g. a swipe to another Space
     /// (macOS hides the notch during it). Closes like a hover exit if the pointer isn't on the notch.
     public func pointerMayHaveLeft() {
-        guard !isPinned, !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
+        guard !isPinned, !layout.outline(for: state, contains: pointerLocation()) else { return }
         // A hover-open still waiting for its delay would otherwise open it with the pointer gone.
         hoverTask?.cancel()
         waitsForPointerToLeave = false
@@ -405,7 +405,7 @@ public final class NotchViewModel {
     var isHeld: Bool { modules.contains { $0.holdsOpen } }
 
     private func closeIfPointerOutside() {
-        guard !layout.outlineFrame(for: state).contains(pointerLocation()) else { return }
+        guard !layout.outline(for: state, contains: pointerLocation()) else { return }
         scheduleCloseIfIdle()
     }
 

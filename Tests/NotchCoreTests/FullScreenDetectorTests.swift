@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import NotchCore
@@ -58,6 +59,43 @@ struct FullScreenDetectorTests {
     @Test func unknownDataIsNotFullScreen() {
         #expect(!FullScreenDetector.isFullScreen(displaySpaces: [], displayUUID: builtIn))
         #expect(!FullScreenDetector.isFullScreen(displaySpaces: [["junk": 1]], displayUUID: builtIn))
+    }
+}
+
+/// Window frames recorded from full-screen Chrome on a 1470×956 display, 33 pt under the notch.
+struct FullScreenContentDetectorTests {
+    let display = CGRect(x: 0, y: 0, width: 1470, height: 956)
+    let chrome: pid_t = 15987
+
+    func windows(_ frames: [CGRect]) -> [FullScreenContentDetector.Window] {
+        frames.map { .init(owner: chrome, bounds: $0) }
+    }
+
+    @Test func aFullScreenVideoFillsTheScreen() {
+        // The toolbar slides off screen and the page covers everything under the notch.
+        let video = windows([
+            CGRect(x: 0, y: -73, width: 1470, height: 41), CGRect(x: 0, y: -113, width: 1470, height: 81),
+            CGRect(x: 0, y: 33, width: 1470, height: 149), CGRect(x: 0, y: 33, width: 1470, height: 923),
+        ])
+        #expect(FullScreenContentDetector.fillsScreen(video, display: display, topInset: 33))
+    }
+
+    @Test func aTabUnderTheToolbarDoesNot() {
+        let tab = windows([
+            CGRect(x: 0, y: 33, width: 1470, height: 41), CGRect(x: 0, y: 74, width: 1470, height: 81),
+            CGRect(x: 0, y: 33, width: 1470, height: 158), CGRect(x: 0, y: 155, width: 1470, height: 801),
+            CGRect(x: -1, y: 935, width: 447, height: 22),
+        ])
+        #expect(!FullScreenContentDetector.fillsScreen(tab, display: display, topInset: 33))
+    }
+
+    @Test func aWindowOverTheWholeDisplayFillsIt() {
+        // Apps that draw under the notch too (games, players).
+        #expect(FullScreenContentDetector.fillsScreen(windows([display]), display: display, topInset: 33))
+    }
+
+    @Test func noWindowsKeepsThePlainRule() {
+        #expect(FullScreenContentDetector.fillsScreen([], display: display, topInset: 33))
     }
 }
 

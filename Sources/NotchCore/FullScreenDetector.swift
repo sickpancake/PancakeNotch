@@ -52,3 +52,45 @@ public enum FullScreenDetector {
         return apps
     }
 }
+
+/// Tells whether a full-screen app shows something that fills the display (a full-screen video, a
+/// game), or a page under its own toolbar, like a browser tab while a video plays in another tab.
+/// Reads window frames from the window server, which needs no permission (titles aren't read). Query it
+/// when the notch is about to hide, never on a timer.
+public enum FullScreenContentDetector {
+    /// One on-screen window, as `CGWindowListCopyWindowInfo` describes it (top-left origin, y down).
+    struct Window: Equatable {
+        var owner: pid_t
+        var bounds: CGRect
+    }
+
+    /// Slack for rounding: the area under the notch can end a fraction off `safeAreaInsets.top`.
+    static let tolerance: CGFloat = 2
+
+    /// - Parameters:
+    ///   - apps: the apps in the full-screen Space.
+    ///   - screen: the display, in the coordinates `NSScreen` uses (bottom-left origin).
+    public static func fillsScreen(apps: [pid_t], screen: NSScreen) -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] else { return true }
+        let windows = list.compactMap { info -> Window? in
+            guard let pid = info[kCGWindowOwnerPID as String] as? pid_t, apps.contains(pid),
+                  let bounds = (info[kCGWindowBounds as String] as? [String: Any])
+                      .flatMap({ CGRect(dictionaryRepresentation: $0 as CFDictionary) })
+            else { return nil }
+            return Window(owner: pid, bounds: bounds)
+        }
+        return fillsScreen(windows, display: CGDisplayBounds(screen.displayID), topInset: screen.safeAreaInsets.top)
+    }
+
+    /// One window covers the whole display below the menu bar (or all of it). If the apps have no
+    /// windows on screen, macOS didn't say enough: it counts as filling, so the notch hides as before.
+    static func fillsScreen(_ windows: [Window], display: CGRect, topInset: CGFloat) -> Bool {
+        guard !windows.isEmpty else { return true }
+        return windows.contains { window in
+            let frame = window.bounds
+            return frame.minX <= display.minX + tolerance && frame.maxX >= display.maxX - tolerance
+                && frame.minY <= display.minY + topInset + tolerance && frame.maxY >= display.maxY - tolerance
+        }
+    }
+}
