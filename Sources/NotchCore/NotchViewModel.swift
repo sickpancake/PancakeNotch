@@ -92,6 +92,7 @@ public final class NotchViewModel {
     /// only once the pointer has left.
     @ObservationIgnored private var waitsForPointerToLeave = false
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    @ObservationIgnored private var wasOpenedByHover = false
     private static let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
     /// A module asked to close through Compact next time (the Shelf after a drop), for this long.
     @ObservationIgnored private var briefCompactOnClose: (duration: Duration, moduleID: String?)?
@@ -298,7 +299,7 @@ public final class NotchViewModel {
         if isHovering {
             guard state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
-                model.open()
+                model.open(fromHover: true)
                 if model.state == .expanded, model.behavior.hapticOnOpen {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
@@ -454,7 +455,7 @@ public final class NotchViewModel {
     /// Opens the panel on the most relevant module (or `moduleID`), unless Mission Control is up: the
     /// notch is hidden there but still gets the pointer, and opening it would cover the Spaces bar and
     /// steal its clicks.
-    public func open(focusing moduleID: String? = nil) {
+    public func open(focusing moduleID: String? = nil, fromHover: Bool = false) {
         hoverTask?.cancel()
         guard !isMissionControlActive() else {
             Self.logger.info("Not opening: Mission Control is up")
@@ -466,6 +467,7 @@ public final class NotchViewModel {
         briefModuleID = nil
         endPeek(animated: false)
         if state != .expanded { chooseModuleForOpening(moduleID) }
+        wasOpenedByHover = fromHover
         transition(to: .expanded)
     }
 
@@ -591,6 +593,9 @@ public final class NotchViewModel {
             guard let self, self.transitionID == id else { return }
             self.fitWindow?(self.state)
             if self.state == .closed { self.earsAsleep = true }
+            // Resizing the hover area can swallow an exit while the notch opens. Check once it
+            // settles; clicks, shortcuts and drags keep their own rules for closing.
+            if opening, self.wasOpenedByHover { self.pointerMayHaveLeft() }
         }
         if opening {
             onOpen?()
@@ -621,6 +626,7 @@ public final class NotchViewModel {
         transitionID += 1
         staysCompact = false
         waitsForPointerToLeave = false
+        wasOpenedByHover = false
         modules.forEach { $0.dragEnded() }
         let wasExpanded = state == .expanded
         state = restingState
