@@ -83,7 +83,7 @@ final class NotchDragWatcher {
     private func dragged() {
         guard press != .other else { return }
         let location = NSEvent.mouseLocation
-        let isNear = zone().contains(location)
+        let isNear = NotchLayout.area(zone(), contains: location)
         if press == .unknown {
             guard isNear else { return }
             let pasteboard = NSPasteboard(name: .drag)

@@ -17,6 +17,17 @@ struct NotchLayoutTests {
         #expect(layout.windowFrame(for: .closed) == geometry.notchRect)
     }
 
+    @Test func thePointerAgainstTheTopOfTheScreenIsOnTheNotch() {
+        let layout = NotchLayout(geometry: geometry)
+        let midX = geometry.notchRect.midX
+        for state in NotchState.allCases {
+            // Pushed against the top edge, the pointer sits at the screen's maxY: still on the notch.
+            #expect(layout.outline(for: state, contains: CGPoint(x: midX, y: geometry.screenFrame.maxY)))
+            #expect(!layout.outline(for: state, contains: CGPoint(x: midX, y: geometry.screenFrame.maxY - 300)))
+            #expect(!layout.outline(for: state, contains: CGPoint(x: 0, y: geometry.screenFrame.maxY)))
+        }
+    }
+
     @Test func statesGrowInOrder() {
         let layout = NotchLayout(geometry: geometry)
         let closed = layout.bodySize(for: .closed)

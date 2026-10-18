@@ -76,6 +76,19 @@ struct NotchHoverOpeningTests {
         model.reset()
     }
 
+    /// Pushed against the top of the screen the pointer is exactly on the outline's top edge. The check
+    /// after a hover opening once took that for "left", closed, then the hover opened it again, in a loop.
+    @Test func thePointerAgainstTheTopEdgeKeepsItOpen() async throws {
+        let pointer = PointerBox(CGPoint(x: 756, y: 982))
+        let model = makeModel(pointer: pointer)
+        model.hoverChanged(true)
+        try await settle(.milliseconds(300)) { model.state == .expanded }
+        model.pointerMayHaveLeft()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.state == .expanded)
+        model.reset()
+    }
+
     @Test(arguments: ["click", "keyboard", "drag"])
     func otherOpeningMethodsDoNotCloseForAnOutsidePointer(method: String) async throws {
         let pointer = PointerBox(outside)

@@ -94,6 +94,17 @@ public struct NotchLayout: Equatable, Sendable {
         return CGRect(x: window.minX + padding, y: window.minY + padding, width: window.width - 2 * padding, height: window.height - padding)
     }
 
+    /// The pointer is on the notch outline for a state (see `area(_:contains:)`).
+    public func outline(for state: NotchState, contains point: CGPoint) -> Bool {
+        Self.area(outlineFrame(for: state), contains: point)
+    }
+
+    /// `CGRect.contains` for an area hanging from the top of the screen, with its top edge included: a
+    /// pointer pushed against the top of the screen sits exactly there (y == the screen's maxY).
+    static func area(_ frame: CGRect, contains point: CGPoint) -> Bool {
+        point.x >= frame.minX && point.x < frame.maxX && point.y >= frame.minY && point.y <= frame.maxY
+    }
+
     /// Window frame for a state: just the outline (plus shadow room when expanded), centered on the
     /// notch and touching the top of the screen, so the window never covers more than it shows.
     public func windowFrame(for state: NotchState) -> CGRect {
