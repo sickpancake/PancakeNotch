@@ -11,20 +11,51 @@ struct ModulesView: View {
     let context: AppContext
     /// Opens a module's lesson on Learn.
     let openLesson: (LessonID) -> Void
+    /// Modules whose "Settings" dropdown is open.
+    @State private var openSettings: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        AppPage(
-            title: String(localized: "Modules"),
-            subtitle: String(localized: "Small tools that live inside the notch.")
-        ) {
-            YourModulesCard(context: context)
-            NowPlayingModuleCard(context: context) { openLesson(.nowPlaying) }
-            ShelfModuleCard(
-                preferences: context.preferences,
-                arrangement: context.arrangement,
-                settings: context.shelfSettings,
-                store: context.shelfStore
-            ) { openLesson(.shelf) }
+        ScrollViewReader { proxy in
+            AppPage(
+                title: String(localized: "Modules"),
+                subtitle: String(localized: "Small tools that live inside the notch.")
+            ) {
+                YourModulesCard(context: context) { moduleID in showSettings(moduleID, proxy: proxy) }
+                NowPlayingModuleCard(context: context, showsSettings: settingsBinding("nowPlaying")) { openLesson(.nowPlaying) }
+                ShelfModuleCard(
+                    preferences: context.preferences,
+                    arrangement: context.arrangement,
+                    settings: context.shelfSettings,
+                    store: context.shelfStore,
+                    showsSettings: settingsBinding("shelf")
+                ) { openLesson(.shelf) }
+            }
+        }
+    }
+
+    /// The scroll target for a module's "Settings" dropdown.
+    static func settingsAnchor(_ moduleID: String) -> String { "settings-\(moduleID)" }
+
+    private var animation: Animation {
+        .easeInOut(duration: reduceMotion ? 0.15 : 0.25)
+    }
+
+    private func settingsBinding(_ moduleID: String) -> Binding<Bool> {
+        Binding(
+            get: { openSettings.contains(moduleID) },
+            set: { isOpen in
+                if isOpen { openSettings.insert(moduleID) } else { openSettings.remove(moduleID) }
+            }
+        )
+    }
+
+    /// Opens a module's settings and scrolls them into view, past its preview.
+    private func showSettings(_ moduleID: String, proxy: ScrollViewProxy) {
+        withAnimation(animation) { _ = openSettings.insert(moduleID) }
+        // Once the rows are in the layout, so the scroll lands on them.
+        Task { @MainActor in
+            withAnimation(animation) { proxy.scrollTo(Self.settingsAnchor(moduleID), anchor: .top) }
         }
     }
 }
@@ -35,6 +66,8 @@ struct ModulesView: View {
 /// the ones you want as tabs, switch them on or off. Ear sides can be swapped.
 private struct YourModulesCard: View {
     let context: AppContext
+    /// Opens a module's settings further down the page.
+    let showSettings: (String) -> Void
     @State private var dragging: String?
     /// The row a reorder drag is over right now (nil once it leaves, is dropped or is cancelled).
     @State private var dropTarget: String?
@@ -44,10 +77,12 @@ private struct YourModulesCard: View {
         let arrangement = context.arrangement
         SettingsCard(
             header: String(localized: "Your modules"),
-            footer: String(localized: "Drag a module or use its arrows to change the order: the first two that are active get the small spots beside the notch. Favorites (★) are tabs in the open notch.")
+            footer: footer(arrangement.navigation)
         ) {
             ForEach(arrangement.order, id: \.self) { moduleID in
-                ModuleListRow(context: context, moduleID: moduleID, dragging: $dragging, dropTarget: $dropTarget)
+                ModuleListRow(context: context, moduleID: moduleID, dragging: $dragging, dropTarget: $dropTarget) {
+                    showSettings(moduleID)
+                }
             }
             SettingsRow(
                 title: String(localized: "Swap sides"),
@@ -63,6 +98,20 @@ private struct YourModulesCard: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: arrangement.order)
         .onDisappear { dragging = nil; dropTarget = nil }
     }
+
+    /// The order, then what a star does with the way the open notch is set to move between modules.
+    private func footer(_ navigation: NotchNavigation) -> String {
+        let order = String(localized: "Drag a module or use its arrows to reorder. The first two that are active get the spots beside the notch.")
+        let favorites = switch navigation {
+        case .tabsAndMenu:
+            String(localized: "Favorites (★) get a tab in the open notch and a big tile in the Module Menu.")
+        case .menu:
+            String(localized: "Favorites (★) get a big tile at the top of the Module Menu.")
+        case .tabs:
+            String(localized: "Every module has a tab right now, so favorites only matter with a Module Menu (Notch settings).")
+        }
+        return "\(order) \(favorites)"
+    }
 }
 
 /// One module in the list: its rank, name and what it's doing, a star and its switch.
@@ -71,6 +120,7 @@ private struct ModuleListRow: View {
     let moduleID: String
     @Binding var dragging: String?
     @Binding var dropTarget: String?
+    let showSettings: () -> Void
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -79,6 +129,8 @@ private struct ModuleListRow: View {
         let info = AppContext.moduleInfo(moduleID)
         let rank = arrangement.rank(of: moduleID)
         let isOn = context.isEnabled(moduleID)
+        // Without a Module Menu every module is a tab: a star would change nothing.
+        let favoritesMatter = arrangement.navigation != .tabs
         HStack(spacing: 12) {
             // Up and down arrows, so the order can change without dragging (keyboard, Full Keyboard Access).
             VStack(spacing: 0) {
@@ -107,6 +159,22 @@ private struct ModuleListRow: View {
                     .foregroundStyle(AppPalette.secondaryText)
             }
             Spacer(minLength: 8)
+            // Straight to the module's settings, past its preview. Only while it's on (they show only then);
+            // the space stays so the star and switch don't shift.
+            Button(action: showSettings) {
+                Image(systemName: "gearshape")
+                    .font(.app(size: 13, weight: .semibold))
+                    .foregroundStyle(isHovered ? AppPalette.primaryText : AppPalette.secondaryText)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isOn ? 1 : 0)
+            .disabled(!isOn)
+            .accessibilityHidden(!isOn)
+            .help(Text("\(info.title) settings"))
+            .accessibilityLabel(Text("\(info.title) settings"))
+            .accessibilityHint(Text("Opens the settings further down this page."))
             Button {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { arrangement.toggleFavorite(moduleID) }
             } label: {
@@ -118,6 +186,8 @@ private struct ModuleListRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!favoritesMatter)
+            .opacity(favoritesMatter ? 1 : 0.35)
             .help(Text(arrangement.isFavorite(moduleID) ? String(localized: "Remove from favorites") : String(localized: "Add to favorites")))
             .accessibilityLabel(Text(arrangement.isFavorite(moduleID)
                 ? String(localized: "Remove \(info.title) from favorites")
@@ -280,8 +350,8 @@ private struct EarsDiagram: View {
 /// and its settings while it's on.
 private struct NowPlayingModuleCard: View {
     let context: AppContext
+    @Binding var showsSettings: Bool
     let learn: () -> Void
-    @State private var showsSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var settings: NowPlayingSettings { context.nowPlayingSettings }
@@ -302,7 +372,8 @@ private struct NowPlayingModuleCard: View {
                 // The pretend song plays only while Now Playing is on: nothing animates under the dimmed stage.
                 practice: settings.isEnabled ? [.nowPlaying] : [],
                 inactiveHint: String(localized: "Turn on Now Playing to try it here."),
-                activeHint: String(localized: "A pretend song is playing. Hover the notch and try the buttons.")
+                activeHint: String(localized: "A pretend song is playing. Hover the notch and try the buttons."),
+                badge: .practice
             )
             .background(Color.black)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous))
@@ -326,6 +397,7 @@ private struct NowPlayingModuleCard: View {
                 SettingsDisclosure(isOpen: showsSettings, label: String(localized: "Now Playing settings")) {
                     withAnimation(animation) { showsSettings.toggle() }
                 }
+                .id(ModulesView.settingsAnchor("nowPlaying"))
                 if showsSettings {
                     AppPalette.hairline.frame(height: 1)
                     NowPlayingSettingsRows(settings: settings, center: context.nowPlaying)
@@ -479,9 +551,9 @@ extension NowPlayingSettingsRows {
         }
         let text = switch settings.soundBars {
         case .followMusic:
-            String(localized: "The bars move with the sound of the app that's playing.")
+            String(localized: "The bars follow the real sound of the app that's playing, beat by beat.")
         case .gentle:
-            String(localized: "The bars dance while the playing app makes sound and rest when it's quiet. No permission needed.")
+            String(localized: "A calm made-up animation while the playing app makes sound; the bars rest when it's quiet. No permission needed.")
         case .still:
             String(localized: "The bars stand still.")
         }
@@ -780,8 +852,8 @@ private struct ShelfModuleCard: View {
     let arrangement: ModuleArrangement
     @Bindable var settings: ShelfSettings
     let store: ShelfStore
+    @Binding var showsSettings: Bool
     let learn: () -> Void
-    @State private var showsSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let points = [
@@ -800,7 +872,8 @@ private struct ShelfModuleCard: View {
                 // The example Shelf (files written to a temporary folder) only while the Shelf is on.
                 practice: settings.isEnabled ? [.shelf] : [],
                 inactiveHint: String(localized: "Turn on the Shelf to try it here."),
-                activeHint: String(localized: "Hover the notch, then click an item to open it. These are example items.")
+                activeHint: String(localized: "Hover the notch, then click an item to open it. These are example items."),
+                badge: .practice
             )
             .background(Color.black)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous))
@@ -878,6 +951,7 @@ private struct ShelfModuleCard: View {
         SettingsDisclosure(isOpen: showsSettings, label: String(localized: "Shelf settings")) {
             withAnimation(animation) { showsSettings.toggle() }
         }
+        .id(ModulesView.settingsAnchor("shelf"))
     }
 }
 
@@ -978,16 +1052,6 @@ private struct ShelfSettingsRows: View {
         ) {
             Toggle(String(localized: "Show the Shelf's count beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
-        }
-        SettingsRow(
-            title: String(localized: "Mission Control gets in the way of drops"),
-            subtitle: String(localized: "macOS opens Mission Control when you drag to the very top of the screen. The notch opens before that, so drop a little lower, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
-        ) {
-            Button(String(localized: "Open Desktop & Dock")) {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
         }
     }
 }

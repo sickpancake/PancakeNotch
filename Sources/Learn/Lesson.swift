@@ -182,7 +182,7 @@ public struct Lesson: Identifiable, Sendable {
             LessonStep(
                 id: "shelf.add",
                 title: String(localized: "Drop a file on the notch", comment: "Lesson step title"),
-                detail: String(localized: "Drag one of the practice files below onto the notch.", comment: "Lesson step detail"),
+                detail: String(localized: "Drag one of the practice files onto the notch.", comment: "Lesson step detail"),
                 symbol: "tray.and.arrow.down",
                 signal: .shelfItemAdded
             ),
@@ -210,7 +210,7 @@ public struct Lesson: Identifiable, Sendable {
             LessonStep(
                 id: "shelf.dragOut",
                 title: String(localized: "Drag an item out", comment: "Lesson step title"),
-                detail: String(localized: "Drag it out of the notch into the box below, or anywhere you want a copy.", comment: "Lesson step detail"),
+                detail: String(localized: "Drag it out of the notch into the dashed box, or anywhere you want a copy.", comment: "Lesson step detail"),
                 symbol: "tray.and.arrow.up",
                 signal: .shelfDraggedOut
             ),

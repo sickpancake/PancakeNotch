@@ -71,7 +71,8 @@ private struct LessonCard: View {
                         .font(.app(size: 12.5))
                         .foregroundStyle(AppPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(isDone ? String(localized: "Done") : String(localized: "\(lesson.steps.count) steps"))
+                    // Picking a finished lesson starts it from the top: say so instead of just "Done".
+                    Text(isDone ? String(localized: "Done · Practice again") : String(localized: "\(lesson.steps.count) steps"))
                         .font(.app(size: 11.5, weight: .semibold))
                         .foregroundStyle(isDone ? AppPalette.primaryText : AppPalette.secondaryText)
                         .padding(.top, 6)
@@ -158,7 +159,8 @@ struct LessonPlayer: View {
                 arrangement: arrangement,
                 modules: practiceModules,
                 activeHint: hint,
-                onStateChange: notchChanged
+                onStateChange: notchChanged,
+                badge: .practice
             )
             .background(Color.black)
 
@@ -256,7 +258,7 @@ struct LessonPlayer: View {
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
-            Button(String(localized: "Do again"), action: restart)
+            Button(String(localized: "Practice Again"), action: restart)
             if let nextLesson {
                 Button(String(localized: "Next: \(nextLesson.title)"), action: onNext)
                     .buttonStyle(ProminentPillButtonStyle())
@@ -492,35 +494,37 @@ private struct PracticeTray: View {
     @State private var received = 0
 
     var body: some View {
-        HStack(spacing: 18) {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(title: String(localized: "Practice files"))
-                HStack(spacing: 10) {
-                    ForEach(files, id: \.self) { url in
-                        PracticeFileChip(url: url)
-                    }
+        // One slim row, so the steps below stay close to the notch.
+        HStack(spacing: 14) {
+            SectionLabel(title: String(localized: "Practice files"))
+                .fixedSize()
+            HStack(spacing: 6) {
+                ForEach(files, id: \.self) { url in
+                    PracticeFileChip(url: url)
                 }
             }
             Spacer(minLength: 12)
             dropBox
         }
         .padding(.horizontal, AppMetrics.cardInset)
-        .padding(.vertical, 16)
+        .padding(.vertical, 10)
     }
 
     /// Takes whatever is dragged out of the practice Shelf and keeps none of it.
     private var dropBox: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        return VStack(spacing: 6) {
+        return HStack(spacing: 8) {
             Image(systemName: received > 0 ? "checkmark" : "tray.and.arrow.up")
-                .font(.app(size: 16, weight: .semibold))
+                .font(.app(size: 14, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
             Text(received > 0 ? String(localized: "Got it") : String(localized: "Drag items out to here"))
                 .font(.app(size: 11.5, weight: .medium))
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
         }
         .foregroundStyle(isTargeted ? AppPalette.primaryText : AppPalette.secondaryText)
-        .frame(width: 150, height: 76)
+        // Gives way a little in a narrow window, so the strip never overflows.
+        .padding(.horizontal, 10)
+        .frame(minWidth: 130, maxWidth: 170, minHeight: 52)
         .background(isTargeted ? AppPalette.selection : .clear, in: shape)
         .overlay {
             shape.strokeBorder(isTargeted ? Color.white.opacity(0.6) : AppPalette.hairlineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
@@ -542,16 +546,16 @@ private struct PracticeFileChip: View {
     @State private var isHovered = false
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                 .resizable()
-                .frame(width: 38, height: 38)
+                .frame(width: 30, height: 30)
             Text(url.lastPathComponent)
-                .font(.app(size: 11, weight: .medium))
+                .font(.app(size: 10.5, weight: .medium))
                 .foregroundStyle(AppPalette.secondaryText)
                 .lineLimit(1)
         }
-        .frame(width: 76, height: 70)
+        .frame(width: 70, height: 52)
         .background(isHovered ? AppPalette.hover : .clear, in: .rect(cornerRadius: 10, style: .continuous))
         .contentShape(.rect(cornerRadius: 10))
         .onHover { isHovered = $0 }

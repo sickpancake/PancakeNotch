@@ -92,6 +92,8 @@ struct OnboardingView: View {
             }
             Spacer()
             if step == .learn {
+                Button(String(localized: "Open Learn"), action: openLearn)
+                    .accessibilityHint(Text("Ends the welcome and opens the next lesson on the Learn page."))
                 Button(String(localized: "Done"), action: finish)
                     .buttonStyle(ProminentPillButtonStyle())
                     .keyboardShortcut(.defaultAction)
@@ -123,6 +125,14 @@ struct OnboardingView: View {
 
     private func finish() {
         progress.finishWelcome()
+    }
+
+    /// Ends the welcome on Learn, at the first lesson not done yet.
+    private func openLearn() {
+        let navigation = context.navigation
+        navigation.lesson = LessonID.allCases.first { !progress.isDone($0) } ?? .basics
+        navigation.sectionAfterWelcome = .learn
+        finish()
     }
 
     // MARK: Pages
