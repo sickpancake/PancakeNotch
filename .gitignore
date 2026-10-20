@@ -29,6 +29,7 @@ CLAUDE.md
 CONTEXT.md
 docs/adr/
 .claude/
+/.planning-backups/
 
 # Secrets: signing certificates and Sparkle keys must never be committed (ADR-0005)
 *.p12
@@ -46,3 +47,7 @@ update-public-key.txt
 
 # Website design-check scratch folder
 .taste-skill/
+
+# Website (web/): installed packages and build output
+web/node_modules/
+web/dist/

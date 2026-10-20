@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Monochrome like the app: black, white and greys. Apple's own fonts, nothing downloaded. */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --color-ink: #fff;
+  --color-soft: #a3a3a3;
+
+  --animate-float: float 7s ease-in-out infinite;
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-7px) rotate(-1.2deg); }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    background: #000;
+  }
+
+  body {
+    @apply bg-black font-sans text-ink antialiased;
+  }
+}
