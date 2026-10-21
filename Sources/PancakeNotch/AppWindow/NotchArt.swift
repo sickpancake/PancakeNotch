@@ -37,6 +37,14 @@ final class PracticeSet {
     func close() { update([]) }
 }
 
+/// Whether a stage drives the real notch or a practice copy. Shown in its corner in every state.
+enum StageBadge {
+    /// The user's real notch and data (Home).
+    case live
+    /// Practice modules on made-up data.
+    case practice
+}
+
 /// The top edge of a pretend screen with a working notch in it: a sketched menu bar, a soft glow
 /// behind the notch and a live `NotchPreview`, so people can try their hover settings right in the
 /// window. It can hold practice modules (a pretend song, a Shelf with example items): click, drop,
@@ -60,7 +68,12 @@ struct NotchStage: View {
     var onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
     /// Opens the preview on appearing (off-screen snapshots).
     var startState: NotchState?
+    /// "Live" or "Practice" in the bottom corner; none where it's obvious (the welcome).
+    var badge: StageBadge?
     @State private var own = PracticeSet()
+    /// The preview's state, so the hint can step aside while it's open.
+    @State private var previewState: NotchState = .closed
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let size = NotchPreview.restingSize(screenWidth: screenWidth)
@@ -71,7 +84,10 @@ struct NotchStage: View {
             modules: modules ?? own.modules,
             arrangement: arrangement,
             acceptsDragSource: { !ShelfModule.isOwnDragSource($0) },
-            onStateChange: onStateChange,
+            onStateChange: { state, byClick in
+                previewState = state
+                onStateChange?(state, byClick)
+            },
             startState: startState
         )
         .opacity(isActive ? 1 : 0.4)
@@ -92,6 +108,17 @@ struct NotchStage: View {
                     .accessibilityHidden(true)
                 hint
                     .padding(.top, size.height * 0.5)
+                    // The open panel covers the middle: hide the hint instead of letting it peek out.
+                    .opacity(previewState == .expanded ? 0 : 1)
+                    .animation(.easeInOut(duration: reduceMotion ? 0.1 : 0.2), value: previewState)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let badge {
+                StageBadgeLabel(badge: badge)
+                    .padding(.leading, 14)
+                    .padding(.bottom, 10)
+                    .opacity(isActive ? 1 : 0.5)
             }
         }
         .clipped()
@@ -117,6 +144,35 @@ struct NotchStage: View {
         .foregroundStyle(AppPalette.secondaryText)
         // The default hint repeats what the page says; a custom one (e.g. "this is a practice Shelf") is read.
         .accessibilityHidden(isActive ? activeHint == nil : inactiveHint == nil)
+    }
+}
+
+/// A quiet tag in the stage's corner: a dot for "Live", a cap for "Practice".
+private struct StageBadgeLabel: View {
+    let badge: StageBadge
+
+    var body: some View {
+        HStack(spacing: 5) {
+            switch badge {
+            case .live:
+                Circle()
+                    .fill(AppPalette.primaryText)
+                    .frame(width: 5, height: 5)
+                Text("Live")
+            case .practice:
+                Image(systemName: "graduationcap")
+                    .font(.app(size: 9.5, weight: .bold))
+                Text("Practice")
+            }
+        }
+        .font(.app(size: 10.5, weight: .semibold))
+        .kerning(0.6)
+        .textCase(.uppercase)
+        .foregroundStyle(AppPalette.secondaryText)
+        // Sits over the preview's shadow margin: never in the way of the pointer.
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(badge == .live ? Text("Live: your real notch") : Text("Practice notch"))
     }
 }
 

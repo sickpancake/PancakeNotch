@@ -30,13 +30,14 @@ struct StatsView: View {
             title: String(localized: "Statistics"),
             subtitle: String(localized: "What you listened to and how you use the notch. Kept only on this Mac.")
         ) {
+            // Up here because it sets the time for everything on the page, memory history included.
+            MonochromeSegmented(
+                title: String(localized: "Time range"),
+                options: StatsRange.allCases.map { (value: $0, label: $0.label) },
+                selection: $range
+            )
+        } content: {
             StatsSection(title: String(localized: "Listening")) {
-                MonochromeSegmented(
-                    title: String(localized: "Time range"),
-                    options: StatsRange.allCases.map { (value: $0, label: $0.label) },
-                    selection: $range
-                )
-            } content: {
                 ListeningContent(summary: data, range: range, apps: apps)
             }
             .opacity(isShown ? 1 : 0)
@@ -146,7 +147,7 @@ private struct ListeningContent: View {
 
     var body: some View {
         if summary.totalPlays == 0 {
-            EmptyCard(symbol: "music.note", text: String(localized: "Nothing yet. Play some music and it shows up here."))
+            EmptyCard(symbol: "music.note", text: String(localized: "Nothing yet. Play music, a podcast or a video and it shows up here."))
         } else {
             HStack(spacing: 12) {
                 StatsTile(
@@ -156,7 +157,7 @@ private struct ListeningContent: View {
                     caption: range.caption
                 )
                 StatsTile(
-                    label: String(localized: "Songs played"),
+                    label: String(localized: "Plays"),
                     symbol: "music.note",
                     value: summary.totalPlays.formatted(),
                     caption: range.caption
@@ -178,7 +179,7 @@ private struct ListeningContent: View {
             )
 
             HStack(alignment: .top, spacing: 12) {
-                RankedCard(title: String(localized: "Top songs")) {
+                RankedCard(title: String(localized: "Most played")) {
                     ForEach(Array(summary.topSongs.enumerated()), id: \.element.id) { index, song in
                         RankedRow(
                             rank: index + 1,
@@ -189,7 +190,7 @@ private struct ListeningContent: View {
                         )
                     }
                 }
-                RankedCard(title: String(localized: "Top artists")) {
+                RankedCard(title: String(localized: "Top creators")) {
                     ForEach(Array(summary.topArtists.enumerated()), id: \.element.id) { index, artist in
                         RankedRow(
                             rank: index + 1,
@@ -218,6 +219,8 @@ private struct ListeningContent: View {
                     }
                 }
             }
+
+            Footnote(String(localized: "A play is 5 seconds or more without a pause; playing again after a pause counts as a new one. Songs, podcasts and videos all count."))
         }
     }
 
@@ -333,11 +336,7 @@ private struct HealthContent: View {
                     .padding(AppMetrics.cardInset)
             }
             .glassPanel()
-            Text("Memory is how much PancakeNotch uses, music helper included (Activity Monitor shows the same number). In the background it should stay under 50 MB; with this window open it uses a bit more. CPU near 0% means it's resting. A reading is saved now and then when the notch opens.")
-                .font(.app(size: 12.5))
-                .foregroundStyle(AppPalette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, AppMetrics.cardInset)
+            Footnote(String(localized: "Memory includes the music helper and matches Activity Monitor. The 50 MB limit is for the background, with this window closed. CPU near 0% means it's resting. The chart uses readings saved now and then when the notch opens."))
         }
     }
 }
@@ -438,7 +437,7 @@ private struct LiveHealth: View {
             ? String(localized: "App \(StatsFormat.megabytes(latest.footprintBytes)), Now Playing helper \(StatsFormat.megabytes(latest.helperFootprintBytes)).")
             : ""
         let budgetLine = total > StatsFormat.idleBudgetBytes
-            ? String(localized: "Over the \(budget) background limit, because this window is open.")
+            ? String(localized: "Above the \(budget) background limit. That limit is for when this window is closed; with it open, a bit more is normal.")
             : String(localized: "Under the \(budget) background limit.")
         return parts.isEmpty ? budgetLine : "\(parts) \(budgetLine)"
     }
@@ -551,7 +550,8 @@ private struct MemoryHistory: View {
             return "\(when) · \(StatsFormat.megabytes(sample.totalFootprintBytes))"
         }
         guard let last = samples.last else { return nil }
-        return String(localized: "Latest \(StatsFormat.megabytes(last.totalFootprintBytes))")
+        let when = last.date.formatted(.relative(presentation: .named))
+        return String(localized: "Last saved \(when) · \(StatsFormat.megabytes(last.totalFootprintBytes))")
     }
 
     private var accessibilitySummary: String {
@@ -896,6 +896,8 @@ private struct RankedRow<Icon: View>: View {
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
             }
         }
+        // Long titles are cut off: the whole thing on hover.
+        .help(Text(subtitle.map { "\(title)\n\($0)" } ?? title))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(subtitle.map { "\(rank). \(title), \($0)" } ?? "\(rank). \(title)"))
         .accessibilityValue(Text(value))
@@ -940,6 +942,24 @@ private struct SymbolIcon: View {
             .frame(width: 24, height: 24)
             .background(AppPalette.selection, in: .rect(cornerRadius: 7, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+/// A grey note under a section's cards, lined up with the text inside them.
+private struct Footnote: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.app(size: 12.5))
+            .foregroundStyle(AppPalette.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, AppMetrics.cardInset)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

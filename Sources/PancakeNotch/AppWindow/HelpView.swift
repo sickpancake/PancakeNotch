@@ -1,3 +1,4 @@
+import ModuleShelf
 import NowPlayingCore
 import SwiftUI
 
@@ -16,6 +17,7 @@ struct HelpView: View {
         ) {
             notchCard
             musicCard
+            shelfCard
             shortcutCard
             updatesCard
             startOverCard
@@ -54,7 +56,7 @@ struct HelpView: View {
                 SettingsRow(
                     title: String(localized: "It hides in full screen"),
                     subtitle: preferences.fullScreenHiding == .always
-                        ? String(localized: "Set to hide whenever an app fills the screen. Your keyboard shortcut still opens it.")
+                        ? String(localized: "Set to hide whenever an app fills the screen. Your keyboard shortcut still opens it, except over apps on your hide list.")
                         : String(localized: "While a full-screen video plays, it hides until you move the pointer.")
                 ) {
                     Button(String(localized: "Notch Settings")) { navigation.section = .notch }
@@ -116,6 +118,46 @@ struct HelpView: View {
                 }
             }
             MoreOnlineRow(topic: .musicNotDetected)
+        }
+    }
+
+    // MARK: Shelf
+
+    @ViewBuilder
+    private var shelfCard: some View {
+        let settings = context.shelfSettings
+        let store = context.shelfStore
+        SettingsCard(header: String(localized: "The Shelf")) {
+            if !settings.isEnabled {
+                SettingsRow(
+                    title: String(localized: "The Shelf is switched off"),
+                    subtitle: String(localized: "Turn it on to keep files, text and links in the notch.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.isEnabled = true }
+                }
+            } else {
+                SettingsRow(
+                    title: String(localized: "A drop doesn't land"),
+                    subtitle: String(localized: "Dragging to the very top of the screen can open Mission Control instead. Drop a little lower, on the open notch, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
+                ) {
+                    Button(String(localized: "Open Desktop & Dock")) { HelpLinks.openDesktopAndDockSettings() }
+                }
+                SettingsRow(
+                    title: String(localized: "An item disappeared"),
+                    subtitle: String(localized: "The Shelf only remembers where files are. Moved or renamed files stay; a deleted file leaves the Shelf the next time the notch opens.")
+                ) {
+                    EmptyView()
+                }
+                SettingsRow(
+                    title: store.items.count >= ShelfStore.capacity
+                        ? String(localized: "The Shelf is full")
+                        : String(localized: "It holds \(ShelfStore.capacity) items"),
+                    subtitle: String(localized: "\(store.items.count) of \(ShelfStore.capacity) now. When it's full, the notch shows what didn't fit and lets you make room.")
+                ) {
+                    EmptyView()
+                }
+            }
+            MoreOnlineRow(topic: .shelf)
         }
     }
 

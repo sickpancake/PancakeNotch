@@ -95,29 +95,42 @@ struct SectionLabel: View {
     }
 }
 
-/// A page in the detail pane: a big title, a line about the page, then its content.
-struct AppPage<Content: View>: View {
+/// A page in the detail pane: a big title, a line about the page, then its content. An optional
+/// control on the right of the title applies to the whole page (Statistics' time range).
+struct AppPage<Accessory: View, Content: View>: View {
     let title: String
     let subtitle: String
+    @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
 
     var body: some View {
         PageScroll {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.app(size: 30, weight: .bold))
-                    .kerning(-0.4)
-                    .foregroundStyle(AppPalette.primaryText)
-                    .accessibilityAddTraits(.isHeader)
-                Text(subtitle)
-                    .font(.app(size: 14))
-                    .foregroundStyle(AppPalette.secondaryText)
+            HStack(alignment: .bottom, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.app(size: 30, weight: .bold))
+                        .kerning(-0.4)
+                        .foregroundStyle(AppPalette.primaryText)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(subtitle)
+                        .font(.app(size: 14))
+                        .foregroundStyle(AppPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                accessory
             }
             .padding(.bottom, 28)
             VStack(alignment: .leading, spacing: 28) {
                 content
             }
         }
+    }
+}
+
+extension AppPage where Accessory == EmptyView {
+    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+        self.init(title: title, subtitle: subtitle, accessory: { EmptyView() }, content: content)
     }
 }
 

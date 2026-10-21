@@ -5,8 +5,9 @@ import os
 
 /// Hides the notch in full screen as the user chose (ADR-0030):
 /// - **While watching**: while an app in the full-screen Space plays (Now Playing says so when it's that
-///   app, else Core Audio hears it) and the user sits still. Music from a background app doesn't count;
-///   scrolling or moving the pointer brings the notch back until the user has been still for a moment.
+///   app, else Core Audio hears it), what it shows fills the screen, and the user sits still. Music from a
+///   background app doesn't count, nor does a browser tab under its toolbar while a video plays in another
+///   tab; scrolling or moving the pointer brings the notch back until the user has been still for a moment.
 /// - **Always**: whenever the built-in display shows a full-screen app.
 /// Apps on the hide list hide it completely, the shortcut included.
 ///
@@ -25,6 +26,8 @@ final class FullScreenWatch {
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "app")
 
     private var isFullScreen = false
+    /// The apps filling the display's full-screen Space (two in split view).
+    private var fullScreenApps: [pid_t] = []
     /// The apps in the full-screen Space, while "While watching" needs to know whether they play.
     private var apps: [SoundSourceID] = []
     private let sound = AppSoundWatcher()
@@ -54,11 +57,19 @@ final class FullScreenWatch {
             fullScreenApps = FullScreenDetector.fullScreenApps(displayID: screen.displayID)
         }
         isFullScreen = fullScreenApps != nil
-        apps = hiding == .whileWatching
+        self.fullScreenApps = fullScreenApps ?? []
+        let newApps = hiding == .whileWatching
             ? (fullScreenApps ?? []).compactMap { pid in
                 SoundSourceID(processID: pid, bundleIDs: [NSRunningApplication(processIdentifier: pid)?.bundleIdentifier])
             }
             : []
+        if newApps != apps {
+            // Another app fills the screen: the last one's pause grace doesn't carry over to it.
+            pauseTask?.cancel()
+            pauseTask = nil
+            isPlaying = false
+        }
+        apps = newApps
         sound.watch(apps)
         playingMayHaveChanged()
     }
@@ -140,7 +151,13 @@ final class FullScreenWatch {
         let hiddenApps = NotchSettings.appsHiddenInFullScreen
         let suppress = isFullScreen
             && NSWorkspace.shared.frontmostApplication?.bundleIdentifier.map(hiddenApps.contains) == true
-        let hide = hiding.hides(isFullScreen: isFullScreen, isPlaying: isPlaying, isUserActive: isUserActive)
+        var hide = hiding.hides(isFullScreen: isFullScreen, isPlaying: isPlaying, isUserActive: isUserActive)
+        // A browser tab under its toolbar isn't a full-screen video, even while a video plays in another
+        // tab. Checked only when it would hide; split view keeps the plain rule (its tiles are narrower).
+        if hide, hiding == .whileWatching, fullScreenApps.count == 1, let screen = NSScreen.builtIn,
+           !FullScreenContentDetector.fillsScreen(apps: fullScreenApps, screen: screen) {
+            hide = false
+        }
         if suppress != notch.isSuppressed || hide != notch.isHiddenForFullScreen {
             logger.info("Notch \(suppress ? "hidden for a listed full-screen app" : hide ? "hidden in full screen" : "shown", privacy: .public)")
         }

@@ -200,13 +200,14 @@ private struct NotchHero: View {
                 arrangement: context.arrangement,
                 isActive: isOn,
                 modules: liveModules,
-                activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too.")
+                activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too."),
+                badge: .live
             )
             .onAppear { liveModules = context.makeLiveModules() }
             .onChange(of: enabledModules) { liveModules = context.makeLiveModules() }
             .onDisappear { liveModules = [] }
 
-        HStack(spacing: 14) {
+            HStack(spacing: 14) {
                 StatusBadge(isOn: isOn)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(isOn ? String(localized: "Notch is on") : String(localized: "Notch is off"))

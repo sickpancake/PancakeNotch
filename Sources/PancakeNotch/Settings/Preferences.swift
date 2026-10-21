@@ -49,8 +49,8 @@ final class Preferences {
         defaults.register(defaults: [
             Keys.notchEnabled: true,
             Keys.showMenuBarIcon: true,
-            Keys.openDelay: 150.0,
-            Keys.closeDelay: 300.0,
+            Keys.openDelay: Self.defaultOpenDelay,
+            Keys.closeDelay: Self.defaultCloseDelay,
             Keys.hapticOnOpen: false,
             Keys.fullScreenHiding: FullScreenHiding.whileWatching.rawValue,
         ])
@@ -63,6 +63,10 @@ final class Preferences {
         let hiding = defaults.string(forKey: Keys.fullScreenHiding)
         fullScreenHiding = hiding.flatMap(FullScreenHiding.init(rawValue:)) ?? (hiding == "always" ? .always : .whileWatching)
     }
+
+    /// The recommended hover delays, in milliseconds (the Notch page can go back to them).
+    static let defaultOpenDelay = 150.0
+    static let defaultCloseDelay = 300.0
 
     private enum Keys {
         static let notchEnabled = "notchEnabled"

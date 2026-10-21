@@ -72,6 +72,13 @@ enum HelpLinks {
         return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
+    /// System Settings › Desktop & Dock (the Mission Control setting that can get in the way of drops).
+    static func openDesktopAndDockSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// System Settings › Privacy & Security › Automation (Music and Spotify control).
     static func openAutomationSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {

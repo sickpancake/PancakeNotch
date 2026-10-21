@@ -14,6 +14,8 @@ final class AppNavigation {
     var section: AppSection = .home
     /// The lesson shown on Learn; other pages pick one before switching there.
     var lesson: LessonID = .basics
+    /// Where the window goes when the welcome ends; Home unless the welcome asked for Learn.
+    var sectionAfterWelcome: AppSection = .home
 
     /// Opens a lesson on Learn.
     func open(_ lesson: LessonID) {
