@@ -1,17 +1,31 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { easeIn, m, useMotionTemplate, useMotionValueEvent, useReducedMotion, useTransform, type MotionValue } from 'motion/react'
 import appIcon from '@/assets/app-icon.png'
+import { cn } from '@/lib/utils'
 import { DitherSwirl } from './DitherSwirl'
 import { FloatingIcon } from './FloatingIcon'
 
 /* The first screen. The intro takes 5 seconds: the name fades in at the centre, slides to its place,
    then the swirl, the subtitle and the icon fade in together. Everything moves on a long glide: it
    starts right away and slows into a long, soft landing. With Reduce Motion everything simply fades
-   in and the swirl holds still. */
+   in and the swirl holds still.
+
+   Scrolling flies you into the swirl: the words and the icon rush past while the swirl spreads out and fades
+   (`progress`, 0 to 1, is the whole trip to the next part). Reduce Motion fades instead. */
 
 const GLIDE = 'cubic-bezier(.16, 1, .3, 1)' // ease-out expo
 const SOFT_GLIDE = 'cubic-bezier(.33, 1, .68, 1)' // ease-out cubic, for the big swirl fading in
 
-export function Splash() {
+type Props = {
+  progress: MotionValue<number>
+  /** The swirl's flight, 0 to 1; left out with Reduce Motion. */
+  flight?: MotionValue<number>
+  /** "Skip to the notch", for keyboard users. */
+  onSkip: () => void
+}
+
+export function Splash({ progress, flight, onSkip }: Props) {
+  const reduce = useReducedMotion() ?? false
   const sectionRef = useRef<HTMLElement>(null)
   const groupRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
@@ -20,6 +34,15 @@ export function Splash() {
   const iconRef = useRef<HTMLDivElement>(null)
   const swirlRef = useRef<HTMLDivElement>(null)
   const [clear, setClear] = useState({ x: 0, y: 0 })
+
+  // Flying past: the words and icon grow toward you, blur and fade; then the swirl goes dark.
+  const scale = useTransform(progress, [0, 0.225], [1, reduce ? 1 : 3.2], { ease: easeIn })
+  const opacity = useTransform(progress, [0.015, 0.165], [1, 0])
+  const blur = useTransform(progress, [0.03, 0.195], [0, reduce ? 0 : 10])
+  const filter = useMotionTemplate`blur(${blur}px)`
+  const swirlOpacity = useTransform(progress, [0.47, 0.6], [1, 0])
+  const [gone, setGone] = useState(() => progress.get() > 0.225)
+  useMotionValueEvent(progress, 'change', (p) => setGone(p > 0.225))
 
   // The swirl keeps a clear ellipse around the words and the icon. It's as wide as the content (so on
   // phones the dots still reach the sides) and just tall enough to cover it. Offsets ignore the intro's
@@ -85,15 +108,14 @@ export function Splash() {
   }, [])
 
   return (
-    <section
-      ref={sectionRef}
-      aria-labelledby="title"
-      className="relative flex h-svh min-h-[30rem] items-center justify-center overflow-hidden bg-black"
-    >
-      <div ref={swirlRef} className="absolute inset-0">
-        <DitherSwirl clear={clear} className="absolute inset-0 overflow-hidden" />
-      </div>
+    <section ref={sectionRef} aria-labelledby="title" className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      <m.div style={{ opacity: swirlOpacity }} className="absolute inset-0">
+        <div ref={swirlRef} className="absolute inset-0">
+          <DitherSwirl clear={clear} flight={flight} className="absolute inset-0 overflow-hidden" />
+        </div>
+      </m.div>
 
+      <m.div style={{ scale, opacity, filter }} className={gone ? 'invisible' : undefined}>
       <div
         ref={groupRef}
         className="relative flex flex-col-reverse items-center gap-7 px-6 text-center md:flex-row md:gap-[clamp(2rem,3.6vw,4rem)] md:px-0 md:text-left"
@@ -114,9 +136,22 @@ export function Splash() {
           </p>
         </div>
         <div ref={iconRef}>
-          <FloatingIcon src={appIcon} className="size-[clamp(8rem,36vw,10.5rem)] md:size-[clamp(9.5rem,14vw,15rem)]" />
+          <FloatingIcon src={appIcon} paused={gone} className="size-[clamp(8rem,36vw,10.5rem)] md:size-[clamp(9.5rem,14vw,15rem)]" />
         </div>
       </div>
+      </m.div>
+
+      {/* Shown only when the keyboard reaches it. */}
+      <button
+        type="button"
+        onClick={onSkip}
+        className={cn(
+          'sr-only rounded-full bg-white px-4 py-2 text-sm font-semibold text-black focus-visible:not-sr-only focus-visible:absolute focus-visible:bottom-8',
+          gone && 'invisible',
+        )}
+      >
+        Skip to the notch
+      </button>
     </section>
   )
 }

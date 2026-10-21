@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 /* The app icon, leaning toward the cursor like a card in your hand. Quick cursor moves make it
    wobble a little before it settles (an underdamped spring), and a slow float in CSS keeps it alive
    when the cursor rests. The spring only runs while something is moving. Touch screens get the float
-   alone; Reduce Motion gets a still icon. */
+   alone; Reduce Motion gets a still icon. `paused` (out of sight) stops both. */
 
 const TILT = 14 // degrees at the edge of the screen
 const DRIFT = { x: 16, y: 10 } // pixels at the edge of the screen
@@ -13,11 +13,15 @@ const MAX_WOBBLE = 7 // degrees
 type Spring = { value: number; velocity: number; target: number }
 const spring = (): Spring => ({ value: 0, velocity: 0, target: 0 })
 
-type Props = { src: string; className?: string }
+type Props = { src: string; paused?: boolean; className?: string }
 
-export function FloatingIcon({ src, className }: Props) {
+export function FloatingIcon({ src, paused = false, className }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const tiltRef = useRef<HTMLDivElement>(null)
+  const pausedRef = useRef(paused)
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     const anchor = anchorRef.current
@@ -61,7 +65,7 @@ export function FloatingIcon({ src, className }: Props) {
     }
 
     const onMove = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return
+      if ((event.pointerType !== 'mouse' && event.pointerType !== 'pen') || pausedRef.current) return
       // Measured on the box that doesn't move, so the icon's own tilt doesn't feed back into it.
       const box = anchor.getBoundingClientRect()
       const cx = box.left + box.width / 2
@@ -112,7 +116,7 @@ export function FloatingIcon({ src, className }: Props) {
 
   return (
     <div ref={anchorRef} className={className}>
-      <div className="animate-float motion-reduce:animate-none">
+      <div className={paused ? 'animate-float [animation-play-state:paused] motion-reduce:animate-none' : 'animate-float motion-reduce:animate-none'}>
         <div ref={tiltRef} className="will-change-transform">
           <img src={src} alt="" width={512} height={512} draggable={false} className="block h-full w-full select-none" />
         </div>
