@@ -2,8 +2,8 @@ import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { Item } from './data'
 
-/* The notch's pictures: icons drawn on a 24 × 24 grid, the made-up album covers of the practice
-   player, and the Shelf's previews. All of it is drawn here, so nothing is downloaded. */
+/* The notch's pictures: icons drawn on a 24 × 24 grid (the agents' marks among them), the made-up album
+   covers of the practice player, and the Shelf's previews. All of it is drawn here, so nothing is downloaded. */
 
 const ICONS = {
   play: <path fill="currentColor" stroke="none" d="M7.5 5.6v12.8c0 .9 1 1.5 1.8 1l10.4-6.4c.7-.4.7-1.5 0-2L9.3 4.6c-.8-.5-1.8.1-1.8 1Z" />,
@@ -51,6 +51,40 @@ const ICONS = {
     <>
       <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="7.5" />
+    </>
+  ),
+  agents: (
+    <>
+      <path d="M10 6.5h10M10 12h10M10 17.5h7" />
+      <g fill="currentColor" stroke="none">
+        <circle cx="5.5" cy="6.5" r="1.5" />
+        <circle cx="5.5" cy="12" r="1.5" />
+        <circle cx="5.5" cy="17.5" r="1.5" />
+      </g>
+    </>
+  ),
+  // The three tools, as plain marks of our own: a spark, a prompt and a pointer.
+  claude: <path d="M12 4v16M5.1 8l13.8 8M5.1 16l13.8-8" />,
+  codex: <path d="m6 8 4.5 4L6 16M12.5 16.5H18" />,
+  pointer: <path fill="currentColor" d="m6.5 4.5 12 6-5.3 1.8-1.9 5.3Z" />,
+  // How a thread is doing: working, needs you, done, error.
+  working: <circle cx="12" cy="12" r="8.5" pathLength="8" strokeDasharray="0.001 1" strokeWidth="3" />,
+  needs: (
+    <>
+      <circle cx="12" cy="12" r="10" fill="currentColor" stroke="none" />
+      <path d="M12 7.2v6M12 16.8v.1" stroke="#000" strokeWidth="2.4" />
+    </>
+  ),
+  done: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12.4 2.8 2.8 5.2-5.7" />
+    </>
+  ),
+  error: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9.3 9.3 5.4 5.4M14.7 9.3l-5.4 5.4" />
     </>
   ),
   key: <path d="M5 7.5h14a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V9A1.5 1.5 0 0 1 5 7.5ZM7 12h.01M10.5 12h.01M14 12h.01M17 12h.01" />,
