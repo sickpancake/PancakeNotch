@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { m, useReducedMotion, useScroll, useSpring, useTransform } from 'motion/react'
 import { Logo } from './Logo'
 
-/* The top bar: the logo and name on the left, a link to the project and a Download button (the latest
-   release on GitHub) on the right. It waits for the opening animation to finish before it appears.
+/* The top bar: the logo and name on the left, links to Help and the project and a Download button (the
+   latest release on GitHub) on the right. It waits for the opening animation to finish before it appears.
    At the very top it's a wide, light frosted-glass bar; as you scroll the glass fills in and it
    shrinks into a compact capsule in the middle. With Reduce Motion it doesn't shrink. */
 
 const REPO = 'https://github.com/sickpancake/PancakeNotch'
 const RELEASES = `${REPO}/releases/latest`
+const HELP = `${import.meta.env.BASE_URL}help/`
 
 const FULL = 1376 // 86rem, the page's width, in pixels
 const COMPACT = 900
@@ -56,6 +57,12 @@ export function TopBar() {
         </a>
 
         <nav aria-label="Project" className="relative flex items-center gap-1.5">
+          <a
+            href={HELP}
+            className="hidden h-10 items-center rounded-full px-4 text-[.9375rem] font-medium text-soft transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex"
+          >
+            Help
+          </a>
           <a
             href={REPO}
             className="hidden h-10 items-center rounded-full px-4 text-[.9375rem] font-medium text-soft transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex"

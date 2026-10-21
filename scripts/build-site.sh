@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Puts the website together in <folder>: the files in site/ plus the update feed. The feed isn't kept in
+# Puts the website together in <folder>: the home page (the React app in web/, built here), the Help page
+# and its assets (site/), plus the update feed. The feed isn't kept in
 # the repo (each release adds to it), so unless one is given it's fetched: from the published site, or
 # else from the latest GitHub Release, which carries the full feed too. That second source matters
 # because GitHub Pages keeps only one deploy per commit: when the website deploy for a commit wins the
 # race against its release, the feed would otherwise be missing until the next release.
+# Needs Node (22 or newer) for the home page; the app's links point at help/ and its anchors, so those
+# stay where they were (ADR-0027, ADR-0036).
 # Usage: scripts/build-site.sh <folder> [appcast.xml]
 set -euo pipefail
 
@@ -13,9 +16,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FEED_URL="https://sickpancake.github.io/PancakeNotch/appcast.xml"
 RELEASE_FEED_URL="https://github.com/sickpancake/PancakeNotch/releases/latest/download/appcast.xml"
 
+# The home page: build web/ (installing its packages first if they aren't there yet).
+if [[ ! -d "$ROOT/web/node_modules" ]]; then
+  (cd "$ROOT/web" && npm ci --no-audit --no-fund)
+fi
+(cd "$ROOT/web" && npm run build)
+
 rm -rf "$OUT"
 mkdir -p "$OUT"
-cp -R "$ROOT/site/." "$OUT/"
+cp -R "$ROOT/site/." "$OUT/"   # Help and the files it uses
+cp -R "$ROOT/web/dist/." "$OUT/"   # the home page and its files, added on top
 
 if [[ -n "$APPCAST" ]]; then
   cp "$APPCAST" "$OUT/appcast.xml"

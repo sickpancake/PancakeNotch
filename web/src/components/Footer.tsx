@@ -9,10 +9,12 @@ import { m, useMotionTemplate, useReducedMotion, useScroll, useTransform } from 
 
 const REPO = 'https://github.com/sickpancake/PancakeNotch'
 const DOWNLOAD = `${REPO}/releases/latest/download/PancakeNotch.zip`
+const HELP = `${import.meta.env.BASE_URL}help/` // the Help page, which sits next to this one on the site
 
 const LINKS = [
   { label: 'GitHub', href: REPO },
   { label: 'Releases', href: `${REPO}/releases` },
+  { label: 'Help', href: HELP },
   { label: 'GPL-3.0', href: `${REPO}/blob/main/LICENSE` },
 ]
 
@@ -57,6 +59,12 @@ export function Footer() {
           Download for Mac
         </a>
         <p className="mt-4 text-[.9375rem] text-balance text-soft">Free and open source. macOS 15 or later, Apple Silicon.</p>
+        <a
+          href={`${HELP}#first-launch`}
+          className="mt-2 text-[.9375rem] text-soft underline decoration-white/30 underline-offset-4 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+        >
+          macOS shows a warning the first time? Here&rsquo;s why.
+        </a>
 
         <m.p
           style={{ opacity: nameOpacity, y: nameY, filter: nameFilter }}

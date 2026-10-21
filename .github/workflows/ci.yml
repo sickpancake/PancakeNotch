@@ -21,6 +21,20 @@ jobs:
       - name: Shelf peak memory budget (ADR-0006)
         run: ./scripts/check-shelf-memory.sh build/PancakeNotch.app 20 100
 
+  # The website builds (home page in web/, Help in site/), so a change that breaks it shows up here
+  # and not after the merge.
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Put the site together
+        run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
+
   # The release pipeline end to end with throwaway keys (nothing is published): certificate import
   # and trust, signing, the update signature, the feed, the privacy check, and the idle memory of a
   # build that can update itself (Sparkle running).
@@ -54,6 +68,9 @@ jobs:
           codesign -d -r- build/PancakeNotch.app 2>&1 | grep 'certificate leaf'
       - name: Idle memory budget with updates on (ADR-0006)
         run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
       - name: Website
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
       - uses: actions/upload-artifact@v4

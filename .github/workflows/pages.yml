@@ -1,12 +1,12 @@
 name: Website
 
-# Publishes site/ to GitHub Pages whenever it changes on main. The update feed is carried over from
-# the live site (releases add to it; see release.yml).
+# Publishes the website to GitHub Pages whenever web/ (the home page) or site/ (Help) changes on main.
+# The update feed is carried over from the live site (releases add to it; see release.yml).
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", "scripts/build-site.sh"]
+    paths: ["web/**", "site/**", "scripts/build-site.sh"]
   workflow_dispatch:
 
 concurrency:
@@ -18,6 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Put the site together
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
       - uses: actions/upload-pages-artifact@v5
