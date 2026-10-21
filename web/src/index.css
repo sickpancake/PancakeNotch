@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* Monochrome like the app: black, white and greys. Apple's own fonts, nothing downloaded. */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --color-ink: #fff;
+  --color-soft: #a3a3a3;
+
+  --animate-float: float 7s ease-in-out infinite;
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-7px) rotate(-1.2deg); }
+  }
+}
+
+/* The notch's sound bars, while a song plays. Each bar sets its own range. */
+@keyframes bar-dance {
+  from { transform: scaleY(var(--from)); }
+  to { transform: scaleY(var(--to)); }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    background: #000;
+    /* The page's side margin; the sections share it so their edges line up. */
+    --page-gutter: 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    :root { --page-gutter: 2.5rem; }
+  }
+
+  @media (min-width: 1024px) {
+    :root { --page-gutter: clamp(2rem, 4vw, 4rem); }
+  }
+
+  body {
+    @apply bg-black font-sans text-ink antialiased;
+  }
+}
+
+/* A small light running around the pretend Mac screen's bezel (after Magic UI's Border Beam). The
+   element is masked down to its 1.5 px border; the light is a soft square travelling along it. */
+.border-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px solid transparent;
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0) border-box; /* taste-skill-ignore: a mask, not a visible gradient */
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0) border-box; /* taste-skill-ignore: a mask, not a visible gradient */
+}
+.border-beam::after {
+  content: "";
+  position: absolute;
+  width: 160px;
+  aspect-ratio: 1;
+  background: linear-gradient(to left, #fff, rgb(255 255 255 / .35), transparent); /* taste-skill-ignore: the beam's own fade */
+  offset-path: rect(0 auto auto 0 round 160px);
+  animation: beam 10s linear infinite;
+}
+.border-beam-paused::after {
+  animation-play-state: paused;
+}
+@keyframes beam {
+  to { offset-distance: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .border-beam { display: none; }
+}
+
+/* The terminal's blinking cursor. */
+@keyframes caret-blink {
+  50% { opacity: 0; }
+}
+.caret {
+  animation: caret-blink 1.1s steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .caret { animation: none; }
+}
+
+/* The footer's glow: a dark middle with gray rising around its edge, from black to a mid gray at the
+   bottom (kept dim), sitting high on the screen. It breathes by growing and shrinking a little. */
+.footer-glow {
+  background: radial-gradient(in oklab ellipse 104% 96% at 50% -8%, #0a0a0a 0 36%, #121212 44%, #1c1c1c 54%, #333 64%, #545454 74%, #787878 85%, #939393 94%, #a0a0a0 100%); /* taste-skill-ignore: the footer's glow, on purpose */
+  transform-origin: 50% -8%;
+  animation: breathe 9s ease-in-out infinite;
+}
+.footer-glow[data-paused="true"] {
+  animation-play-state: paused;
+}
+@keyframes breathe {
+  50% { transform: scale(1.09); }
+}

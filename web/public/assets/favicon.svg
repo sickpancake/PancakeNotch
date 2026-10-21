@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18">
+  <style>.g{fill:#000;stroke:#000}@media (prefers-color-scheme:dark){.g{fill:#fff;stroke:#fff}}</style>
+  <defs>
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="18" height="18">
+      <rect width="18" height="18" fill="#fff"/>
+      <g fill="#000" stroke="#000" stroke-width="1.6">
+        <rect x="4.6" y="5" width="1.7" height="5" rx=".85"/>
+        <rect x="7.6" y="5" width="1.7" height="6" rx=".85"/>
+        <rect x="10.6" y="5" width="1.7" height="4.4" rx=".85"/>
+      </g>
+    </mask>
+  </defs>
+  <g class="g" fill="none" stroke-width="1.3" mask="url(#gap)" style="fill:none">
+    <rect x="1.65" y="8.55" width="14.7" height="2.6" rx="1.3"/>
+    <rect x="1.65" y="13.45" width="14.7" height="2.6" rx="1.3"/>
+  </g>
+  <g class="g" style="stroke:none">
+    <path fill-rule="evenodd" d="M5 1.5h8a2.5 2.5 0 0 1 0 5H5a2.5 2.5 0 0 1 0-5ZM12.3 4a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0Z"/>
+    <rect x="4.6" y="5" width="1.7" height="5" rx=".85"/>
+    <rect x="7.6" y="5" width="1.7" height="6" rx=".85"/>
+    <rect x="10.6" y="5" width="1.7" height="4.4" rx=".85"/>
+  </g>
+</svg>
