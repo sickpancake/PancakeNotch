@@ -225,6 +225,7 @@ public final class AgentsCenter {
                 thread.canAnswer = false
             }
             if status.isFinished {
+                thread.subagents = []
                 if update.step == nil { thread.step = nil }
                 thread.isSeen = update.quietly || listVisible
                 if thread.isSeen { seenAt[update.id] = update.at }
@@ -239,9 +240,25 @@ public final class AgentsCenter {
         prune(now: update.at)
     }
 
+    /// A thread's helpers, all at once (Claude Code's subagent files). Only the working ones are kept.
+    func setSubagents(_ subagents: [AgentSubagent], of parentID: String) {
+        guard let thread = storage[parentID], !thread.status.isFinished else { return }
+        let working = subagents.filter { !$0.status.isFinished }.sorted { $0.statusSince == $1.statusSince ? $0.id < $1.id : $0.statusSince < $1.statusSince }
+        if thread.subagents != working { storage[parentID]?.subagents = working }
+    }
+
+    /// One helper changed (a Codex spawned agent): kept while it works, dropped once it finishes.
+    func updateSubagent(_ subagent: AgentSubagent, of parentID: String) {
+        guard var list = storage[parentID]?.subagents else { return }
+        list.removeAll { $0.id == subagent.id }
+        list.append(subagent)
+        setSubagents(list, of: parentID)
+    }
+
     /// The thread's session ended (the tool quit). A working or waiting thread counts as stopped.
     func ended(_ id: String, at date: Date) {
         guard let thread = storage[id] else { return }
+        if !thread.subagents.isEmpty { storage[id]?.subagents = [] }
         if thread.status.isFinished { return }
         apply(Update(id: id, tool: thread.tool, at: date, status: .stopped))
     }

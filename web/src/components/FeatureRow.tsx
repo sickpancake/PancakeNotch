@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import { useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { Cover, Icon, Thumb, type IconName } from './notch/art'
-import { EXAMPLES } from './notch/data'
+import { Cover, Icon, StatusMark, Thumb, leftTone, type IconName } from './notch/art'
+import { EXAMPLES, type ThreadState } from './notch/data'
 
 /* What the app does, as a row of cards you can scroll sideways: swipe, drag with the mouse, use the
    arrow buttons or the arrow keys. Each card has a small drawing made from the same pieces as the live
@@ -199,7 +199,7 @@ function ShelfArt() {
 }
 
 function AgentsArt() {
-  const rows: { mark: IconName; width: string }[] = [
+  const rows: { mark: ThreadState; width: string }[] = [
     { mark: 'working', width: 'w-24' },
     { mark: 'needs', width: 'w-16' },
     { mark: 'done', width: 'w-20' },
@@ -208,7 +208,7 @@ function AgentsArt() {
     <div aria-hidden="true" className={cn('w-[14.5rem] space-y-3.5 rounded-2xl p-3.5', SURFACE)}>
       {rows.map(({ mark, width }) => (
         <div key={mark} className="flex items-center gap-2.5">
-          <Icon name={mark} className="text-lg text-ink" />
+          <StatusMark state={mark} className="text-lg" />
           <span className={cn('h-1.5 rounded-full bg-white/18', width)} />
           {mark === 'needs' && <span className="ml-auto grid h-5 place-items-center rounded-full bg-white px-2.5 text-[11px] leading-none font-semibold text-black">Allow</span>}
         </div>
@@ -231,7 +231,7 @@ function UsageArt() {
             <span className="text-ink tabular-nums">{left}% left</span>
           </div>
           <div className="relative mt-2 h-1.5 rounded-full bg-white/12">
-            <span className="block h-full rounded-full bg-white" style={{ width: `${left}%` }} />
+            <span className={cn('block h-full rounded-full bg-current', leftTone(left))} style={{ width: `${left}%` }} />
             <span className="absolute -top-1 h-3.5 w-0.5 rounded-full bg-white/45" style={{ left: `${pace}%` }} />
           </div>
         </div>

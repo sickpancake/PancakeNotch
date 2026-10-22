@@ -113,11 +113,24 @@ private struct AgentsList: View {
                 ForEach(threads) { thread in
                     AgentRow(module: module, thread: thread)
                         .transition(.opacity)
+                    if module.openSubagents.contains(thread.id) {
+                        ForEach(thread.subagents) { subagent in
+                            SubagentRow(subagent: subagent)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             // The rows' highlight reaches 10 pt past their content, so the content lines up with the band.
             .padding(.horizontal, AgentsLayout.sidePadding - AgentRow.inset)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: threads.map(\.id))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: shownIDs)
+        }
+    }
+
+    /// Threads and the subagents shown under them, for animating rows in and out.
+    private var shownIDs: [String] {
+        threads.flatMap { thread in
+            [thread.id] + (module.openSubagents.contains(thread.id) ? thread.subagents.map(\.id) : [])
         }
     }
 }
@@ -151,6 +164,9 @@ private struct AgentRow: View {
                     .truncationMode(.tail)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if !thread.subagents.isEmpty {
+                SubagentsToggle(module: module, thread: thread, isOpen: module.openSubagents.contains(thread.id))
+            }
             if thread.canAnswer {
                 AnswerButtons(module: module, thread: thread)
             } else {
@@ -170,8 +186,75 @@ private struct AgentRow: View {
         .contentShape(.rect(cornerRadius: 9, style: .continuous))
         .onHover { isHovered = $0 }
         .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
-        .accessibilityElement(children: thread.canAnswer ? .contain : .combine)
+        .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
         .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
+    }
+}
+
+/// "2 subagents ⌄": shows or hides the thread's working helpers under it. Just the number beside the
+/// answer buttons, where room is short.
+private struct SubagentsToggle: View {
+    let module: AgentsModule
+    let thread: AgentThread
+    let isOpen: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        let count = thread.subagents.count
+        Button {
+            module.toggleSubagents(of: thread)
+        } label: {
+            HStack(spacing: 4) {
+                Text(thread.canAnswer ? "\(count)" : AgentsText.subagents(count))
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .foregroundStyle(.white.opacity(isHovered ? 0.95 : 0.7))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .frame(height: 20)
+            .background(.white.opacity(isHovered || isOpen ? 0.12 : 0.06), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(Text(isOpen ? "Hide this thread's subagents" : "Show this thread's subagents"))
+        .accessibilityLabel(Text(AgentsText.subagents(count)))
+        .accessibilityValue(Text(isOpen ? "Shown" : "Hidden"))
+        .accessibilityHint(Text(isOpen ? "Hides them from the list." : "Shows them under this thread."))
+    }
+}
+
+/// A helper under its thread, lined up with the thread's title: its mark, what it's doing and for how long.
+private struct SubagentRow: View {
+    let subagent: AgentSubagent
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AgentMark(status: subagent.status, size: 14)
+            Text(subagent.title)
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TimelineView(.everyMinute) { context in
+                Text(AgentsText.statusLine(subagent.status, since: subagent.statusSince, now: context.date))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        // Under the thread's title: past its 22 pt mark and the 10 pt gap.
+        .padding(.leading, AgentRow.inset + 32)
+        .padding(.trailing, AgentRow.inset)
+        .frame(height: 26)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(AgentsText.spoken(subagent, now: .now)))
     }
 }
 

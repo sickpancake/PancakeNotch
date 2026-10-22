@@ -6,6 +6,13 @@
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --color-ink: #fff;
   --color-soft: #a3a3a3;
+  /* The only color, as in the app: small status marks (an agent's state) and gauges (how much of a limit is left). */
+  --color-sys-blue: #0a84ff;
+  --color-sys-orange: #ff9f0a;
+  --color-sys-green: #30d158;
+  --color-sys-gray: #8e8e93;
+  --color-sys-red: #ff453a;
+  --color-sys-yellow: #ffd60a;
 
   --animate-float: float 7s ease-in-out infinite;
   @keyframes float {

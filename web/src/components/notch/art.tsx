@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import type { Item } from './data'
+import type { Item, ThreadState, Tool } from './data'
 
 /* The notch's pictures: icons drawn on a 24 × 24 grid (the agents' marks among them), the made-up album
    covers of the practice player, and the Shelf's previews. All of it is drawn here, so nothing is downloaded. */
@@ -81,12 +81,40 @@ const ICONS = {
       <path d="m8 12.4 2.8 2.8 5.2-5.7" />
     </>
   ),
+  stopped: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor" stroke="none" />
+    </>
+  ),
   error: (
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="m9.3 9.3 5.4 5.4M14.7 9.3l-5.4 5.4" />
     </>
   ),
+  // AI Usage: a gauge with its needle half way, the accounts, a check and a chevron.
+  usage: (
+    <>
+      <path d="M5.64 18.36a9 9 0 1 1 12.72 0" />
+      <path d="M12 13V8.2" />
+      <g fill="currentColor" stroke="none">
+        <circle cx="12" cy="13" r="1.7" />
+        <circle cx="6" cy="12" r="1" />
+        <circle cx="7.8" cy="7.8" r="1" />
+        <circle cx="16.2" cy="7.8" r="1" />
+        <circle cx="18" cy="12" r="1" />
+      </g>
+    </>
+  ),
+  people: (
+    <>
+      <circle cx="9.5" cy="8.5" r="3.2" />
+      <path d="M3.5 19c0-3.2 2.6-5 6-5s6 1.8 6 5M16 5.6a3 3 0 0 1 0 5.8M17.5 14.4c2 .5 3.3 2 3.3 4.6" />
+    </>
+  ),
+  check: <path d="m5.5 12.5 4.3 4.3 8.7-9.6" />,
+  chevronDown: <path d="m6.5 9.5 5.5 5.5 5.5-5.5" />,
   key: <path d="M5 7.5h14a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V9A1.5 1.5 0 0 1 5 7.5ZM7 12h.01M10.5 12h.01M14 12h.01M17 12h.01" />,
 } satisfies Record<string, ReactNode>
 
@@ -103,6 +131,26 @@ export function Icon({ name, className }: { name: IconName; className?: string }
     </svg>
   )
 }
+
+export const TOOL_ICON: Record<Tool, IconName> = { 'Claude Code': 'claude', Codex: 'codex', Cursor: 'pointer' }
+
+/* The only color in the notch, on the small marks: how an agent is doing, and how much of a limit is left. */
+const STATE_TONE: Record<ThreadState, string> = {
+  working: 'text-sys-blue',
+  needs: 'text-sys-orange',
+  done: 'text-sys-green',
+  stopped: 'text-sys-gray',
+  error: 'text-sys-red',
+}
+
+/** An agent's mark, in its status color. */
+export function StatusMark({ state, className }: { state: ThreadState; className?: string }) {
+  return <Icon name={state} className={cn(STATE_TONE[state], className)} />
+}
+
+/** The color for a limit's share left (0–100): green, yellow, orange, then red under 10%. */
+export const leftTone = (left: number) =>
+  left >= 50 ? 'text-sys-green' : left >= 20 ? 'text-sys-yellow' : left >= 10 ? 'text-sys-orange' : 'text-sys-red'
 
 /** One of the three made-up album covers. */
 export function Cover({ song, className }: { song: number; className?: string }) {

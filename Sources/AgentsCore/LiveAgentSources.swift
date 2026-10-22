@@ -31,6 +31,8 @@ final class LiveAgentSources {
     private var lastActivity: [String: Date] = [:]
     /// Codex sessions known to be its own helpers (true) or real threads (false), by session ID.
     private var codexHelpers: [String: Bool] = [:]
+    /// Helpers may be read before their parent, or spawn helpers of their own.
+    private var codexSubagents: [String: (parentID: String, agent: AgentSubagent)] = [:]
     private var detailed = false
     private var stopped = false
 
@@ -69,6 +71,7 @@ final class LiveAgentSources {
         lastHookEvent = [:]
         lastActivity = [:]
         codexHelpers = [:]
+        codexSubagents = [:]
     }
 
     private func stopWatching(_ list: inout [FolderWatcher]) {
@@ -134,7 +137,17 @@ final class LiveAgentSources {
         }
         // Codex's own helpers (its automatic reviewer, spawned agents) aren't threads of their own.
         if event.tool == .codex, isCodexHelper(event, session: session) {
-            center.forget("codex:\(session)")
+            let id = "codex:\(session)"
+            center.forget(id)
+            if var entry = codexSubagents[id] {
+                switch event.name {
+                case "Stop": entry.agent.status = .done
+                case "Interrupt", "SessionEnd": entry.agent.status = .stopped
+                default: break
+                }
+                codexSubagents[id] = entry
+                codexRead([])
+            }
             if let requestID = event.requestID { server?.answer(requestID, with: nil) }
             if event.name == "SessionEnd" { codexHelpers[session] = nil }
             return
@@ -296,7 +309,8 @@ final class LiveAgentSources {
             }
             if existing == nil, update.status == nil { continue }
             center.apply(update)
-            if detailed, update.status == .working { readClaudeStep(id) }
+            // A new session gets its title right away; steps and subagents only while the list shows.
+            if existing == nil || (detailed && update.status == .working) { readClaudeDetails(id) }
         }
         // Sessions that left the list quit.
         for (id, entry) in claudeSessions where entry.folder == folder && !seen.contains(id) {
@@ -316,16 +330,15 @@ final class LiveAgentSources {
             return
         }
         markQuietThreadsStopped()
-        for (id, _) in claudeSessions where center.thread(id)?.status == .working { readClaudeStep(id) }
+        refreshCodexTitles()
+        for id in claudeSessions.keys { readClaudeDetails(id) }
         for found in accounts where found.tool == .claude {
             let projects = found.folder.appending(path: "projects").path
             if let watcher = FolderWatcher(paths: [projects], latency: 1, queue: queue, onChange: { [weak self] paths in
-                let sessionIDs = Set(paths.filter { $0.hasSuffix(".jsonl") }.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent })
+                let sessionIDs = Set(paths.compactMap(ClaudeSubagents.sessionID(changed:)))
                 Task { @MainActor in
                     guard let self else { return }
-                    for sessionID in sessionIDs where self.center.thread("claude:\(sessionID)")?.status == .working {
-                        self.readClaudeStep("claude:\(sessionID)")
-                    }
+                    for sessionID in sessionIDs { self.readClaudeDetails("claude:\(sessionID)") }
                 }
             }) {
                 transcriptWatchers.append(watcher)
@@ -333,14 +346,24 @@ final class LiveAgentSources {
         }
     }
 
-    private func readClaudeStep(_ id: String) {
-        guard let entry = claudeSessions[id] else { return }
+    /// The current step (while it works) and the working subagents of a live session.
+    private func readClaudeDetails(_ id: String) {
+        guard let entry = claudeSessions[id], let thread = center.thread(id) else { return }
+        let wantsStep = detailed && thread.status == .working
+        let wantsSubagents = detailed && !thread.status.isFinished
         queue.async { [weak self] in
             let url = ClaudeTranscript.url(folder: entry.folder, sessionID: entry.session.sessionID, cwd: entry.session.cwd)
-            let step = url.flatMap(ClaudeTranscript.currentStep)
+            let details = url.map { ClaudeTranscript.details(at: $0, wantsStep: wantsStep) }
+            let subagents = wantsSubagents ? (url.map { ClaudeSubagents.working(transcript: $0) } ?? []) : []
             Task { @MainActor in
-                guard let self, !self.stopped, let step, self.center.thread(id)?.status == .working else { return }
-                self.center.apply(.init(id: id, tool: .claude, at: .now, step: .some(step), quietly: true))
+                guard let self, !self.stopped, let thread = self.center.thread(id) else { return }
+                let step = self.detailed && thread.status == .working ? details?.step : nil
+                // A name the user gave the session in Claude Code wins over the transcript's title.
+                let title = entry.session.name == nil ? details?.title : nil
+                if step != nil || title != nil {
+                    self.center.apply(.init(id: id, tool: .claude, at: .now, title: title, step: step.map { .some($0) }, quietly: true))
+                }
+                if self.detailed { self.center.setSubagents(subagents, of: id) }
             }
         }
     }
@@ -377,10 +400,15 @@ final class LiveAgentSources {
         }
     }
 
-    private func codexRead(_ updates: [CodexReader.ThreadUpdate]) {
+    func codexRead(_ updates: [CodexReader.ThreadUpdate]) {
         guard !stopped else { return }
-        for item in updates {
+        // Threads first, so a subagent seen in the same read finds its parent.
+        for item in updates.sorted(by: { $0.parentThreadID == nil && $1.parentThreadID != nil }) {
             let id = "codex:\(item.threadID)"
+            if let parent = item.parentThreadID {
+                codexSubagentRead(item, id: id, parentID: "codex:\(parent)")
+                continue
+            }
             lastActivity[id] = item.modified
             var update = AgentsCenter.Update(id: id, tool: .codex, at: item.statusAt ?? item.modified,
                                              accountID: AgentAccount(tool: .codex, folder: item.folder).id,
@@ -409,6 +437,51 @@ final class LiveAgentSources {
             }
             center.apply(update)
         }
+        // Resolve the tree after every batch; parent and child files needn't arrive together.
+        var grouped: [String: [AgentSubagent]] = [:]
+        for (id, entry) in codexSubagents where !entry.agent.status.isFinished {
+            var parent = entry.parentID
+            var visited: Set<String> = [id]
+            while let ancestor = codexSubagents[parent], visited.insert(parent).inserted { parent = ancestor.parentID }
+            guard !visited.contains(parent) else { continue }
+            grouped[parent, default: []].append(entry.agent)
+        }
+        for thread in center.threads where thread.tool == .codex {
+            center.setSubagents(grouped[thread.id] ?? [], of: thread.id)
+        }
+    }
+
+    /// Reopening the list also picks up names changed while a thread wasn't writing its rollout.
+    private func refreshCodexTitles() {
+        let threads = center.threads.filter { $0.tool == .codex }
+        let folders = accounts.filter { $0.tool == .codex }.map(\.folder)
+        let reader = codex
+        queue.async { [weak self] in
+            let titles = threads.compactMap { thread -> (String, String)? in
+                let id = String(thread.id.dropFirst("codex:".count))
+                guard let title = folders.lazy.compactMap({ reader.refreshTitle(folder: $0, threadID: id) }).first else { return nil }
+                return (thread.id, title)
+            }
+            Task { @MainActor in
+                guard let self, !self.stopped else { return }
+                for (id, title) in titles where self.center.thread(id) != nil {
+                    self.center.apply(.init(id: id, tool: .codex, at: .now, title: title, quietly: true))
+                }
+            }
+        }
+    }
+}
+
+extension LiveAgentSources {
+    /// A spawned subagent: under its parent while it works. One that went quiet before launch is gone.
+    fileprivate func codexSubagentRead(_ item: CodexReader.ThreadUpdate, id: String, parentID: String) {
+        // Its hooks may have come in before its rollout said what it is.
+        codexHelpers[item.threadID] = true
+        if center.thread(id) != nil { center.forget(id) }
+        guard let status = item.status,
+              !(item.isCatchUp && Date().timeIntervalSince(item.modified) > ClaudeSubagents.quietLimit) else { return }
+        codexSubagents[id] = (parentID, AgentSubagent(id: id, title: item.title ?? String(localized: "Subagent", comment: "A Codex spawned agent with no name"),
+                                                    status: status, statusSince: item.statusAt ?? item.modified))
     }
 }
 
@@ -423,6 +496,8 @@ final class CodexReader: @unchecked Sendable {
         let statusAt: Date?
         let step: String?
         let hostBundleID: String?
+        /// A spawned subagent's parent thread.
+        let parentThreadID: String?
         let modified: Date
         /// From the first look at a file (at launch), not something that just happened.
         let isCatchUp: Bool
@@ -430,6 +505,8 @@ final class CodexReader: @unchecked Sendable {
 
     private var rollouts: [String: CodexRollout] = [:]
     private var titles: [String: String] = [:]
+    /// When a title was last looked up (new titles and renames arrive after the first rollout line).
+    private var titleCheckedAt: [String: Date] = [:]
     /// The newest rate limits seen, by account folder path.
     private(set) var rateLimits: [String: CodexRateLimits] = [:]
 
@@ -470,12 +547,25 @@ final class CodexReader: @unchecked Sendable {
         if let limits = rollout.rateLimits, limits.seenAt > (rateLimits[folder.path]?.seenAt ?? .distantPast) {
             rateLimits[folder.path] = limits
         }
-        guard let threadID = rollout.threadID, !rollout.isHelper else { return nil }
-        if titles[threadID] == nil { titles[threadID] = CodexThreadTitles.title(folder: folder, threadID: threadID) ?? "" }
+        // Automatic reviews aren't shown at all; spawned subagents show under their thread.
+        guard let threadID = rollout.threadID, !rollout.isHelper || rollout.parentThreadID != nil else { return nil }
+        if rollout.parentThreadID != nil {
+            titles[threadID] = rollout.subagentTitle ?? ""
+        } else if titles[threadID] == nil || Date().timeIntervalSince(titleCheckedAt[threadID] ?? .distantPast) > 30 {
+            _ = refreshTitle(folder: folder, threadID: threadID)
+        }
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .now
         return ThreadUpdate(threadID: threadID, folder: folder, cwd: rollout.cwd, title: titles[threadID].flatMap { $0.isEmpty ? nil : $0 },
                             status: rollout.status, statusAt: rollout.statusAt, step: rollout.step,
-                            hostBundleID: rollout.hostBundleID, modified: modified, isCatchUp: catchUp)
+                            hostBundleID: rollout.hostBundleID, parentThreadID: rollout.parentThreadID,
+                            modified: modified, isCatchUp: catchUp)
+    }
+
+    func refreshTitle(folder: URL, threadID: String) -> String? {
+        let title = CodexThreadTitles.title(folder: folder, threadID: threadID)
+        titles[threadID] = title ?? ""
+        titleCheckedAt[threadID] = .now
+        return title
     }
 
     /// Rollouts changed since `date`, in today's and yesterday's day folders (`sessions/YYYY/MM/DD`).

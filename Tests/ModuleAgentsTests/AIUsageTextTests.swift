@@ -116,3 +116,18 @@ struct StatusColorsTests {
         #expect(StatusColors.color(for: .failed) == StatusColors.red)
     }
 }
+
+struct AgentsSubagentTextTests {
+    @Test func subagentCounts() {
+        #expect(AgentsText.subagents(1) == "1 subagent")
+        #expect(AgentsText.subagents(3) == "3 subagents")
+    }
+
+    @Test func aThreadSaysHowManySubagentsItHas() {
+        let now = Date()
+        let thread = AgentThread(id: "claude:a", tool: .claude, title: "Fix it", project: "web", status: .working, statusSince: now,
+                                 subagents: [AgentSubagent(id: "claude:s", title: "Check it", status: .working, statusSince: now)])
+        #expect(AgentsText.spoken(thread, now: now).hasSuffix(", 1 subagent"))
+        #expect(AgentsText.spoken(thread.subagents[0], now: now) == "Subagent, Check it, Working · 0s")
+    }
+}

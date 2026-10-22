@@ -18,7 +18,9 @@ struct ClaudeSession: Equatable, Sendable {
         self.pid = pid_t(pid)
         self.sessionID = sessionID
         cwd = object["cwd"] as? String ?? ""
-        name = (object["name"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "untitled session" ? nil : $0 }
+        // A "derived" name is only the folder's ("pancakenotch-5a"); the transcript's title is better.
+        name = object["nameSource"] as? String == "derived" ? nil
+            : (object["name"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "untitled session" ? nil : $0 }
         self.status = status
         waitingFor = (object["waitingFor"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let millis = object["statusUpdatedAt"] as? Double ?? object["updatedAt"] as? Double ?? 0
@@ -53,8 +55,10 @@ struct ClaudeSession: Equatable, Sendable {
     }
 }
 
-/// The current step of a Claude Code session, from the end of its transcript: the last tool call of
-/// the newest assistant message. Reads at most the last 256 KB, only while the Agents list is on screen.
+/// The current step and the title of a Claude Code session, from the end of its transcript: the last
+/// tool call of the newest assistant message, and the newest title line (a name the user gave it, else
+/// Claude's own, both rewritten every so often). Reads at most the last 256 KB, only while the Agents
+/// list is on screen.
 enum ClaudeTranscript {
     /// `<config>/projects/<folder>/<session id>.jsonl`. The folder is the cwd with `/` and `.` as `-`,
     /// but rather than rely on that, look for the file name in each project folder.
@@ -68,18 +72,71 @@ enum ClaudeTranscript {
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    static func currentStep(at url: URL) -> String? {
-        guard let tail = JSONLines.tail(of: url, bytes: 256 * 1024) else { return nil }
-        for line in tail.reversed() {
-            guard line.contains("\"tool_use\""), line.contains("\"assistant\""),
-                  let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                  let message = object["message"] as? [String: Any],
-                  let content = message["content"] as? [[String: Any]] else { continue }
-            if let call = content.last(where: { $0["type"] as? String == "tool_use" }), let name = call["name"] as? String {
-                return AgentSteps.step(tool: name, input: call["input"] as? [String: Any] ?? [:])
+    static func details(at url: URL, wantsStep: Bool) -> (step: String?, title: String?) {
+        guard let tail = JSONLines.tail(of: url, bytes: 256 * 1024) else { return (nil, nil) }
+        var step: String?
+        var customTitle: String?
+        var aiTitle: String?
+        for line in tail.reversed() where customTitle == nil || (wantsStep && step == nil) {
+            if line.contains("\"custom-title\"") {
+                customTitle = customTitle ?? title(line, key: "customTitle")
+            } else if line.contains("\"ai-title\"") {
+                aiTitle = aiTitle ?? title(line, key: "aiTitle")
+            } else if wantsStep, step == nil {
+                step = currentStep(line)
             }
         }
-        return nil
+        return (step, customTitle ?? aiTitle)
+    }
+
+    private static func title(_ line: String, key: String) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              let title = (object[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
+        return title
+    }
+
+    /// The last tool call of an assistant message line.
+    private static func currentStep(_ line: String) -> String? {
+        guard line.contains("\"tool_use\""), line.contains("\"assistant\""),
+              let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              let message = object["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]],
+              let call = content.last(where: { $0["type"] as? String == "tool_use" }), let name = call["name"] as? String else { return nil }
+        return AgentSteps.step(tool: name, input: call["input"] as? [String: Any] ?? [:])
+    }
+}
+
+/// A Claude Code session's subagents: `<transcript without .jsonl>/subagents/agent-<id>.jsonl`, each with
+/// a small `.meta.json` holding what it was asked to do, and `"finished": true` once it's done. Read only
+/// while the Agents list is on screen.
+enum ClaudeSubagents {
+    /// A subagent whose transcript hasn't changed for this long is taken as gone (stopped mid-task).
+    static let quietLimit: TimeInterval = 15 * 60
+
+    static func working(transcript: URL, now: Date = .now) -> [AgentSubagent] {
+        let folder = transcript.deletingPathExtension().appending(path: "subagents", directoryHint: .isDirectory)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") }.compactMap { name in
+            let log = folder.appending(path: name)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: log.path),
+                  let modified = attributes[.modificationDate] as? Date, now.timeIntervalSince(modified) < quietLimit,
+                  let data = FileManager.default.contents(atPath: log.deletingPathExtension().path + ".meta.json"),
+                  let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  meta["finished"] as? Bool != true else { return nil }
+            let title = [meta["description"], meta["agentType"]].lazy.compactMap { $0 as? String }.first { !$0.isEmpty }
+                ?? String(localized: "Subagent", comment: "A Claude Code subagent with no description")
+            return AgentSubagent(id: "claude:" + name.dropLast(".jsonl".count), title: title, status: .working,
+                                 statusSince: attributes[.creationDate] as? Date ?? modified)
+        }
+    }
+
+    /// The session a changed transcript file belongs to: its own (`<id>.jsonl`) or a subagent's
+    /// (`<id>/subagents/agent-….jsonl` or `.meta.json`).
+    static func sessionID(changed path: String) -> String? {
+        let url = URL(fileURLWithPath: path)
+        let parent = url.deletingLastPathComponent()
+        if parent.lastPathComponent == "subagents" { return parent.deletingLastPathComponent().lastPathComponent }
+        return url.pathExtension == "jsonl" ? url.deletingPathExtension().lastPathComponent : nil
     }
 }
 

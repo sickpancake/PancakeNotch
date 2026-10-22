@@ -58,10 +58,24 @@ enum AgentsText {
         return (subject, verb)
     }
 
-    /// For VoiceOver, one row: "Fix the login redirect, Claude Code, web-app · Running tests, Working · 4m".
+    /// "1 subagent", "2 subagents".
+    static func subagents(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 subagent", comment: "Agent row: helpers the thread started")
+            : String(localized: "\(count) subagents", comment: "Agent row: helpers the thread started")
+    }
+
+    /// For VoiceOver, one row: "Fix the login redirect, Claude Code, web-app · Running tests, Working · 4m,
+    /// 2 subagents".
     static func spoken(_ thread: AgentThread, now: Date) -> String {
-        [thread.title, thread.tool.name, subtitle(thread), statusLine(thread.status, since: thread.statusSince, now: now)]
+        [thread.title, thread.tool.name, subtitle(thread), statusLine(thread.status, since: thread.statusSince, now: now),
+         thread.subagents.isEmpty ? "" : subagents(thread.subagents.count)]
             .filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    /// "Subagent, Check the session cookie, Working · 3m".
+    static func spoken(_ subagent: AgentSubagent, now: Date) -> String {
+        [String(localized: "Subagent", comment: "VoiceOver: a helper under an agent thread"), subagent.title,
+         statusLine(subagent.status, since: subagent.statusSince, now: now)].joined(separator: ", ")
     }
 
     /// Read while the notch is compact: "2 agents need you".

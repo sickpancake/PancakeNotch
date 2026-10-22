@@ -181,7 +181,7 @@ struct HelpView: View {
             } else {
                 SettingsRow(
                     title: String(localized: "What Agents shows"),
-                    subtitle: String(localized: "Every Claude Code, Codex and Cursor thread: working, needs you or done. Allow once or Deny a request right in the notch, or click a thread to go to its app.")
+                    subtitle: String(localized: "Every Claude Code, Codex and Cursor thread: working, needs you or done, with its subagents tucked under it. Allow once or Deny a request right in the notch, or click a thread to go to its app.")
                 ) {
                     EmptyView()
                 }
@@ -257,7 +257,7 @@ struct HelpView: View {
             }
             SettingsRow(
                 title: String(localized: "It all stays on this Mac"),
-                subtitle: String(localized: "PancakeNotch reads token counts and model names from files your tools already keep. It never reads what you or the agent wrote. When you open AI Usage, Codex is asked for its current limits (Codex checks with OpenAI); PancakeNotch itself sends nothing.")
+                subtitle: String(localized: "PancakeNotch reads token counts and model names from files your tools already keep. It never saves what you or the agent wrote. When you open AI Usage, Codex is asked for its current limits (Codex checks with OpenAI); PancakeNotch itself sends nothing.")
             ) {
                 EmptyView()
             }

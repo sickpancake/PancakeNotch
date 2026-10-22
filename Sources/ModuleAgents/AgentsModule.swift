@@ -15,6 +15,8 @@ public final class AgentsModule: NotchModule {
 
     /// What the peek strip is about (the latest alert).
     var peekAlert: AgentAlert?
+    /// Threads whose subagents are shown under them.
+    private(set) var openSubagents: Set<String> = []
     /// Whether this copy peeks for alerts. The center tells one module, so Home's live copy doesn't.
     @ObservationIgnored private let peeks: Bool
     /// Rendering off-screen: a plain list instead of a scroll view.
@@ -86,6 +88,7 @@ public final class AgentsModule: NotchModule {
     }
 
     private func hideList() {
+        openSubagents = []
         guard isShowingList else { return }
         isShowingList = false
         center.listHidden()
@@ -114,6 +117,10 @@ public final class AgentsModule: NotchModule {
     }
 
     // MARK: Actions (from the views)
+
+    func toggleSubagents(of thread: AgentThread) {
+        if openSubagents.remove(thread.id) == nil { openSubagents.insert(thread.id) }
+    }
 
     /// Brings the thread's app forward and gets the notch out of its way. The practice notch has no
     /// app: it only tells the lesson.

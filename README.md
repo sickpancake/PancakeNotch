@@ -46,7 +46,7 @@ open build/PancakeNotch.app
 
 ## Privacy
 
-No analytics, no accounts, no telemetry. Everything stays on your Mac. The only network request is the once-a-day update check, which sends nothing about you and can be turned off in **General**.
+No analytics, no PancakeNotch account, no telemetry. Your history stays on your Mac. PancakeNotch checks for updates once a day (turn this off in **General**). When you open AI Usage, it also asks your installed Codex for current plan limits; Codex contacts OpenAI using its own sign-in. Claude limits come from local files. PancakeNotch never reads sign-in tokens or the Keychain.
 
 ## Thanks
 

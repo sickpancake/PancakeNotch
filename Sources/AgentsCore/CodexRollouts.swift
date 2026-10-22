@@ -49,6 +49,10 @@ struct CodexRollout: Sendable {
     var originator: String?
     /// A helper thread (a spawned subagent, an automatic review): not shown on its own.
     var isHelper = false
+    /// A spawned subagent's thread: it shows under that one.
+    var parentThreadID: String?
+    /// A spawned subagent's name and task ("Copernicus · kimi qwen signals").
+    var subagentTitle: String?
     var status: AgentStatus?
     var statusAt: Date?
     var step: String?
@@ -94,7 +98,11 @@ struct CodexRollout: Sendable {
             threadID = payload["id"] as? String ?? payload["session_id"] as? String
             cwd = payload["cwd"] as? String
             originator = payload["originator"] as? String
-            isHelper = (payload["source"] as? [String: Any])?["subagent"] != nil
+            let subagent = (payload["source"] as? [String: Any])?["subagent"]
+            isHelper = subagent != nil
+            let spawn = (subagent as? [String: Any])?["thread_spawn"] as? [String: Any]
+            parentThreadID = spawn?["parent_thread_id"] as? String
+            subagentTitle = spawn.flatMap(Self.subagentTitle)
             return true
         case .event:
             switch payload["type"] as? String {
@@ -119,6 +127,14 @@ struct CodexRollout: Sendable {
 
     private enum LineKind {
         case meta, event(String), call
+    }
+
+    /// Its nickname and the last part of its path ("/root/kimi_qwen_signals" → "kimi qwen signals").
+    static func subagentTitle(_ spawn: [String: Any]) -> String? {
+        let task = (spawn["agent_path"] as? String).map { ($0 as NSString).lastPathComponent }
+            .flatMap { $0.isEmpty || $0 == "root" || $0 == "/" ? nil : $0.replacing("_", with: " ") }
+        let parts = [spawn["agent_nickname"] as? String, task].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private mutating func set(_ value: AgentStatus, at date: Date) {

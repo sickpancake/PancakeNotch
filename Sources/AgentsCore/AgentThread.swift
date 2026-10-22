@@ -77,10 +77,13 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public var canOpen: Bool
     /// The user has seen it finished (the list was on screen).
     public var isSeen: Bool
+    /// The helpers it started that are still working, oldest first. Shown under it, never as threads.
+    public var subagents: [AgentSubagent]
 
     public init(id: String, tool: AgentTool, accountID: String? = nil, title: String, project: String,
                 status: AgentStatus, statusSince: Date, workStarted: Date? = nil, step: String? = nil,
-                request: String? = nil, canAnswer: Bool = false, canOpen: Bool = false, isSeen: Bool = false) {
+                request: String? = nil, canAnswer: Bool = false, canOpen: Bool = false, isSeen: Bool = false,
+                subagents: [AgentSubagent] = []) {
         self.id = id
         self.tool = tool
         self.accountID = accountID
@@ -94,6 +97,24 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
         self.canAnswer = canAnswer
         self.canOpen = canOpen
         self.isSeen = isSeen
+        self.subagents = subagents
+    }
+}
+
+/// A helper a thread started: a Claude Code subagent, a Codex spawned agent.
+public struct AgentSubagent: Identifiable, Equatable, Sendable {
+    /// "<tool>:<its own id>".
+    public let id: String
+    /// What it was asked to do ("Review the parser"), or its name.
+    public var title: String
+    public var status: AgentStatus
+    public var statusSince: Date
+
+    public init(id: String, title: String, status: AgentStatus, statusSince: Date) {
+        self.id = id
+        self.title = title
+        self.status = status
+        self.statusSince = statusSince
     }
 }
 

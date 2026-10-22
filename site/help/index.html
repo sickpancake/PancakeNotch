@@ -236,6 +236,9 @@
           <li><strong>Stopped</strong> (a square in a circle): the thread was stopped, or its tool quit.</li>
           <li><strong>Error</strong> (an x in a circle): something went wrong in that thread.</li>
         </ul>
+        <p>Each mark has its own color so you can tell them apart at a glance: blue for Working, orange for Needs you, green for Done, gray for Stopped and red for Error.</p>
+        <h3>Subagents</h3>
+        <p>When an agent hands part of its work to helpers (Claude Code's subagents, or agents that Codex spawns), they don't get rows of their own. The thread's row shows a small <strong>2 subagents</strong> button instead: click it to see each helper's task and how long it has been working, and click again to hide them. Helpers leave the list as soon as they finish. Helper threads that another app starts as separate conversations, like T3 Code's, still show as threads of their own, because nothing in the tools' files says which thread they belong to.</p>
         <h3>With the notch closed</h3>
         <p>One side of the closed notch shows a small mark and a number: how many threads are working. It changes to a <strong>!</strong> when one needs you, and to a <strong>✓</strong> when one has finished. A slim strip also pops out under the notch for a moment when a thread needs you, or when one finishes after working for 30 seconds or more. It never pops out for an app you're already looking at.</p>
       </section>
@@ -279,6 +282,8 @@
         <p>The <strong>AI Usage</strong> module shows how much of your Claude and Codex limits are left, and what you've used, for each of your accounts. Turn it on under <strong>Modules</strong>, the same way as Agents. It's offered once PancakeNotch finds Claude Code or Codex on your Mac.</p>
         <h3>Limits</h3>
         <p>Each limit is a bar showing how much is left, with the time until it resets, for example <strong>Session 63% left · resets in 2h 14m</strong> or <strong>Weekly 77% left</strong>. A small pace mark on the bar shows where it would be if you used your limit evenly until it resets. When an account drops under 10% left, its gauge shows beside the closed notch, so you notice before you run out.</p>
+        <p>The bars change color as a limit runs low: green with half or more left, yellow from 20 to 49%, orange from 10 to 19%, and red under 10%.</p>
+        <p>Codex limits refresh when you open AI Usage (PancakeNotch asks Codex, which checks with OpenAI). Claude limits update when Claude Code next sends a request; older readings show an "as of" time.</p>
         <h3>Tokens, "API value" and "Cost"</h3>
         <p>Switch between <strong>Today</strong>, <strong>7 days</strong> and <strong>30 days</strong> to see how many tokens you used and which models you used most.</p>
         <ul>
@@ -288,12 +293,13 @@
         <h3>More than one account</h3>
         <p>Many people have two or more Claude or Codex accounts. PancakeNotch finds them by itself in <span class="path">~/.claude</span>, <span class="path">~/.codex</span> and folders named like <span class="path">~/.claude-work</span>. If one is missing, click <strong>Add account folder…</strong> in the AI Usage settings and choose its folder. You can rename an account there too.</p>
         <p>The pill at the top right shows the account you're looking at: the tool's icon, the account's name and a small ▾. Click it for a list of your accounts, grouped by tool, each with a tiny bar for how much is left. Pick one to see it, or pick <strong>All accounts</strong> for the totals.</p>
+        <p>Emails are partly hidden, with the part before the @ blurred except its first letter, until you click one to show it (click again to hide it, and closing the account list hides it too).</p>
         <h3>If something's missing</h3>
         <ul class="checks">
           <li><strong>No Claude limits yet</strong>They appear after you've used Claude Code once.</li>
           <li><strong>Codex tokens look low</strong>Older Codex sessions that Codex has compressed (shrunk to save space) aren't counted.</li>
         </ul>
-        <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Everything comes from files Claude Code and Codex already keep on your Mac, and it all works offline: no accounts, no network and no Keychain. PancakeNotch keeps only token counts and model names, for 90 days, and never any text.</p></div>
+        <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Token history and Claude limits come from files the tools keep on your Mac. For fresh Codex limits, PancakeNotch asks your installed Codex, which checks with OpenAI using its own sign-in. PancakeNotch never reads sign-in tokens or the Keychain. It saves token counts and model names for 90 days, never conversation text.</p></div>
       </section>
 
       <section class="topic" id="updates" aria-labelledby="updates-title">
@@ -319,7 +325,7 @@
           <li><strong>Everything stays on your Mac.</strong> No accounts, no ads, no analytics and no tracking.</li>
           <li><strong>One network request:</strong> the once-a-day update check, which only asks GitHub for the latest version. You can turn it off (see <a class="text-link" href="#updates">Updates</a>).</li>
           <li><strong>Statistics are a file on your Mac.</strong> Listening and notch use are counted locally and kept for 90 days. Delete them any time with <strong>Clear Statistics</strong> on the <strong>Statistics</strong> page.</li>
-          <li><strong>Agents and AI Usage only read files already on your Mac.</strong> They work offline, with no accounts, no network and no Keychain, and keep only token counts and model names for 90 days, never any text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
+          <li><strong>Agents and AI Usage keep their history on your Mac.</strong> Codex checks with OpenAI for fresh limits when AI Usage opens. PancakeNotch reads no sign-in tokens or Keychain, and saves only token counts and model names for 90 days, never conversation text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
           <li><strong>Permissions only when needed:</strong> controlling Music and Spotify in limited mode, System Audio Recording for the optional "Follow the music" bars, and Login Items if you turn on launch at login.</li>
           <li>This website has no cookies and no analytics either.</li>
         </ul>

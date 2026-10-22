@@ -1,11 +1,11 @@
 import { useEffect, useReducer, useState } from 'react'
 import { TileSwap } from '@/components/TileSwap'
 import { cn } from '@/lib/utils'
-import { Cover, Icon, Thumb, type IconName } from './art'
-import { SONGS, clock, count, kindOf, nameOf, type Item, type Module, type Thread, type Tool } from './data'
+import { Cover, Icon, StatusMark, TOOL_ICON, Thumb, type IconName } from './art'
+import { SONGS, clock, count, kindOf, nameOf, type Item, type Module, type Thread } from './data'
 import { positionAt, type Player, type PlayerActions } from './player'
 
-/* What the open notch shows: the player, the Shelf, the agents and the Module Menu, at the app's sizes. */
+/* What the open notch shows: the player, the Shelf, the agents and the Module Menu, at the app's sizes (AI Usage is in usageViews.tsx). */
 
 const control = 'grid cursor-pointer place-items-center rounded-[10px] text-white transition-[background-color,color,transform] duration-150 hover:bg-white/9 active:scale-90 motion-reduce:active:scale-100'
 
@@ -214,7 +214,6 @@ export function ShelfView({
 
 /* ---------- Agents ---------- */
 
-const TOOL_ICON: Record<Tool, IconName> = { 'Claude Code': 'claude', Codex: 'codex', Cursor: 'pointer' }
 const OPEN_NOTE = 'In your notch, this opens the thread’s app'
 
 const capsule = 'h-6 flex-none cursor-pointer rounded-full px-3 text-[11.5px] leading-none font-semibold transition-colors'
@@ -256,7 +255,7 @@ export function AgentsView({ threads, narrow, onAllow, onDeny }: { threads: Thre
                   </span>
                 </span>
                 <span className={cn('flex flex-none items-center gap-1.5 text-[11.5px] leading-none', asks ? 'font-semibold text-white' : 'text-white/60', asks && narrow && 'sr-only')}>
-                  <Icon name={thread.state} className="text-[15px]" />
+                  <StatusMark state={thread.state} className="text-[15px]" />
                   {thread.status}
                 </span>
               </button>
@@ -292,22 +291,24 @@ const MODULES: { id: Exclude<Module, 'menu'>; name: string; icon: IconName }[] =
   { id: 'np', name: 'Now Playing', icon: 'note' },
   { id: 'shelf', name: 'Shelf', icon: 'tray' },
   { id: 'agents', name: 'Agents', icon: 'agents' },
+  { id: 'usage', name: 'AI Usage', icon: 'usage' },
 ]
 
-export function MenuView({ current, song, items, agents, onGo }: { current: Module; song: string; items: number; agents: string; onGo: (module: Module) => void }) {
+export function MenuView({ current, song, items, agents, usage, narrow, onGo }: { current: Module; song: string; items: number; agents: string; usage: string; narrow: boolean; onGo: (module: Module) => void }) {
   return (
     <div className="flex h-full gap-[18px]">
-      <div>
+      <div className={cn(narrow && 'min-w-0 flex-1')}>
         <p className="mt-1 mb-2.5 text-[10px] leading-none font-semibold tracking-[.08em] text-white/50 uppercase">Favorites</p>
-        <div className="flex gap-2">
+        <div className={cn('flex', narrow ? 'gap-1.5' : 'gap-2')}>
           {MODULES.map((module) => (
             <button
               key={module.id}
               type="button"
               onClick={() => onGo(module.id)}
               className={cn(
-                'flex h-[62px] w-[78px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl bg-white/7 text-[10.5px] leading-none font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,.08)] transition-colors hover:bg-white/12', // taste-skill-ignore: the app's own interface, drawn in the pretend screen
+                'flex h-[62px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl bg-white/7 text-[10.5px] leading-none font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,.08)] transition-colors hover:bg-white/12', // taste-skill-ignore: the app's own interface, drawn in the pretend screen
                 current === module.id && 'bg-white/16 shadow-[inset_0_0_0_1px_rgba(255,255,255,.3)] hover:bg-white/16', // taste-skill-ignore: the app's own interface, drawn in the pretend screen
+                narrow ? 'min-w-0 flex-1 px-0.5 text-center leading-[1.15]' : 'w-[78px]', // four tiles share a phone's width, and a long name wraps
               )}
             >
               <Icon name={module.icon} className="text-[17px]" />
@@ -316,26 +317,30 @@ export function MenuView({ current, song, items, agents, onGo }: { current: Modu
           ))}
         </div>
       </div>
-      <div className="min-w-0 flex-1 border-l border-white/12 pl-[18px]" /* taste-skill-ignore: the app's own interface, drawn in the pretend screen */>
+      {/* A phone has no room for the list beside the tiles. */}
+      <div className={cn('min-h-0 min-w-0 flex-1 flex-col border-l border-white/12 pl-[18px]', narrow ? 'hidden' : 'flex')} /* taste-skill-ignore: the app's own interface, drawn in the pretend screen */>
         <p className="mt-1 mb-2.5 text-[10px] leading-none font-semibold tracking-[.08em] text-white/50 uppercase">All modules</p>
-        {MODULES.map((module) => (
-          <button
-            key={module.id}
-            type="button"
-            onClick={() => onGo(module.id)}
-            className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-[3px] text-left transition-colors hover:bg-white/7"
-          >
-            <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-white/10 text-[13px]">
-              <Icon name={module.icon} />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[12.5px] leading-[1.25] font-semibold">{module.name}</span>
-              <span className="block truncate text-[11px] leading-[1.3] text-white/50">
-                {module.id === 'np' ? song : module.id === 'agents' ? agents : items ? count(items) : 'Empty'}
+        {/* The list scrolls when it doesn't fit, with no scrollbar, as in the app. */}
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
+          {MODULES.map((module) => (
+            <button
+              key={module.id}
+              type="button"
+              onClick={() => onGo(module.id)}
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-[3px] text-left transition-colors hover:bg-white/7"
+            >
+              <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-white/10 text-[13px]">
+                <Icon name={module.icon} />
               </span>
-            </span>
-          </button>
-        ))}
+              <span className="min-w-0">
+                <span className="block text-[12.5px] leading-[1.25] font-semibold">{module.name}</span>
+                <span className="block truncate text-[11px] leading-[1.3] text-white/50">
+                  {module.id === 'np' ? song : module.id === 'agents' ? agents : module.id === 'usage' ? usage : items ? count(items) : 'Empty'}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

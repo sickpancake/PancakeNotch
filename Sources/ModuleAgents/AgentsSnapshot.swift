@@ -32,9 +32,11 @@ public enum AgentsSnapshot {
             rows.append(model)
         }
 
-        // Agents: the ear for a thread that needs you, the list, the strip under the notch, nothing running.
+        // Agents: the ear for a thread that needs you, the list (one thread's subagents shown), the strip under the notch, nothing running.
         row(.compact, agents())
-        row(.expanded, agents())
+        let withSubagents = agents()
+        if let parent = withSubagents.center.threads.first(where: { !$0.subagents.isEmpty }) { withSubagents.toggleSubagents(of: parent) }
+        row(.expanded, withSubagents)
         let asking = agents()
         asking.peekAlert = asking.center.threads.first { $0.status.needsYou }.map { AgentAlert(kind: .needsYou, thread: $0) }
         row(.compact, asking) { $0.peekForSnapshot(asking) }
