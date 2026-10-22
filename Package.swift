@@ -81,5 +81,9 @@ let package = Package(
             name: "AgentsCoreTests",
             dependencies: ["AgentsCore"]
         ),
+        .testTarget(
+            name: "ModuleAgentsTests",
+            dependencies: ["ModuleAgents", "AgentsCore", "NotchCore"]
+        ),
     ]
 )

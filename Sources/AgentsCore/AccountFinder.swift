@@ -20,7 +20,7 @@ enum AccountFinder {
         }
         for path in added {
             let folder = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
-            guard let tool = AgentTool.allCases.first(where: { looksLikeAccount(folder, tool: $0, home: home) }),
+            guard let tool = tool(of: folder, home: home),
                   !found.contains(where: { $0.folder.standardizedFileURL == folder.standardizedFileURL }) else { continue }
             found.append(Found(tool: tool, folder: folder))
         }
@@ -29,7 +29,16 @@ enum AccountFinder {
 
     /// The tool a folder added with "Add account folder…" belongs to, or nil when it's neither.
     static func tool(of folder: URL, home: URL) -> AgentTool? {
-        [AgentTool.claude, .codex].first { looksLikeAccount(folder, tool: $0, home: home) }
+        let fm = FileManager.default
+        func has(_ name: String) -> Bool { fm.fileExists(atPath: folder.appending(path: name).path) }
+        if has("projects") || has(".claude.json") { return .claude }
+        if has("auth.json") || has("config.toml") || has("session_index.jsonl") { return .codex }
+        if let named = tool(forFolderNamed: folder.lastPathComponent), looksLikeAccount(folder, tool: named, home: home) { return named }
+        // Both tools call a directory "sessions". Claude puts PID JSON files there; Codex uses year folders.
+        let sessions = (try? fm.contentsOfDirectory(atPath: folder.appending(path: "sessions").path)) ?? []
+        if sessions.contains(where: { $0.hasSuffix(".json") }) { return .claude }
+        if sessions.contains(where: { $0.count == 4 && $0.allSatisfy(\.isNumber) }) { return .codex }
+        return nil
     }
 
     /// `.claude`, `.claude-work`, `.claude_2`; `.codex`, `.codex-work`. Not `.claude.json` or backups.

@@ -17,6 +17,9 @@ public final class AgentsModule: NotchModule {
     var peekAlert: AgentAlert?
     /// Whether this copy peeks for alerts. The center tells one module, so Home's live copy doesn't.
     @ObservationIgnored private let peeks: Bool
+    /// Rendering off-screen: a plain list instead of a scroll view.
+    @ObservationIgnored public var isSnapshot = false
+    @ObservationIgnored private var isShowingList = false
 
     public init(center: AgentsCenter, peeks: Bool = true) {
         self.center = center
@@ -47,6 +50,7 @@ public final class AgentsModule: NotchModule {
     public func attach(to notch: NotchViewModel?) {
         self.notch = notch
         guard notch != nil else {
+            hideList()
             if peeks { center.onAlert = nil }
             return
         }
@@ -68,14 +72,22 @@ public final class AgentsModule: NotchModule {
     }
 
     public func notchDidOpen() {
+        guard !isShowingList else { return }
+        isShowingList = true
         center.listShown()
     }
 
     public func notchDidClose() {
-        center.listHidden()
+        hideList()
     }
 
     public func userSwitchedAway() {
+        hideList()
+    }
+
+    private func hideList() {
+        guard isShowingList else { return }
+        isShowingList = false
         center.listHidden()
     }
 

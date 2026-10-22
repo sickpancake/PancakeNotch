@@ -16,7 +16,8 @@ struct AgentsView: View {
                 .frame(height: layout.bandHeight)
                 .padding(.horizontal, AgentsLayout.sidePadding)
             if threads.isEmpty {
-                AgentsNothing()
+                PanelNote(symbol: "sparkles", title: "No agents running",
+                          detail: "Start Claude Code, Codex or Cursor and they'll show up here.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.bottom, AgentsLayout.bottomPadding)
             } else {
@@ -99,26 +100,6 @@ private struct ClearFinishedButton: View {
     }
 }
 
-/// No threads at all.
-private struct AgentsNothing: View {
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.white.opacity(0.4))
-                .padding(.bottom, 4)
-                .accessibilityHidden(true)
-            Text("No agents running")
-                .font(.system(size: 13, weight: .semibold))
-            Text("Start Claude Code, Codex or Cursor and they'll show up here.")
-                .font(.system(size: 11.5))
-                .foregroundStyle(.white.opacity(0.55))
-                .multilineTextAlignment(.center)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
 // MARK: List
 
 private struct AgentsList: View {
@@ -127,7 +108,7 @@ private struct AgentsList: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ScrollView {
+        PanelScroll(isSnapshot: module.isSnapshot, bottomMargin: AgentsLayout.bottomPadding) {
             VStack(spacing: 0) {
                 ForEach(threads) { thread in
                     AgentRow(module: module, thread: thread)
@@ -138,7 +119,6 @@ private struct AgentsList: View {
             .padding(.horizontal, AgentsLayout.sidePadding - AgentRow.inset)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: threads.map(\.id))
         }
-        .contentMargins(.bottom, AgentsLayout.bottomPadding, for: .scrollContent)
     }
 }
 

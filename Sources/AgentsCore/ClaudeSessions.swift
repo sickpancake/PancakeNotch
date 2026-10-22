@@ -118,41 +118,45 @@ enum JSONLines {
     /// after the last complete line (a line still being written is read next time). Lines over
     /// `maxLine` are skipped.
     @discardableResult
-    static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024, line: (Data) -> Void) -> UInt64 {
+    static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
+                     shouldContinue: () -> Bool = { true }, line: (Data) -> Void) -> UInt64 {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return offset }
         defer { try? handle.close() }
         guard let size = try? handle.seekToEnd(), size > offset else { return offset }
         try? handle.seek(toOffset: offset)
         var position = offset
+        var chunkOffset = offset
         var pending = Data()
         var skipping = false
-        while let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty {
+        while shouldContinue(), let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty {
             var start = chunk.startIndex
             while let newline = chunk[start...].firstIndex(of: UInt8(ascii: "\n")) {
-                if skipping {
-                    skipping = false
-                } else if pending.isEmpty {
-                    line(chunk[start..<newline])
-                } else {
-                    pending.append(chunk[start..<newline])
-                    line(pending)
-                    pending.removeAll(keepingCapacity: true)
+                guard shouldContinue() else { return position }
+                if !skipping, pending.count + newline - start <= maxLine {
+                    if pending.isEmpty {
+                        line(Data(chunk[start..<newline]))
+                    } else {
+                        pending.append(chunk[start..<newline])
+                        line(pending)
+                    }
                 }
-                position += UInt64(newline - start + 1)
+                pending.removeAll(keepingCapacity: true)
+                skipping = false
+                position = chunkOffset + UInt64(newline + 1)
                 start = chunk.index(after: newline)
             }
             let rest = chunk[start...]
             if skipping {
-                position += UInt64(rest.count)
+                // Keep the last complete-line offset until the oversized line ends.
             } else if pending.count + rest.count > maxLine {
                 skipping = true
-                position += UInt64(pending.count + rest.count)
                 pending.removeAll()
             } else {
                 pending.append(rest)
             }
+            chunkOffset += UInt64(chunk.count)
         }
-        // Just after the last newline, or past a skipped line's start (its rest is ignored next time).
+        // Just after the last newline. An unfinished line, even an oversized one, is retried intact.
         return position
     }
 }

@@ -29,7 +29,10 @@ final class LiveAgentSources {
     private var lastHookEvent: [String: Date] = [:]
     /// The last sign of life per Codex and Cursor thread, for spotting ones that quit without a word.
     private var lastActivity: [String: Date] = [:]
+    /// Codex sessions known to be its own helpers (true) or real threads (false), by session ID.
+    private var codexHelpers: [String: Bool] = [:]
     private var detailed = false
+    private var stopped = false
 
     /// A thread with no sign of life for this long counts as stopped when the list is shown.
     static let quietLimit: TimeInterval = 60 * 60
@@ -53,6 +56,8 @@ final class LiveAgentSources {
     }
 
     func stop() {
+        stopped = true
+        for id in Array(pending.keys) { handBack(threadID: id) }
         server?.stop()
         server = nil
         stopWatching(&watchers)
@@ -61,6 +66,9 @@ final class LiveAgentSources {
         activationObserver = nil
         claudeSessions = [:]
         pending = [:]
+        lastHookEvent = [:]
+        lastActivity = [:]
+        codexHelpers = [:]
     }
 
     private func stopWatching(_ list: inout [FolderWatcher]) {
@@ -118,9 +126,17 @@ final class LiveAgentSources {
 
     // MARK: Hooks
 
-    private func handle(_ event: HookEvent) {
+    func handle(_ event: HookEvent) {
+        guard !stopped else { return }
         guard let session = event.sessionID, !session.isEmpty else {
             if let requestID = event.requestID { server?.answer(requestID, with: nil) }
+            return
+        }
+        // Codex's own helpers (its automatic reviewer, spawned agents) aren't threads of their own.
+        if event.tool == .codex, isCodexHelper(event, session: session) {
+            center.forget("codex:\(session)")
+            if let requestID = event.requestID { server?.answer(requestID, with: nil) }
+            if event.name == "SessionEnd" { codexHelpers[session] = nil }
             return
         }
         let id = "\(event.tool.rawValue):\(session)"
@@ -186,11 +202,25 @@ final class LiveAgentSources {
             center.ended(id, at: now)
             lastHookEvent[id] = nil
             lastActivity[id] = nil
+            codexHelpers[session] = nil
             return
         default:
             return
         }
         center.apply(update)
+    }
+
+    /// From the session's model, or its rollout's first line (read once per session). A session without a
+    /// rollout yet is taken as a real thread until its rollout says otherwise.
+    private func isCodexHelper(_ event: HookEvent, session: String) -> Bool {
+        if event.model?.hasPrefix("codex-auto-review") == true { return true }
+        if let known = codexHelpers[session] { return known }
+        guard let path = event.transcriptPath, let first = JSONLines.firstLine(of: URL(fileURLWithPath: path)) else { return false }
+        var rollout = CodexRollout()
+        _ = rollout.consume(Data(first.utf8))
+        guard rollout.threadID != nil else { return false }
+        codexHelpers[session] = rollout.isHelper
+        return rollout.isHelper
     }
 
     /// The account folder a hook event's transcript lives in (else the tool's standard folder).
@@ -231,6 +261,7 @@ final class LiveAgentSources {
     }
 
     private func claudeSessionsRead(_ sessions: [ClaudeSession], folder: URL, worked: Set<String>) {
+        guard !stopped else { return }
         let accountID = AgentAccount(tool: .claude, folder: folder).id
         var seen: Set<String> = []
         for session in sessions {
@@ -308,7 +339,7 @@ final class LiveAgentSources {
             let url = ClaudeTranscript.url(folder: entry.folder, sessionID: entry.session.sessionID, cwd: entry.session.cwd)
             let step = url.flatMap(ClaudeTranscript.currentStep)
             Task { @MainActor in
-                guard let self, let step, self.center.thread(id)?.status == .working else { return }
+                guard let self, !self.stopped, let step, self.center.thread(id)?.status == .working else { return }
                 self.center.apply(.init(id: id, tool: .claude, at: .now, step: .some(step), quietly: true))
             }
         }
@@ -347,6 +378,7 @@ final class LiveAgentSources {
     }
 
     private func codexRead(_ updates: [CodexReader.ThreadUpdate]) {
+        guard !stopped else { return }
         for item in updates {
             let id = "codex:\(item.threadID)"
             lastActivity[id] = item.modified

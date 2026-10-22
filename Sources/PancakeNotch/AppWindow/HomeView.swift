@@ -1,3 +1,4 @@
+import AgentsCore
 import Learn
 import ModuleShelf
 import NotchCore
@@ -9,6 +10,8 @@ struct HomeView: View {
     let context: AppContext
     @Binding var section: AppSection
     let openLesson: (LessonID) -> Void
+    /// The AI tools found on this Mac, for the offer to switch on Agents and AI Usage.
+    @State private var foundTools: [AgentTool] = []
 
     var body: some View {
         PageScroll {
@@ -20,6 +23,11 @@ struct HomeView: View {
             }
             if !context.progress.homeBoxHidden {
                 LearnBox(progress: context.progress, openLesson: openLesson)
+                    .padding(.top, 26)
+                    .transition(.opacity)
+            }
+            if let offer = AgentsOffer(found: foundTools, settings: context.agentsSettings) {
+                AgentsOfferCard(context: context, offer: offer)
                     .padding(.top, 26)
                     .transition(.opacity)
             }
@@ -35,6 +43,7 @@ struct HomeView: View {
             ) { section = .keyboard }
                 .padding(.top, 14)
         }
+        .onAppear { foundTools = context.detectTools() }
     }
 }
 
@@ -189,7 +198,7 @@ private struct NotchHero: View {
 
     /// Which modules are on: the live notch follows the switches.
     private var enabledModules: [Bool] {
-        [context.nowPlayingSettings.isEnabled, context.shelfSettings.isEnabled]
+        ["nowPlaying", "shelf", "agents", "aiUsage"].map(context.isEnabled)
     }
 
     var body: some View {

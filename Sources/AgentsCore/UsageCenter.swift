@@ -19,6 +19,8 @@ public final class UsageCenter {
     public private(set) var totals: UsageTotals = .zero
     /// Reading the history for the first time (0…1), or nil.
     public private(set) var firstReadProgress: Double?
+    /// Changes even when an import only affects days outside the selected notch range.
+    public private(set) var historyRevision = 0
 
     /// The account shown (falls back to all accounts when the saved one is gone).
     public var selection: AccountSelection {
@@ -55,15 +57,21 @@ public final class UsageCenter {
         accounts.count { $0.tool == tool } > 1
     }
 
+    /// Every shown account pays per token, so the money is a real cost, not what a plan's tokens would cost.
+    public var paysPerToken: Bool {
+        let shown = shownAccounts
+        return !shown.isEmpty && shown.allSatisfy { $0.billing == .apiKey }
+    }
+
     /// "API value", or "Cost" when every shown account pays per token.
     public var moneyLabel: String {
-        let shown = shownAccounts
-        if !shown.isEmpty, shown.allSatisfy({ $0.billing == .apiKey }) { return shown[0].moneyLabel }
+        if paysPerToken { return shownAccounts[0].moneyLabel }
         return AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/")).moneyLabel
     }
 
     /// The account closest to running out, while one is under 10% left (the near-limit ear).
     public var nearLimit: NearLimit? {
+        _ = limitsRevision
         guard settings.warnsNearLimit else { return nil }
         let now = Date()
         return accounts.compactMap { account -> NearLimit? in
@@ -82,6 +90,8 @@ public final class UsageCenter {
 
     @ObservationIgnored private var live: LiveUsageSources?
     @ObservationIgnored private var warned: Set<String> = []
+    private var limitsRevision = 0
+    @ObservationIgnored private var resetTask: Task<Void, Never>?
     /// Where the token history is kept; nil keeps none (snapshots).
     @ObservationIgnored private let stats: StatsStore?
     /// How many views showing the history are on screen (AI Usage and Statistics can both be).
@@ -107,9 +117,12 @@ public final class UsageCenter {
         let sources = LiveUsageSources(center: self, stats: stats)
         live = sources
         sources.start()
+        if viewers > 0 { sources.setVisible(true) }
     }
 
     public func stop() {
+        resetTask?.cancel()
+        resetTask = nil
         live?.stop()
         live = nil
         accounts = []
@@ -141,6 +154,13 @@ public final class UsageCenter {
         return await live.daily(days: days, accountIDs: shownAccounts.map(\.id))
     }
 
+    /// Tokens and money per model for the last `days` days, biggest first (the Statistics page's top
+    /// models, which follow its own range rather than AI Usage's).
+    public func models(days: Int) async -> [ModelUsage] {
+        guard let live else { return isPractice ? PracticeUsage.totals(for: selection, range: days <= 1 ? .today : days <= 7 ? .week : .month).models : [] }
+        return await live.models(days: days, accountIDs: shownAccounts.map(\.id))
+    }
+
     // MARK: Updates from the sources
 
     func setAccounts(_ found: [AgentAccount]) {
@@ -157,6 +177,24 @@ public final class UsageCenter {
         guard limits[accountID] != value else { return }
         limits[accountID] = value
         checkNearLimit(accountID)
+        scheduleReset()
+    }
+
+    /// A single wake-up at the next known reset removes an expired ear without polling while idle.
+    private func scheduleReset() {
+        resetTask?.cancel()
+        let now = Date()
+        guard !isPractice, let next = limits.values.flatMap(\.limits).compactMap(\.resetsAt).filter({ $0 > now }).min() else {
+            resetTask = nil
+            return
+        }
+        resetTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(next.timeIntervalSince(now))) } catch { return }
+            guard let self else { return }
+            self.limitsRevision += 1
+            for account in self.accounts { self.checkNearLimit(account.id) }
+            self.scheduleReset()
+        }
     }
 
     func setTotals(_ value: UsageTotals) {
@@ -165,6 +203,14 @@ public final class UsageCenter {
 
     func setFirstReadProgress(_ value: Double?) {
         if firstReadProgress != value { firstReadProgress = value }
+    }
+
+    func historyChanged() { historyRevision += 1 }
+
+    /// Statistics was cleared; reload the visible totals after the database finishes its queued clear.
+    public func statisticsCleared() {
+        historyChanged()
+        refreshTotals()
     }
 
     /// Asks for the selected range's totals again (selection, range or history changed).

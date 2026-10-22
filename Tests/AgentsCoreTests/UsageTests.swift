@@ -177,6 +177,15 @@ struct UsageLogTests {
         #expect(resumed.thread == "thread-1" && resumed.model == "gpt-6.1-sol")
     }
 
+    @Test func addedCodexFoldersAreNotMistakenForClaudeSessions() throws {
+        let home = try temporaryFolder()
+        let folder = home.appending(path: "custom-account")
+        try FileManager.default.createDirectory(at: folder.appending(path: "sessions/2026"), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: folder.appending(path: "auth.json"))
+        #expect(AccountFinder.tool(of: folder, home: home) == .codex)
+        #expect(AccountFinder.find(home: home, added: [folder.path]).map(\.tool) == [.codex])
+    }
+
     @Test func threadIDFromTheFileName() {
         #expect(CodexUsageLog.thread(inFileName: "rollout-2026-10-17T19-41-40-0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.jsonl")
             == "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
@@ -196,6 +205,41 @@ struct UsageLogTests {
         lines = []
         _ = JSONLines.read(file, from: offset) { lines.append(String(decoding: $0, as: UTF8.self)) }
         #expect(lines == ["{\"c\":3}"])
+    }
+
+    @Test func jsonLinesKeepsExactOffsetsAcrossChunks() throws {
+        let file = try temporaryFolder().appending(path: "large.jsonl")
+        let first = String(repeating: "a", count: 300_000)
+        let text = first + "\nsecond\nunfinished"
+        try Data(text.utf8).write(to: file)
+        var lengths: [Int] = []
+        let offset = JSONLines.read(file, from: 0) { lengths.append($0.count) }
+        #expect(lengths == [300_000, 6])
+        #expect(offset == 300_008)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("\nlast\n".utf8))
+        try handle.close()
+        var lines: [String] = []
+        let end = JSONLines.read(file, from: offset) { lines.append(String(decoding: $0, as: UTF8.self)) }
+        #expect(lines == ["unfinished", "last"])
+        #expect(end == UInt64(text.utf8.count + 6))
+    }
+
+    @Test func oversizedLinesAreSkippedWholeAndCancellationResumesOnALine() throws {
+        let file = try temporaryFolder().appending(path: "large.jsonl")
+        let text = "first\n" + String(repeating: "a", count: 300_000) + "\nlast\n"
+        try Data(text.utf8).write(to: file)
+        var lines: [String] = []
+        let offset = JSONLines.read(file, from: 0, maxLine: 100, shouldContinue: { lines.isEmpty }) {
+            lines.append(String(decoding: $0, as: UTF8.self))
+        }
+        #expect(lines == ["first"])
+        #expect(offset == 6)
+        lines = []
+        let end = JSONLines.read(file, from: offset, maxLine: 100) { lines.append(String(decoding: $0, as: UTF8.self)) }
+        #expect(lines == ["last"])
+        #expect(end == UInt64(text.utf8.count))
     }
 
     @Test func theLedgerReadsEachFileOnceAndKeepsOneRecordPerMessage() async throws {

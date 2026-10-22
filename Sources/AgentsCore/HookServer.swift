@@ -24,6 +24,8 @@ struct HookEvent: Sendable {
     var message: String?
     /// Cursor's stop status ("completed", "aborted", "error").
     var status: String?
+    /// Codex: the session's model ("codex-auto-review" for its automatic reviewer).
+    var model: String?
 
     init(tool: AgentTool, name: String, parentPID: pid_t, payload: [String: Any]) {
         self.tool = tool
@@ -36,6 +38,7 @@ struct HookEvent: Sendable {
         notificationType = payload["notification_type"] as? String
         message = payload["message"] as? String ?? payload["error"] as? String
         status = payload["status"] as? String
+        model = payload["model"] as? String
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
             summary = AgentSteps.request(tool: toolName, input: input)
@@ -197,7 +200,7 @@ final class HookServer: @unchecked Sendable {
             }
             let line = client.buffer[client.buffer.startIndex..<newline]
             guard let header = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                  (header["length"] as? Int).map({ $0 <= Self.maxBody }) == true else {
+                  (header["length"] as? Int).map({ (0...Self.maxBody).contains($0) }) == true else {
                 close(client)
                 return
             }
@@ -214,7 +217,7 @@ final class HookServer: @unchecked Sendable {
             close(client)
             return
         }
-        var event = HookEvent(tool: tool, name: name, parentPID: pid_t(header["ppid"] as? Int ?? 0), payload: payload)
+        var event = HookEvent(tool: tool, name: name, parentPID: pid_t(clamping: header["ppid"] as? Int ?? 0), payload: payload)
         client.buffer = Data()
         if header["waits"] as? Bool == true {
             let requestID = nextRequest

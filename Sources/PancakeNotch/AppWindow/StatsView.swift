@@ -1,3 +1,4 @@
+import AgentsCore
 import AppKit
 import Charts
 import Stats
@@ -9,6 +10,9 @@ import SwiftUI
 /// once a second and only while this page is on screen.
 struct StatsView: View {
     let store: StatsStore
+    /// AI Usage's data and switch: its section shows only while AI Usage is on.
+    let usage: UsageCenter
+    let agentsSettings: AgentsSettings
     /// The Now Playing helper's process id, for the live memory figure (nil when it isn't running).
     let helperPID: () -> pid_t?
 
@@ -49,6 +53,12 @@ struct StatsView: View {
             .opacity(isShown ? 1 : 0)
             .accessibilityHidden(!isShown)
 
+            if agentsSettings.usageEnabled {
+                StatsSection(title: String(localized: "AI usage")) {
+                    AIUsageContent(usage: usage, range: range)
+                }
+            }
+
             StatsSection(title: String(localized: "App health")) {
                 HealthContent(samples: data.health, range: range, helperPID: helperPID)
             }
@@ -64,6 +74,7 @@ struct StatsView: View {
                     Button(confirmingClear ? String(localized: "Clear All Statistics?") : String(localized: "Clear Statistics")) {
                         if confirmingClear {
                             store.clear()
+                            usage.statisticsCleared()
                             generation += 1
                             justCleared = true
                             AccessibilityNotification.Announcement(String(localized: "Statistics cleared")).post()
@@ -318,6 +329,87 @@ private struct UsageContent: View {
         let value = Double(total) / Double(max(days, 1))
         return value.formatted(.number.precision(.fractionLength(value < 10 ? 0...1 : 0...0)))
     }
+}
+
+// MARK: - AI usage
+
+/// Tokens per day and the top models over the page's range, from the token history AI Usage keeps.
+/// The history catches up while this is on screen.
+private struct AIUsageContent: View {
+    let usage: UsageCenter
+    let range: StatsRange
+    @State private var days: [DailyUsage] = []
+    @State private var models: [ModelUsage] = []
+
+    var body: some View {
+        // Reading the totals here means the page reloads whenever the history grows.
+        let key = AIUsageKey(days: range.days, revision: usage.historyRevision, accounts: usage.shownAccounts.map(\.id))
+        VStack(alignment: .leading, spacing: 12) {
+            DailyBarCard(
+                title: String(localized: "Tokens per day"),
+                days: days.map(\.day),
+                values: days.map { Double($0.tokens) },
+                range: range,
+                minimumTop: 1_000_000,
+                axisName: String(localized: "Tokens"),
+                valueText: { StatsFormat.tokens(Int64($0)) },
+                axisText: { StatsFormat.tokens(Int64($0)) },
+                detail: total,
+                emptyText: String(localized: "No AI usage yet in this time.")
+            )
+
+            if !models.isEmpty {
+                RankedCard(title: String(localized: "Top models")) {
+                    let top = models.first?.tokens ?? 0
+                    ForEach(Array(models.prefix(5).enumerated()), id: \.element.id) { index, model in
+                        RankedRow(
+                            rank: index + 1,
+                            title: model.name,
+                            subtitle: nil,
+                            value: "\(StatsFormat.tokens(model.tokens)) · \(StatsFormat.dollars(model.cost))",
+                            fraction: top > 0 ? Double(model.tokens) / Double(top) : 0
+                        )
+                    }
+                }
+            }
+
+            Footnote(footnote)
+        }
+        .task(id: key) {
+            async let loadedDays = usage.daily(days: range.days)
+            async let loadedModels = usage.models(days: range.days)
+            let (newDays, newModels) = await (loadedDays, loadedModels)
+            guard !Task.isCancelled else { return }
+            days = newDays
+            models = newModels
+        }
+        .onAppear { usage.viewShown() }
+        .onDisappear { usage.viewHidden() }
+    }
+
+    /// "1.2B tokens · ≈ $313 API value".
+    private var total: String {
+        let tokens = StatsFormat.tokens(days.reduce(0) { $0 + $1.tokens })
+        let money = StatsFormat.dollars(days.reduce(0) { $0 + $1.cost })
+        let paysPerUse = !usage.shownAccounts.isEmpty && usage.shownAccounts.allSatisfy { $0.billing == .apiKey }
+        return paysPerUse
+            ? String(localized: "\(tokens) tokens · \(money) cost")
+            : String(localized: "\(tokens) tokens · ≈ \(money) API value")
+    }
+
+    private var footnote: String {
+        let who = usage.selectedAccount.map(\.name) ?? String(localized: "all accounts")
+        let source = String(localized: "Shows \(who), read from your AI tools' own files on this Mac. API value is what the tokens would cost pay-per-use; plan accounts don't pay it.")
+        guard let progress = usage.firstReadProgress else { return source }
+        let done = progress.formatted(.percent.precision(.fractionLength(0)))
+        return String(localized: "Reading your AI history for the first time: \(done). \(source)")
+    }
+}
+
+private struct AIUsageKey: Equatable {
+    let days: Int
+    let revision: Int
+    let accounts: [String]
 }
 
 // MARK: - App health
@@ -576,6 +668,8 @@ private struct DailyBarCard: View {
     let minimumTop: Double
     let axisName: String
     let valueText: (Double) -> String
+    /// Shorter text for the y axis ("20M"), when the numbers are big; otherwise the axis picks its own.
+    var axisText: ((Double) -> String)?
     var detail: String?
     var emptyText: String?
 
@@ -617,9 +711,13 @@ private struct DailyBarCard: View {
         .chartYScale(domain: 0...top * 1.05)
         .chartXSelection(value: $selectedKey)
         .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine().foregroundStyle(AppPalette.hairline)
-                AxisValueLabel().font(.app(size: 10.5)).foregroundStyle(AppPalette.secondaryText)
+                if let axisText, let number = value.as(Double.self) {
+                    AxisValueLabel { Text(axisText(number)) }.font(.app(size: 10.5)).foregroundStyle(AppPalette.secondaryText)
+                } else {
+                    AxisValueLabel().font(.app(size: 10.5)).foregroundStyle(AppPalette.secondaryText)
+                }
             }
         }
         .chartXAxis {
@@ -1021,6 +1119,16 @@ private enum StatsFormat {
         if hours == 0 { return String(localized: "\(rest) min") }
         if rest == 0 { return String(localized: "\(hours) h") }
         return String(localized: "\(hours) h \(rest) min")
+    }
+
+    /// "1.2B", "340M", "52K".
+    static func tokens(_ count: Int64) -> String {
+        count.formatted(.number.notation(.compactName))
+    }
+
+    /// "$313", or "$4.20" while it's small.
+    static func dollars(_ value: Double) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(value < 10 ? 2 : 0)))
     }
 
     static func megabytes(_ bytes: UInt64) -> String {

@@ -1,5 +1,6 @@
 import CoreGraphics
 import NotchCore
+import SwiftUI
 
 /// Where things sit in the open Agents and AI Usage panels (origin top-left, y down): a band beside the
 /// hardware notch, then the list or the columns under it.
@@ -24,4 +25,23 @@ struct AgentsLayout: Equatable {
 
     /// Width of each half of the band beside the notch.
     var bandSideWidth: CGFloat { max(0, (body.width - notchWidth) / 2 - Self.sidePadding) }
+}
+
+/// A vertical scroll view. Off-screen snapshots get the plain content: `ImageRenderer` draws nothing
+/// inside a scroll view.
+struct PanelScroll<Content: View>: View {
+    let isSnapshot: Bool
+    var bottomMargin: CGFloat = 0
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if isSnapshot {
+            content
+                .padding(.bottom, bottomMargin)
+                .frame(maxHeight: .infinity, alignment: .top)
+        } else {
+            ScrollView { content }
+                .contentMargins(.bottom, bottomMargin, for: .scrollContent)
+        }
+    }
 }

@@ -13,7 +13,15 @@ final class FolderWatcher: @unchecked Sendable {
 
     /// - Parameter onChange: the changed paths, on `queue`.
     init?(paths: [String], latency: TimeInterval, queue: DispatchQueue, onChange: @escaping @Sendable ([String]) -> Void) {
-        let existing = paths.filter { FileManager.default.fileExists(atPath: $0) }
+        // A new account may not have its sessions/projects directory yet. Watch its nearest existing
+        // parent so creating the directory and the first log still reaches the same stream.
+        let existing = Array(Set(paths.map { path in
+            var folder = URL(fileURLWithPath: path)
+            while !FileManager.default.fileExists(atPath: folder.path), folder.path != "/" {
+                folder.deleteLastPathComponent()
+            }
+            return folder.path
+        }.filter { $0 != "/" }))
         guard !existing.isEmpty else { return nil }
         self.queue = queue
         self.onChange = onChange
@@ -59,7 +67,6 @@ final class FileChangeWatcher: @unchecked Sendable {
     private let queue: DispatchQueue
     private let onChange: @Sendable () -> Void
     private var source: DispatchSourceFileSystemObject?
-    private var retries = 0
     private var stopped = false
 
     init(path: String, queue: DispatchQueue, onChange: @escaping @Sendable () -> Void) {
@@ -75,13 +82,20 @@ final class FileChangeWatcher: @unchecked Sendable {
         guard !stopped else { return }
         let fd = open(path, O_EVTONLY)
         guard fd >= 0 else {
-            // Caught between an atomic save's delete and rename: look again a moment later, a few times.
-            guard retries < 3 else { return }
-            retries += 1
-            queue.asyncAfter(deadline: .now() + 2) { [weak self] in self?.arm() }
+            // A first-use config may not exist yet. The parent directory tells us when it is created,
+            // without a retry timer or a watch over everything below the user's home folder.
+            let parent = open((path as NSString).deletingLastPathComponent, O_EVTONLY)
+            guard parent >= 0 else { return }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: parent, eventMask: [.write], queue: queue)
+            source.setEventHandler { [weak self] in
+                self?.arm()
+                self?.onChange()
+            }
+            source.setCancelHandler { close(parent) }
+            self.source = source
+            source.resume()
             return
         }
-        retries = 0
         let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .extend, .rename, .delete], queue: queue)
         source.setEventHandler { [weak self] in
             guard let self, let current = self.source else { return }

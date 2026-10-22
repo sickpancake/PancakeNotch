@@ -52,6 +52,8 @@ final class AppContext {
     let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
+    /// Which AI tools are on this Mac, for the offer to switch on Agents and AI Usage.
+    let detectTools: () -> [AgentTool]
 
     init(
         preferences: Preferences,
@@ -69,7 +71,8 @@ final class AppContext {
         agents: AgentsCenter,
         usage: UsageCenter,
         connector: AgentConnector,
-        makeLiveModules: @escaping () -> [any NotchModule]
+        makeLiveModules: @escaping () -> [any NotchModule],
+        detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() }
     ) {
         self.preferences = preferences
         self.shortcuts = shortcuts
@@ -87,6 +90,7 @@ final class AppContext {
         self.usage = usage
         self.connector = connector
         self.makeLiveModules = makeLiveModules
+        self.detectTools = detectTools
     }
 
     /// Whether a module is switched on (its card's switch on the Modules page).

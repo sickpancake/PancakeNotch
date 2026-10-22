@@ -96,7 +96,7 @@ struct AppWindowView: View {
                 case .learn:
                     LearnView(context: context, lesson: $navigation.lesson)
                 case .statistics:
-                    StatsView(store: context.statsStore, helperPID: { [nowPlaying = context.nowPlaying] in nowPlaying.helperProcessID })
+                    StatsView(store: context.statsStore, usage: context.usage, agentsSettings: context.agentsSettings, helperPID: { [nowPlaying = context.nowPlaying] in nowPlaying.helperProcessID })
                 case .general: GeneralSettingsView(preferences: preferences, updates: context.updates)
                 case .notch: NotchSettingsView(context: context) { navigation.section = .modules }
                 case .keyboard: KeyboardSettingsView(shortcuts: context.shortcuts)

@@ -91,7 +91,9 @@ final class LiveUsageSources {
         center.setAccounts(accounts)
         for item in read { center.setLimits(item.limits, for: item.account.id) }
         watchLimits(read)
-        if visible { scan() }
+        if visible { watchHistory() }
+        // One initial import, even before the history view is opened.
+        scan()
     }
 
     private func watchLimits(_ read: [ReadAccount]) {
@@ -213,7 +215,10 @@ final class LiveUsageSources {
                 if total >= Self.bigRead, percent != reported {
                     reported = percent
                     let progress = Double(percent) / 50
-                    Task { @MainActor in self?.center.setFirstReadProgress(progress) }
+                    Task { @MainActor in
+                        guard let self, !self.stopped else { return }
+                        self.center.setFirstReadProgress(progress)
+                    }
                 }
             }
             Task { @MainActor in self?.scanned() }
@@ -222,8 +227,9 @@ final class LiveUsageSources {
 
     private func scanned() {
         scanning = false
-        center.setFirstReadProgress(nil)
         guard !stopped else { return }
+        center.setFirstReadProgress(nil)
+        center.historyChanged()
         center.refreshTotals()
         if scanAgain, visible {
             scanAgain = false
@@ -264,5 +270,10 @@ final class LiveUsageSources {
     func daily(days: Int, accountIDs: [String]) async -> [DailyUsage] {
         guard let stats else { return [] }
         return await stats.aiDaily(accounts: accountIDs, days: days).map { DailyUsage(day: $0.day, tokens: $0.tokens, cost: $0.cost) }
+    }
+
+    func models(days: Int, accountIDs: [String]) async -> [ModelUsage] {
+        guard let stats else { return [] }
+        return Self.totals(await stats.aiTotals(accounts: accountIDs, days: days)).models
     }
 }

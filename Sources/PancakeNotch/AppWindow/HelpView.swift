@@ -1,3 +1,4 @@
+import AgentsCore
 import ModuleShelf
 import NowPlayingCore
 import SwiftUI
@@ -18,6 +19,9 @@ struct HelpView: View {
             notchCard
             musicCard
             shelfCard
+            agentsCard
+            connectCard
+            aiUsageCard
             shortcutCard
             updatesCard
             startOverCard
@@ -161,6 +165,106 @@ struct HelpView: View {
         }
     }
 
+    // MARK: Agents and AI Usage
+
+    @ViewBuilder
+    private var agentsCard: some View {
+        let settings = context.agentsSettings
+        SettingsCard(header: String(localized: "Agents")) {
+            if !settings.agentsEnabled {
+                SettingsRow(
+                    title: String(localized: "Agents is switched off"),
+                    subtitle: String(localized: "Turn it on to see your AI agents in the notch and answer their requests.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.agentsEnabled = true }
+                }
+            } else {
+                SettingsRow(
+                    title: String(localized: "What Agents shows"),
+                    subtitle: String(localized: "Every Claude Code, Codex and Cursor thread: working, needs you or done. Allow once or Deny a request right in the notch, or click a thread to go to its app.")
+                ) {
+                    EmptyView()
+                }
+            }
+            MoreOnlineRow(topic: .agents)
+        }
+    }
+
+    /// What Connect does, and a Disconnect for each tool that has it.
+    @ViewBuilder
+    private var connectCard: some View {
+        let connector = context.connector
+        let connected = AgentTool.allCases.filter { connector.state($0) == .connected }
+        SettingsCard(header: String(localized: "Connecting your AI tools")) {
+            SettingsRow(
+                title: String(localized: "What Connect does"),
+                subtitle: String(localized: "It adds a small helper to the tool's hooks, so alerts are instant and you can Allow once or Deny right in the notch. Without it, Claude Code and Codex are followed from their own files.")
+            ) {
+                EmptyView()
+            }
+            ForEach(connected, id: \.self) { tool in
+                SettingsRow(
+                    title: String(localized: "\(tool.name) is connected"),
+                    subtitle: tool == .codex
+                        ? String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks. Disconnect takes the helper out again.")
+                        : String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
+                ) {
+                    Button(String(localized: "Disconnect")) { connector.disconnect(tool) }
+                        .accessibilityLabel(Text("Disconnect \(tool.name)"))
+                }
+            }
+            if connected.isEmpty {
+                SettingsRow(
+                    title: String(localized: "Nothing is connected"),
+                    subtitle: String(localized: "Connect a tool in Modules, under Agents settings.")
+                ) {
+                    Button(String(localized: "Open Modules")) { navigation.section = .modules }
+                }
+            }
+            if let problem = connector.problem {
+                SettingsRow(title: String(localized: "That didn't work"), subtitle: problem) {
+                    EmptyView()
+                }
+            }
+            MoreOnlineRow(topic: .agentsConnect)
+        }
+        .onAppear { connector.refresh() }
+    }
+
+    @ViewBuilder
+    private var aiUsageCard: some View {
+        let settings = context.agentsSettings
+        SettingsCard(header: String(localized: "AI Usage")) {
+            if !settings.usageEnabled {
+                SettingsRow(
+                    title: String(localized: "AI Usage is switched off"),
+                    subtitle: String(localized: "Turn it on to see your plan limits and how many tokens you use.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.usageEnabled = true }
+                }
+            }
+            SettingsRow(
+                title: String(localized: "How it finds your accounts"),
+                subtitle: String(localized: "It looks for Claude Code and Codex folders in your home folder, like .claude and .codex. Missing one? Add its folder under AI Usage settings in Modules.")
+            ) {
+                EmptyView()
+            }
+            SettingsRow(
+                title: String(localized: "What API value means"),
+                subtitle: String(localized: "What your tokens would cost if you paid per use. Plan accounts, like Claude Pro or Max and ChatGPT Plus or Pro, don't pay it.")
+            ) {
+                EmptyView()
+            }
+            SettingsRow(
+                title: String(localized: "It all stays on this Mac"),
+                subtitle: String(localized: "PancakeNotch reads token counts and model names from files your tools already keep. It never reads what you or the agent wrote, and nothing goes online.")
+            ) {
+                EmptyView()
+            }
+            MoreOnlineRow(topic: .aiUsage)
+        }
+    }
+
     // MARK: Keyboard shortcut
 
     @ViewBuilder
@@ -203,7 +307,7 @@ struct HelpView: View {
             }
             SettingsRow(
                 title: String(localized: "Practice in Learn"),
-                subtitle: String(localized: "Hands-on lessons for the notch, the Shelf and Now Playing.")
+                subtitle: String(localized: "Hands-on lessons for the notch, the Shelf, Now Playing, Agents and AI Usage.")
             ) {
                 Button(String(localized: "Open Learn")) { navigation.section = .learn }
             }

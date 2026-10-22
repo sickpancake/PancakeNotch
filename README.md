@@ -9,6 +9,8 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 
 - **Now Playing** — album art and sound bars beside the notch; open it to pause, skip, scrub, shuffle and repeat, for any app that plays.
 - **Shelf** — drag files onto the notch to park them; drag them out, share them or AirDrop them later.
+- **Agents** — follow Claude Code and Codex threads, plus Cursor after Connect. See who is working, needs you, or finished; answer permission requests from the notch after Connect.
+- **AI Usage** — choose between accounts, check plan limits, and see tokens and estimated API value for today, 7 days, or 30 days. Both AI modules are optional and read files already on your Mac.
 - **Module Menu** — tabs for your favorite modules, a menu with all of them, or a two-finger swipe.
 - **The PancakeNotch window** — settings, favorites, statistics (listening, usage, and the app's own memory use), short hands-on lessons, and a Help page with quick fixes.
 

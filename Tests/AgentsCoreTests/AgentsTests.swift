@@ -73,6 +73,44 @@ struct AgentsCenterTests {
         #expect(center.threads.first?.status == .stopped)
     }
 
+    @Test func aWorkingSessionThatQuitsIsStopped() {
+        let center = center()
+        center.apply(.init(id: "claude:a", tool: .claude, at: .now, status: .working))
+        center.ended("claude:a", at: .now)
+        #expect(center.threads.first?.status == .stopped)
+    }
+
+    @Test func codexHooksHideReviewersAndHelpers() throws {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "review", "model": "codex-auto-review"]))
+        #expect(center.threads.isEmpty)
+        let file = try temporaryFolder().appending(path: "helper.jsonl")
+        try Data(#"{"type":"session_meta","payload":{"id":"helper","source":{"subagent":{"other":"guardian"}}}}"#.utf8).write(to: file)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "helper", "transcript_path": file.path]))
+        #expect(center.threads.isEmpty)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "real", "model": "gpt-6.1-sol"]))
+        #expect(center.threads.map(\.id) == ["codex:real"])
+        sources.stop()
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0, payload: ["session_id": "late"]))
+        #expect(center.threads.map(\.id) == ["codex:real"])
+    }
+
+    @Test func twoVisibleListsKeepFinishedThreadsSeenUntilBothClose() {
+        let center = center()
+        center.listShown()
+        center.listShown()
+        center.listHidden()
+        center.apply(.init(id: "claude:a", tool: .claude, at: .now, status: .done))
+        #expect(center.thread("claude:a")?.isSeen == true)
+        center.listHidden()
+        center.apply(.init(id: "claude:b", tool: .claude, at: .now, status: .done))
+        #expect(center.thread("claude:b")?.isSeen == false)
+    }
+
     @Test func practiceAllowGoesBackToWork() throws {
         let center = AgentsCenter.practice()
         var events: [AgentsPracticeEvent] = []

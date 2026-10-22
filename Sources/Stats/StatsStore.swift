@@ -25,6 +25,9 @@ public final class StatsStore: Sendable {
 
     /// `~/Library/Application Support/PancakeNotch/statistics.sqlite`. Creates the folder.
     public static func defaultURL() -> URL {
+        if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_STATS_FILE"] {
+            return URL(fileURLWithPath: path)
+        }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let folder = support.appending(path: "PancakeNotch", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

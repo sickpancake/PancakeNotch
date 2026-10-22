@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var connector = AgentConnector(settings: agentsSettings)
     /// Exists only while Agents is switched on.
     private var agentsModule: AgentsModule?
+    /// Exists only while AI Usage is switched on.
+    private var usageModule: AIUsageModule?
+    private var followedAccountFolders: [String] = []
     /// Keeps at most one app-health sample per 10 minutes, taken when the notch or window opens.
     private var healthSampler = HealthSampler()
     private var lastStatisticsCleanup: Date?
@@ -184,6 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shelfStore.saveEdits()
         // Ends the Now Playing helper and the current listening stretch, then lets it reach the file.
         if nowPlayingModule != nil { nowPlaying.stop() }
+        agents.stop()
+        usage.stop()
         statistics.waitForWrites()
     }
 
@@ -253,17 +258,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
         if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
+        if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
         return modules
     }
 
     /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
     /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
     private func observeModules() {
-        let (nowPlayingOn, shelfOn, agentsOn) = withObservationTracking {
-            (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled)
+        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders) = withObservationTracking {
+            (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled,
+             agentsSettings.usageEnabled, agentsSettings.addedFolders)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
+        let accountsChanged = accountFolders != followedAccountFolders
+        followedAccountFolders = accountFolders
         if nowPlayingOn {
             if nowPlayingModule == nil { nowPlayingModule = NowPlayingModule(center: nowPlaying) }
             nowPlaying.start()
@@ -286,12 +295,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 agentsModule = AgentsModule(center: agents)
                 agents.start()
                 connector.updateHelperIfConnected()
+            } else if accountsChanged {
+                agents.refreshAccounts()
             }
         } else if agentsModule != nil {
             agentsModule = nil
             agents.stop()
         }
-        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule].compactMap { $0 }
+        if usageOn {
+            if usageModule == nil {
+                usageModule = AIUsageModule(center: usage)
+                usage.start()
+            } else if accountsChanged {
+                usage.refreshAccounts()
+            }
+        } else if usageModule != nil {
+            usageModule = nil
+            usage.stop()
+        }
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule].compactMap { $0 }
     }
 
     /// Counts items put on the Shelf and sent with AirDrop, for the statistics.
@@ -341,6 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
                 NowPlayingSnapshot.models(layout: layout) + Self.moduleSnapshots(layout: layout) + ShelfSnapshot.models(layout: layout)
+                    + AgentsSnapshot.models(layout: layout)
             }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")

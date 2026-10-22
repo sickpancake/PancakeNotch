@@ -186,7 +186,10 @@ enum CodexThreadTitles {
         defer { sqlite3_close_v2(db) }
         sqlite3_busy_timeout(db, 200)
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT COALESCE(NULLIF(name, ''), title) FROM threads WHERE id = ?", -1, &statement, nil) == SQLITE_OK else { return nil }
+        if sqlite3_prepare_v2(db, "SELECT COALESCE(NULLIF(name, ''), title) FROM threads WHERE id = ?", -1, &statement, nil) != SQLITE_OK {
+            // Older schemas have a title but no separate name.
+            guard sqlite3_prepare_v2(db, "SELECT title FROM threads WHERE id = ?", -1, &statement, nil) == SQLITE_OK else { return nil }
+        }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, threadID, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         guard sqlite3_step(statement) == SQLITE_ROW, let raw = sqlite3_column_text(statement, 0) else { return nil }

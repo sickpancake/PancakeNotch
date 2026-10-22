@@ -196,7 +196,7 @@ final class UsageLedger: @unchecked Sendable {
                           let size = values.fileSize.map(UInt64.init), (values.contentModificationDate ?? now) >= oldest
                     else { continue }
                     let saved = progress[url.path]
-                    if saved?.size == size { continue }
+                    if saved?.size == size, saved?.offset == size { continue }
                     // A file that got shorter was replaced: read it again (records already saved stay single).
                     let resumes = saved.map { $0.offset <= size } ?? false
                     let start = resumes ? saved?.offset ?? 0 : 0
@@ -214,7 +214,14 @@ final class UsageLedger: @unchecked Sendable {
         var records: [String: AIUsageRecord] = [:]
         var codex = file.account.tool == .codex ? CodexUsageLog(state: file.state) : nil
         let fallback = CodexUsageLog.thread(inFileName: file.url.lastPathComponent)
-        let offset = JSONLines.read(file.url, from: file.start) { line in
+        func flush(_ next: AIFileProgress) {
+            stats.recordAIUsage(Array(records.values), file: file.url.path, progress: next)
+            // Bound both this batch and the database's pending writes during a large first import.
+            stats.waitForWrites()
+            records.removeAll(keepingCapacity: true)
+        }
+        let initial = AIFileProgress(size: file.size, offset: file.start, state: file.state)
+        let offset = JSONLines.read(file.url, from: file.start, shouldContinue: { !self.cancelled.withLock { $0 } }) { line in
             // Each line's decoded objects go right away, so a big log never piles up in memory.
             autoreleasepool {
                 let record = codex != nil
@@ -223,10 +230,11 @@ final class UsageLedger: @unchecked Sendable {
                 guard let record, record.date >= oldest else { return }
                 if record.output >= records[record.id]?.output ?? -1 { records[record.id] = record }
             }
+            if records.count >= 256 { flush(initial) }
         }
         let next = AIFileProgress(size: file.size, offset: offset, state: codex?.state ?? "")
         progress[file.url.path] = next
-        stats.recordAIUsage(Array(records.values), file: file.url.path, progress: next)
+        flush(next)
     }
 }
 

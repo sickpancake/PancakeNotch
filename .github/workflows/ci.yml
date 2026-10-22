@@ -20,6 +20,8 @@ jobs:
         run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
       - name: Shelf peak memory budget (ADR-0006)
         run: ./scripts/check-shelf-memory.sh build/PancakeNotch.app 20 100
+      - name: AI modules memory budget (large first import and open usage view)
+        run: ./scripts/check-agents-memory.sh build/PancakeNotch.app
 
   # The website builds (home page in web/, Help in site/), so a change that breaks it shows up here
   # and not after the merge.

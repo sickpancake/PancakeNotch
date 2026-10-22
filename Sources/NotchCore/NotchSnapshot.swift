@@ -30,7 +30,9 @@ public enum NotchSnapshot {
         .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
+        // A PNG can't be taller than 16384 px: a sheet with many rows renders at a smaller scale.
+        let sheetHeight = models.reduce(CGFloat(24)) { $0 + $1.layout.windowFrame(for: .expanded).size.height + 12 } - 12
+        renderer.scale = min(2, 16_000 / sheetHeight)
         guard let image = renderer.cgImage,
               let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
         else { throw CocoaError(.fileWriteUnknown) }

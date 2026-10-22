@@ -45,7 +45,8 @@ public final class AgentsCenter {
     @ObservationIgnored private var processIDs: [String: pid_t] = [:]
     /// Apps named by the tool when there's no process ID (a Codex rollout's originator).
     @ObservationIgnored private var hostBundleIDs: [String: String] = [:]
-    @ObservationIgnored private var listVisible = false
+    @ObservationIgnored private var listViewers = 0
+    private var listVisible: Bool { listViewers > 0 }
     @ObservationIgnored private var live: LiveAgentSources?
     @ObservationIgnored private var practice: PracticeAgents?
 
@@ -88,6 +89,7 @@ public final class AgentsCenter {
         let sources = LiveAgentSources(center: self)
         live = sources
         sources.start()
+        if listVisible { sources.setDetailed(true) }
     }
 
     /// Stops following them and forgets every thread.
@@ -100,9 +102,19 @@ public final class AgentsCenter {
         hostBundleIDs = [:]
     }
 
+    /// A configured account folder changed. Restart the file sources so both tools follow the new set.
+    public func refreshAccounts() {
+        guard !isPractice, live != nil else { return }
+        live?.stop()
+        let sources = LiveAgentSources(center: self)
+        live = sources
+        sources.start()
+        if listVisible { sources.setDetailed(true) }
+    }
+
     /// The list is on screen: finished threads count as seen, and the current steps are read.
     public func listShown() {
-        listVisible = true
+        listViewers += 1
         let now = Date()
         for (id, thread) in storage where thread.status.isFinished && !thread.isSeen {
             storage[id]?.isSeen = true
@@ -113,8 +125,8 @@ public final class AgentsCenter {
     }
 
     public func listHidden() {
-        listVisible = false
-        live?.setDetailed(false)
+        listViewers = max(0, listViewers - 1)
+        if !listVisible { live?.setDetailed(false) }
     }
 
     /// "Clear finished": every finished thread goes now.
@@ -231,7 +243,7 @@ public final class AgentsCenter {
     func ended(_ id: String, at date: Date) {
         guard let thread = storage[id] else { return }
         if thread.status.isFinished { return }
-        apply(Update(id: id, tool: thread.tool, at: date, status: thread.status.needsYou ? .stopped : .done))
+        apply(Update(id: id, tool: thread.tool, at: date, status: .stopped))
     }
 
     /// Drops a thread without a trace (an idle session that never worked, a practice reset).
