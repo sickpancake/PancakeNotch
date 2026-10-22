@@ -2,10 +2,10 @@ import { useEffect, useReducer, useState } from 'react'
 import { TileSwap } from '@/components/TileSwap'
 import { cn } from '@/lib/utils'
 import { Cover, Icon, Thumb, type IconName } from './art'
-import { SONGS, clock, count, kindOf, nameOf, type Item, type Module } from './data'
+import { SONGS, clock, count, kindOf, nameOf, type Item, type Module, type Thread, type Tool } from './data'
 import { positionAt, type Player, type PlayerActions } from './player'
 
-/* What the open notch shows: the player, the Shelf and the Module Menu, at the app's sizes. */
+/* What the open notch shows: the player, the Shelf, the agents and the Module Menu, at the app's sizes. */
 
 const control = 'grid cursor-pointer place-items-center rounded-[10px] text-white transition-[background-color,color,transform] duration-150 hover:bg-white/9 active:scale-90 motion-reduce:active:scale-100'
 
@@ -212,14 +212,89 @@ export function ShelfView({
   )
 }
 
+/* ---------- Agents ---------- */
+
+const TOOL_ICON: Record<Tool, IconName> = { 'Claude Code': 'claude', Codex: 'codex', Cursor: 'pointer' }
+const OPEN_NOTE = 'In your notch, this opens the thread’s app'
+
+const capsule = 'h-6 flex-none cursor-pointer rounded-full px-3 text-[11.5px] leading-none font-semibold transition-colors'
+const outlined = 'ring-1 ring-white/30 ring-inset hover:bg-white/10'
+
+export function AgentsView({ threads, narrow, onAllow, onDeny }: { threads: Thread[]; narrow: boolean; onAllow: (id: number) => void; onDeny: (id: number) => void }) {
+  // Clicking a row would bring its app forward; here it says so for a moment.
+  const [noted, setNoted] = useState<number | null>(null)
+  useEffect(() => {
+    if (noted === null) return
+    const end = setTimeout(() => setNoted(null), 3000)
+    return () => clearTimeout(end)
+  }, [noted])
+
+  return (
+    <>
+      <ul aria-label="Agent threads" className="flex h-full flex-col">
+        {threads.map((thread) => {
+          const asks = thread.state === 'needs'
+          return (
+            <li key={thread.id} className="flex h-10 flex-none items-center gap-1.5 rounded-[10px] transition-colors hover:bg-white/7">
+              <button
+                type="button"
+                data-thread={thread.id}
+                title="Open the thread’s app"
+                onClick={() => setNoted(thread.id)}
+                className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 text-left focus-visible:outline-offset-0"
+              >
+                <span className="grid size-6 flex-none place-items-center rounded-lg bg-white/10 text-[13px]">
+                  <Icon name={TOOL_ICON[thread.tool]} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] leading-[1.25] font-semibold">
+                    <span className="sr-only">{thread.tool}: </span>
+                    {thread.name}
+                  </span>
+                  <span className="block truncate text-[11.5px] leading-[1.3] text-white/60">
+                    {noted === thread.id ? OPEN_NOTE : `${thread.project} · ${thread.step}`}
+                  </span>
+                </span>
+                <span className={cn('flex flex-none items-center gap-1.5 text-[11.5px] leading-none', asks ? 'font-semibold text-white' : 'text-white/60', asks && narrow && 'sr-only')}>
+                  <Icon name={thread.state} className="text-[15px]" />
+                  {thread.status}
+                </span>
+              </button>
+              {asks && (
+                <div className="flex flex-none items-center gap-1.5 pr-1.5">
+                  <button type="button" aria-label={`Allow once: ${thread.name}`} onClick={() => onAllow(thread.id)} className={cn(capsule, 'bg-white text-black hover:bg-white/85')}>
+                    Allow
+                  </button>
+                  <button type="button" aria-label={`Deny: ${thread.name}`} onClick={() => onDeny(thread.id)} className={cn(capsule, outlined)}>
+                    Deny
+                  </button>
+                  {!narrow && (
+                    <button type="button" aria-label={`Open the app: ${thread.name}`} onClick={() => setNoted(thread.id)} className={cn(capsule, outlined)}>
+                      Open
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <span role="status" className="sr-only">
+        {noted === null ? '' : OPEN_NOTE}
+      </span>
+    </>
+  )
+}
+
 /* ---------- The Module Menu ---------- */
 
 const MODULES: { id: Exclude<Module, 'menu'>; name: string; icon: IconName }[] = [
   { id: 'np', name: 'Now Playing', icon: 'note' },
   { id: 'shelf', name: 'Shelf', icon: 'tray' },
+  { id: 'agents', name: 'Agents', icon: 'agents' },
 ]
 
-export function MenuView({ current, song, items, onGo }: { current: Module; song: string; items: number; onGo: (module: Module) => void }) {
+export function MenuView({ current, song, items, agents, onGo }: { current: Module; song: string; items: number; agents: string; onGo: (module: Module) => void }) {
   return (
     <div className="flex h-full gap-[18px]">
       <div>
@@ -248,7 +323,7 @@ export function MenuView({ current, song, items, onGo }: { current: Module; song
             key={module.id}
             type="button"
             onClick={() => onGo(module.id)}
-            className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-[5px] text-left transition-colors hover:bg-white/7"
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-[3px] text-left transition-colors hover:bg-white/7"
           >
             <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-white/10 text-[13px]">
               <Icon name={module.icon} />
@@ -256,7 +331,7 @@ export function MenuView({ current, song, items, onGo }: { current: Module; song
             <span className="min-w-0">
               <span className="block text-[12.5px] leading-[1.25] font-semibold">{module.name}</span>
               <span className="block truncate text-[11px] leading-[1.3] text-white/50">
-                {module.id === 'np' ? song : items ? count(items) : 'Empty'}
+                {module.id === 'np' ? song : module.id === 'agents' ? agents : items ? count(items) : 'Empty'}
               </span>
             </span>
           </button>
