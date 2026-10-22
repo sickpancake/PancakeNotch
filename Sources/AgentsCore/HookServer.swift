@@ -14,6 +14,9 @@ struct HookEvent: Sendable {
     var requestID: Int?
     /// Claude and Codex: `session_id`; Cursor: `conversation_id`.
     var sessionID: String?
+    /// Codex's current turn, used to confirm who reviews its permission requests.
+    var turnID: String?
+    var permissionMode: String?
     var cwd: String?
     var transcriptPath: String?
     var title: String?
@@ -32,6 +35,8 @@ struct HookEvent: Sendable {
         self.name = name
         self.parentPID = parentPID
         sessionID = payload["session_id"] as? String ?? payload["conversation_id"] as? String
+        turnID = payload["turn_id"] as? String
+        permissionMode = payload["permission_mode"] as? String
         cwd = payload["cwd"] as? String ?? (payload["workspace_roots"] as? [String])?.first
         transcriptPath = payload["transcript_path"] as? String
         title = payload["session_title"] as? String
@@ -219,6 +224,12 @@ final class HookServer: @unchecked Sendable {
         }
         var event = HookEvent(tool: tool, name: name, parentPID: pid_t(clamping: header["ppid"] as? Int ?? 0), payload: payload)
         client.buffer = Data()
+        // Codex runs this hook BEFORE automatic review or a user prompt. Only intercept a confirmed
+        // user-reviewed turn; closing with no decision lets Codex follow its own approval path.
+        if tool == .codex, name == "PermissionRequest", !CodexApprovalRouting.needsUser(event) {
+            close(client)
+            return
+        }
         if header["waits"] as? Bool == true {
             let requestID = nextRequest
             nextRequest += 1
