@@ -109,7 +109,8 @@ struct CodexUsageLog: Codable, Equatable {
 enum CodexLimitsLog {
     /// The newest limits in the account's most recently written rollouts.
     static func latest(in folder: URL, files: Int = 4) -> CodexRateLimits? {
-        newestRollouts(in: folder.appending(path: "sessions"), count: files).lazy.compactMap(read).first
+        newestRollouts(in: folder.appending(path: "sessions"), count: files).compactMap(read)
+            .max { $0.seenAt < $1.seenAt }
     }
 
     /// The last limits in one rollout's last 256 KB.

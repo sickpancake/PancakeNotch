@@ -30,7 +30,7 @@ public enum NotchSnapshot {
         .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: view)
-        // A PNG can't be taller than 16384 px: a sheet with many rows renders at a smaller scale.
+        // Keep a long contact sheet below the renderer's large-image limit.
         let sheetHeight = models.reduce(CGFloat(24)) { $0 + $1.layout.windowFrame(for: .expanded).size.height + 12 } - 12
         renderer.scale = min(2, 16_000 / sheetHeight)
         guard let image = renderer.cgImage,

@@ -187,6 +187,22 @@ struct UsageLogTests {
         #expect(AccountFinder.find(home: home, added: [folder.path]).map(\.tool) == [.codex])
     }
 
+    @Test func newestLimitsUseTheirObservationTimeRatherThanTheFilesWriteTime() throws {
+        let folder = try temporaryFolder()
+        let day = folder.appending(path: "sessions/2026/10/21")
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        for (name, stamp, percent, modified) in [
+            ("rollout-old.jsonl", "2026-10-21T10:00:00Z", 90, 2000.0),
+            ("rollout-new.jsonl", "2026-10-21T11:00:00Z", 20, 1000.0)
+        ] {
+            let file = day.appending(path: name)
+            let line = #"{"timestamp":"\#(stamp)","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":\#(percent)}}}}"#
+            try Data((line + "\n").utf8).write(to: file)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: modified)], ofItemAtPath: file.path)
+        }
+        #expect(CodexLimitsLog.latest(in: folder)?.primary?.usedPercent == 20)
+    }
+
     @Test func threadIDFromTheFileName() {
         #expect(CodexUsageLog.thread(inFileName: "rollout-2026-10-17T19-41-40-0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.jsonl")
             == "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")

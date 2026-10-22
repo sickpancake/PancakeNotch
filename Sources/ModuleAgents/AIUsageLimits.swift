@@ -18,7 +18,9 @@ struct AIUsageLimits: View {
                 PanelScroll(isSnapshot: module.isSnapshot) {
                     VStack(spacing: 0) {
                         ForEach(shown) { account in
-                            AccountSummaryRow(account: account, limits: center.limits[account.id])
+                            TimelineView(.everyMinute) { _ in
+                                AccountSummaryRow(account: account, limits: center.limits[account.id])
+                            }
                         }
                     }
                 }
