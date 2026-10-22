@@ -29,6 +29,8 @@ final class LiveUsageSources {
     private var visible = false
     private var scanning = false
     private var scanAgain = false
+    /// Keep Codex's temporary process apart from the initial history import.
+    private var refreshCodexAfterScan = false
     /// Drops totals that arrive after a newer question.
     private var totalsAsked = 0
     private var stopped = false
@@ -165,6 +167,7 @@ final class LiveUsageSources {
     /// Code only learns new limits when it sends a request, so its show "as of" when they're old.
     private func refreshLimits() {
         let now = Date()
+        if scanning { refreshCodexAfterScan = true }
         for account in accounts {
             let id = account.id
             if let file = configFiles[id] {
@@ -172,7 +175,7 @@ final class LiveUsageSources {
                     guard let identity = AccountIdentity.claude(configFile: file) else { return }
                     Task { @MainActor in self?.claudeIdentityChanged(identity, accountID: id) }
                 }
-            } else if account.tool == .codex, account.billing != .apiKey,
+            } else if !scanning, account.tool == .codex, account.billing != .apiKey,
                       now.timeIntervalSince(askedCodex[id] ?? .distantPast) > Self.askAgainAfter {
                 askedCodex[id] = now
                 let folder = account.folder, home = home
@@ -195,6 +198,7 @@ final class LiveUsageSources {
             scan()
             refreshLimits()
         } else {
+            refreshCodexAfterScan = false
             stopWatchingHistory()
         }
     }
@@ -270,6 +274,9 @@ final class LiveUsageSources {
         if scanAgain, visible {
             scanAgain = false
             scan()
+        } else if visible, refreshCodexAfterScan {
+            refreshCodexAfterScan = false
+            refreshLimits()
         }
     }
 
