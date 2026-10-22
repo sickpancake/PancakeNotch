@@ -23,9 +23,13 @@ import Testing
         for days in [1, 7, 30, 90] {
             let daily = await center.daily(days: days)
             let models = await center.models(days: days)
+            let dailyTokens: Int64 = daily.reduce(0) { $0 + $1.tokens }
+            let modelTokens: Int64 = models.reduce(0) { $0 + $1.tokens }
+            let dailyCost: Double = daily.reduce(0) { $0 + $1.cost }
+            let modelCost: Double = models.reduce(0) { $0 + $1.cost }
             #expect(daily.count == days)
-            #expect(daily.reduce(0) { $0 + $1.tokens } == models.reduce(0) { $0 + $1.tokens })
-            #expect(abs(daily.reduce(0) { $0 + $1.cost } - models.reduce(0) { $0 + $1.cost }) < 0.000001)
+            #expect(dailyTokens == modelTokens)
+            #expect(abs(dailyCost - modelCost) < 0.000001)
         }
     }
 }
