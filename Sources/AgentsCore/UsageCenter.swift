@@ -213,6 +213,9 @@ public final class UsageCenter {
         refreshTotals()
     }
 
+    /// Stop an in-progress first import from bringing cleared history back.
+    public func statisticsWillClear() { live?.discardHistory(before: .now) }
+
     /// Asks for the selected range's totals again (selection, range or history changed).
     func refreshTotals() {
         if isPractice {

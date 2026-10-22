@@ -273,6 +273,21 @@ struct UsageLogTests {
         for log in more { ledger.read(log) }
         totals = LiveUsageSources.totals(await stats.aiTotals(accounts: [account.id], days: 1))
         #expect(totals.tokens == 32 + 11)
+
+        // Clearing during an import must not bring older messages back; offsets still advance.
+        ledger.discardHistory(before: now.addingTimeInterval(0.5))
+        stats.clear()
+        let future = ISO8601DateFormatter().string(from: now.addingTimeInterval(2))
+        let resumed = try FileHandle(forWritingTo: file)
+        try resumed.seekToEnd()
+        try resumed.write(contentsOf: Data((message("old", output: 4)
+            + message("new", output: 10).replacingOccurrences(of: stamp, with: future)).utf8))
+        try resumed.close()
+        for log in ledger.unread([account]) { ledger.read(log) }
+        totals = LiveUsageSources.totals(await stats.aiTotals(accounts: [account.id], days: 1))
+        #expect(totals.tokens == 20)
+        let restarted = UsageLedger(stats: stats, progress: await stats.aiFileProgress())
+        #expect(restarted.unread([account]).isEmpty)
     }
 }
 

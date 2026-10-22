@@ -24,6 +24,7 @@ final class LiveUsageSources {
     /// Drops totals that arrive after a newer question.
     private var totalsAsked = 0
     private var stopped = false
+    private var discardedBefore: Date?
 
     /// A first read this big shows its progress.
     nonisolated private static let bigRead: UInt64 = 32 * 1024 * 1024
@@ -195,6 +196,7 @@ final class LiveUsageSources {
                 let progress = await stats.aiFileProgress()
                 guard let self, !self.stopped else { return }
                 self.ledger = UsageLedger(stats: stats, progress: progress)
+                if let date = self.discardedBefore { self.ledger?.discardHistory(before: date) }
                 self.scanning = false
                 self.scan()
             }
@@ -215,13 +217,13 @@ final class LiveUsageSources {
                 if total >= Self.bigRead, percent != reported {
                     reported = percent
                     let progress = Double(percent) / 50
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
                         guard let self, !self.stopped else { return }
                         self.center.setFirstReadProgress(progress)
                     }
                 }
             }
-            Task { @MainActor in self?.scanned() }
+            Task { @MainActor [weak self] in self?.scanned() }
         }
     }
 
@@ -275,5 +277,10 @@ final class LiveUsageSources {
     func models(days: Int, accountIDs: [String]) async -> [ModelUsage] {
         guard let stats else { return [] }
         return Self.totals(await stats.aiTotals(accounts: accountIDs, days: days)).models
+    }
+
+    func discardHistory(before date: Date) {
+        discardedBefore = date
+        ledger?.discardHistory(before: date)
     }
 }

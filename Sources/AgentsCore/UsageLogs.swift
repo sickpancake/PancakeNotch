@@ -173,10 +173,17 @@ final class UsageLedger: @unchecked Sendable {
     private var progress: [String: AIFileProgress]
     /// Set from the main actor to stop a long first read early (AI Usage was switched off).
     let cancelled = OSAllocatedUnfairLock(initialState: false)
+    private let discardedBefore = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
     init(stats: StatsStore, progress: [String: AIFileProgress]) {
         self.stats = stats
         self.progress = progress
+    }
+
+    /// The user cleared Statistics during an import. Finish advancing file offsets, but keep only
+    /// requests made after that click. The lock orders each batch before or after the database clear.
+    func discardHistory(before date: Date) {
+        discardedBefore.withLock { $0 = date }
     }
 
     /// The log files with something unread. Files untouched for longer than the history is kept are skipped.
@@ -215,7 +222,11 @@ final class UsageLedger: @unchecked Sendable {
         var codex = file.account.tool == .codex ? CodexUsageLog(state: file.state) : nil
         let fallback = CodexUsageLog.thread(inFileName: file.url.lastPathComponent)
         func flush(_ next: AIFileProgress) {
-            stats.recordAIUsage(Array(records.values), file: file.url.path, progress: next)
+            let batch = Array(records.values)
+            discardedBefore.withLock { cutoff in
+                let kept = batch.filter { record in cutoff.map { record.date >= $0 } ?? true }
+                stats.recordAIUsage(kept, file: file.url.path, progress: next)
+            }
             // Bound both this batch and the database's pending writes during a large first import.
             stats.waitForWrites()
             records.removeAll(keepingCapacity: true)

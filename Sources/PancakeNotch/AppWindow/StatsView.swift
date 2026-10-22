@@ -73,6 +73,7 @@ struct StatsView: View {
                     // Two clicks, like Clear Shelf.
                     Button(confirmingClear ? String(localized: "Clear All Statistics?") : String(localized: "Clear Statistics")) {
                         if confirmingClear {
+                            usage.statisticsWillClear()
                             store.clear()
                             usage.statisticsCleared()
                             generation += 1
