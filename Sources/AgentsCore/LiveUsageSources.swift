@@ -12,8 +12,16 @@ final class LiveUsageSources {
     private let stats: StatsStore?
     private let home = FileManager.default.homeDirectoryForCurrentUser
     private let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.usage.files", qos: .utility)
+    /// Asking Codex for its limits can take seconds: it waits here, not in front of the file reading.
+    private let askQueue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.usage.codex", qos: .utility)
 
     private var accounts: [AgentAccount] = []
+    /// Each Claude account's settings file, where Claude Code keeps its last-known limits.
+    private var configFiles: [String: URL] = [:]
+    /// When Codex was last asked for each account's limits.
+    private var askedCodex: [String: Date] = [:]
+    /// Codex isn't asked again sooner than this.
+    private static let askAgainAfter: TimeInterval = 60
     private var limitWatchers: [FolderWatcher] = []
     private var configWatchers: [FileChangeWatcher] = []
     private var historyWatcher: FolderWatcher?
@@ -90,6 +98,7 @@ final class LiveUsageSources {
     private func accountsRead(_ read: [ReadAccount]) {
         guard !stopped else { return }
         accounts = read.map(\.account)
+        configFiles = Dictionary(uniqueKeysWithValues: read.compactMap { item in item.configFile.map { (item.account.id, $0) } })
         center.setAccounts(accounts)
         for item in read { center.setLimits(item.limits, for: item.account.id) }
         watchLimits(read)
@@ -152,6 +161,29 @@ final class LiveUsageSources {
         center.setLimits(Self.codexLimits(rates, billing: account.billing), for: accountID)
     }
 
+    /// AI Usage was opened: read Claude's saved limits again, and ask Codex for its current ones. Claude
+    /// Code only learns new limits when it sends a request, so its show "as of" when they're old.
+    private func refreshLimits() {
+        let now = Date()
+        for account in accounts {
+            let id = account.id
+            if let file = configFiles[id] {
+                queue.async { [weak self] in
+                    guard let identity = AccountIdentity.claude(configFile: file) else { return }
+                    Task { @MainActor in self?.claudeIdentityChanged(identity, accountID: id) }
+                }
+            } else if account.tool == .codex, account.billing != .apiKey,
+                      now.timeIntervalSince(askedCodex[id] ?? .distantPast) > Self.askAgainAfter {
+                askedCodex[id] = now
+                let folder = account.folder, home = home
+                askQueue.async { [weak self] in
+                    guard let rates = CodexLimitsRequest.read(folder: folder, home: home) else { return }
+                    Task { @MainActor in self?.codexLimitsChanged(rates, accountID: id) }
+                }
+            }
+        }
+    }
+
     // MARK: Token history
 
     /// AI Usage or Statistics appeared (catch up and follow the logs) or went away (stop following).
@@ -161,6 +193,7 @@ final class LiveUsageSources {
         if value {
             watchHistory()
             scan()
+            refreshLimits()
         } else {
             stopWatchingHistory()
         }

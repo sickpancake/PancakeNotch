@@ -35,12 +35,12 @@ struct AccountPill: View {
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
             .help(Text("Choose an account"))
-            .accessibilityLabel(Text("Account: \(name)"))
+            .accessibilityLabel(Text("Account: \(EmailPrivacy.masked(name))"))
             .accessibilityHint(Text("Opens the list of accounts."))
         } else {
             label(center, account: account, name: name, canChoose: false)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text("Account: \(name)"))
+                .accessibilityLabel(Text("Account: \(EmailPrivacy.masked(name))"))
         }
     }
 
@@ -49,7 +49,8 @@ struct AccountPill: View {
             Image(systemName: account?.tool.symbol ?? "person.2")
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.6))
-            Text(name)
+            // A click on the pill opens the menu; emails are shown in full from there.
+            PrivateText(name, revealed: module.revealsEmails)
                 .font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -202,7 +203,7 @@ private struct AccountMenuRow: View {
         let limits = module.center.limits[account.id]
         let session = limits?.limits.first { $0.kind == .session }
         let weekly = limits?.limits.first { $0.kind == .weekly }
-        let spoken = [account.name, account.email, account.plan,
+        let spoken = [EmailPrivacy.masked(account.name), account.email.map(EmailPrivacy.masked), account.plan,
                       session.map { "\($0.label) \(AIUsageText.left($0, now: .now))" },
                       weekly.map { "\($0.label) \(AIUsageText.left($0, now: .now))" }]
             .compactMap { $0 }.joined(separator: ", ")
@@ -212,7 +213,7 @@ private struct AccountMenuRow: View {
             AccountCircle(account: account, size: 20)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
-                    Text(account.name)
+                    PrivateText(account.name, revealed: module.revealsEmails, toggle: module.toggleEmails)
                         .font(.system(size: 11.5, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(namedByEmail ? .middle : .tail)
@@ -226,7 +227,7 @@ private struct AccountMenuRow: View {
                     }
                 }
                 if let second = namedByEmail ? account.plan : account.email {
-                    Text(second)
+                    PrivateText(second, revealed: module.revealsEmails, toggle: module.toggleEmails)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.6))
                         .lineLimit(1)

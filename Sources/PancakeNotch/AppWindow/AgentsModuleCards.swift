@@ -1,5 +1,6 @@
 import AgentsCore
 import AppKit
+import ModuleAgents
 import SwiftUI
 
 /// Agents on the Modules page: a practice notch with pretend threads, what it does with its switch,
@@ -44,7 +45,7 @@ struct AIUsageModuleCard: View {
         String(localized: "How much of each plan limit is left, for every Claude Code and Codex account"),
         String(localized: "Tokens and API value for today, 7 days or 30 days"),
         String(localized: "A small gauge beside the notch, and a heads-up when an account is nearly out"),
-        String(localized: "Read from files already on your Mac: nothing goes online"),
+        String(localized: "Read from files on your Mac. Only Codex is asked for fresh limits, by Codex itself"),
     ]
 
     var body: some View {
@@ -347,6 +348,8 @@ private struct AccountRow: View {
     let remove: () -> Void
     /// The name being typed; nil when not renaming.
     @State private var draft: String?
+    /// The email shows in full after a click on it.
+    @State private var revealsEmail = false
     @FocusState private var isTyping: Bool
 
     var body: some View {
@@ -370,13 +373,19 @@ private struct AccountRow: View {
                         .onAppear { isTyping = true }
                         .onSubmit(save)
                         .onExitCommand { draft = nil }
-                        .accessibilityLabel(Text("Name for \(account.name)"))
+                        .accessibilityLabel(Text("Name for \(EmailPrivacy.masked(account.name))"))
                 } else {
-                    Text(account.name)
+                    PrivateText(account.name, revealed: revealsEmail) { revealsEmail.toggle() }
                         .font(.app(size: 13.5, weight: .medium))
-                    Text(details)
-                        .font(.app(size: 12.5))
-                        .foregroundStyle(AppPalette.secondaryText)
+                    HStack(spacing: 0) {
+                        if let email = account.email, email != account.name {
+                            PrivateText(email, revealed: revealsEmail) { revealsEmail.toggle() }
+                            Text(verbatim: " · ")
+                        }
+                        Text(details)
+                    }
+                    .font(.app(size: 12.5))
+                    .foregroundStyle(AppPalette.secondaryText)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,10 +396,10 @@ private struct AccountRow: View {
                         .buttonStyle(ProminentPillButtonStyle())
                 } else {
                     Button(String(localized: "Rename")) { draft = account.name }
-                    .accessibilityLabel(Text("Rename \(account.name)"))
+                    .accessibilityLabel(Text("Rename \(EmailPrivacy.masked(account.name))"))
                     if isAdded {
                         Button(String(localized: "Remove"), action: remove)
-                            .accessibilityLabel(Text("Remove \(account.name)"))
+                            .accessibilityLabel(Text("Remove \(EmailPrivacy.masked(account.name))"))
                             .accessibilityHint(Text("Takes this folder off the list. The folder itself stays."))
                     }
                 }
@@ -400,9 +409,9 @@ private struct AccountRow: View {
         .settingsRowPadding()
     }
 
-    /// "sam@example.com · Pro · Claude Code" (the email is the name until it's renamed).
+    /// "Pro · Claude Code", after the email when the account has been renamed.
     private var details: String {
-        [account.name == account.email ? nil : account.email, account.plan, account.tool.name]
+        [account.plan, account.tool.name]
             .compactMap { $0 }
             .joined(separator: " · ")
     }

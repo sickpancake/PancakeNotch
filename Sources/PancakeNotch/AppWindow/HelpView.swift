@@ -257,7 +257,7 @@ struct HelpView: View {
             }
             SettingsRow(
                 title: String(localized: "It all stays on this Mac"),
-                subtitle: String(localized: "PancakeNotch reads token counts and model names from files your tools already keep. It never reads what you or the agent wrote, and nothing goes online.")
+                subtitle: String(localized: "PancakeNotch reads token counts and model names from files your tools already keep. It never reads what you or the agent wrote. When you open AI Usage, Codex is asked for its current limits (Codex checks with OpenAI); PancakeNotch itself sends nothing.")
             ) {
                 EmptyView()
             }

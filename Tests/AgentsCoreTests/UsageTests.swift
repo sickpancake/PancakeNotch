@@ -313,3 +313,24 @@ func temporaryFolder() throws -> URL {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     return folder
 }
+
+struct PrivacyAndFreshnessTests {
+    @Test func emailsAreHalfHidden() throws {
+        let parts = try #require(EmailPrivacy.parts("sam@studio.example"))
+        #expect(parts.first == "s" && parts.hidden == "am" && parts.domain == "@studio.example")
+        #expect(EmailPrivacy.masked("thesickpancake@gmail.com") == "t••••••••@gmail.com")
+        #expect(EmailPrivacy.masked("Work") == "Work")
+        #expect(EmailPrivacy.parts("@nothing") == nil)
+    }
+
+    @Test func codexAnswersBecomeLimits() throws {
+        let rates = try #require(CodexLimitsRequest.limits([
+            "rateLimits": ["primary": ["usedPercent": 57, "windowDurationMins": 300, "resetsAt": 1_792_647_539],
+                           "secondary": ["usedPercent": 10, "windowDurationMins": 10080, "resetsAt": 1_793_108_662],
+                           "planType": "plus"],
+        ]))
+        #expect(rates.limits.map(\.kind) == [.session, .weekly])
+        #expect(rates.limits.map(\.usedPercent) == [57, 10])
+        #expect(rates.plan == "plus")
+    }
+}

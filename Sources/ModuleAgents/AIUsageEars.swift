@@ -1,7 +1,7 @@
 import AgentsCore
 import SwiftUI
 
-/// A still ring that shows how much of a limit is left (nothing moves).
+/// A still ring that shows how much of a limit is left, colored by it (nothing moves).
 struct LimitRing: View {
     /// 0…1.
     let left: Double
@@ -12,7 +12,7 @@ struct LimitRing: View {
             Circle().stroke(.white.opacity(0.25), lineWidth: 2)
             Circle()
                 .trim(from: 0, to: max(0.02, min(1, left)))
-                .stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(StatusColors.color(left: left * 100), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)

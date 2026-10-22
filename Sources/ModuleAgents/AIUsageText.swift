@@ -33,9 +33,9 @@ enum AIUsageText {
                       comment: "AI Usage: when a limit resets, e.g. resets Sun 11:00")
     }
 
-    /// "as of 3:12 PM" when the tool last fetched the limits more than an hour ago, else `nil`.
+    /// "as of 3:12 PM" when the tool last fetched the limits more than 10 minutes ago, else `nil`.
     static func asOf(_ updatedAt: Date?, now: Date) -> String? {
-        guard let updatedAt, now.timeIntervalSince(updatedAt) > 3_600 else { return nil }
+        guard let updatedAt, now.timeIntervalSince(updatedAt) > 600 else { return nil }
         let when = Calendar.current.isDate(updatedAt, inSameDayAs: now)
             ? updatedAt.formatted(date: .omitted, time: .shortened)
             : updatedAt.formatted(.dateTime.weekday(.abbreviated).hour().minute())
@@ -65,20 +65,21 @@ enum AIUsageText {
     /// has no limits, else "All accounts".
     static func menuStatus(account: AgentAccount?, limits: AccountLimits?, now: Date = .now) -> String {
         guard let account else { return String(localized: "All accounts", comment: "AI Usage: every account at once") }
-        guard let limit = limits?.tightest(now: now) else { return account.name }
+        guard let limit = limits?.tightest(now: now) else { return EmailPrivacy.masked(account.name) }
         return "\(limit.label) \(left(limit, now: now))"
     }
 
     /// The strip under the notch: who is nearly out ("Claude · Work") and what's left.
     static func peek(_ near: NearLimit, now: Date) -> (subject: String, detail: String) {
         let account = near.account
-        let subject = account.name == account.tool.shortName ? account.name : "\(account.tool.shortName) · \(account.name)"
+        let name = EmailPrivacy.masked(account.name)
+        let subject = account.name == account.tool.shortName ? name : "\(account.tool.shortName) · \(name)"
         return (subject, detail(near.limit, now: now))
     }
 
     /// Read while the notch is compact: "Work is nearly out of Claude Code: 8% left".
     static func spoken(_ near: NearLimit, now: Date) -> String {
-        String(localized: "\(near.account.name) is nearly out of \(near.account.tool.name): \(left(near.limit, now: now))",
+        String(localized: "\(EmailPrivacy.masked(near.account.name)) is nearly out of \(near.account.tool.name): \(left(near.limit, now: now))",
                comment: "VoiceOver, compact notch: an account is almost at its limit")
     }
 

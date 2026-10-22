@@ -100,3 +100,19 @@ struct AIUsageTextTests {
         }
     }
 }
+
+struct StatusColorsTests {
+    @Test func limitsChangeColorAsTheyRunLow() {
+        #expect(StatusColors.color(left: 80) == StatusColors.green)
+        #expect(StatusColors.color(left: 50) == StatusColors.green)
+        #expect(StatusColors.color(left: 35) == StatusColors.yellow)
+        #expect(StatusColors.color(left: 12) == StatusColors.orange)
+        #expect(StatusColors.color(left: 8) == StatusColors.red)
+    }
+
+    @Test func eachStatusHasItsColor() {
+        #expect(StatusColors.color(for: .working) == StatusColors.blue)
+        #expect(StatusColors.color(for: .needsYou(.input)) == StatusColors.orange)
+        #expect(StatusColors.color(for: .failed) == StatusColors.red)
+    }
+}

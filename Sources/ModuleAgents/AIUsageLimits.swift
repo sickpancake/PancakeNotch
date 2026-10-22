@@ -19,7 +19,7 @@ struct AIUsageLimits: View {
                     VStack(spacing: 0) {
                         ForEach(shown) { account in
                             TimelineView(.everyMinute) { _ in
-                                AccountSummaryRow(account: account, limits: center.limits[account.id])
+                                AccountSummaryRow(account: account, limits: center.limits[account.id], module: module)
                             }
                         }
                     }
@@ -104,12 +104,13 @@ private struct LimitRow: View {
 private struct AccountSummaryRow: View {
     let account: AgentAccount
     let limits: AccountLimits?
+    let module: AIUsageModule
 
     var body: some View {
         HStack(spacing: 8) {
             AccountCircle(account: account, size: 20)
             VStack(alignment: .leading, spacing: 0) {
-                Text(account.name)
+                PrivateText(account.name, revealed: module.revealsEmails, toggle: module.toggleEmails)
                     .font(.system(size: 12.5, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -179,7 +180,7 @@ struct LeftBar: View {
             let filled = bar.width * min(100, max(0, left)) / 100
             if filled > 0 {
                 context.fill(Path(roundedRect: CGRect(x: 0, y: bar.minY, width: max(filled, height), height: height), cornerRadius: height / 2),
-                             with: .color(.white))
+                             with: .color(StatusColors.color(left: left)))
             }
             if let pace {
                 let x = min(size.width - Self.tickWidth, max(0, bar.width * min(100, max(0, pace)) / 100 - Self.tickWidth / 2))

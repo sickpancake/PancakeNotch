@@ -23,6 +23,8 @@ public final class AIUsageModule: NotchModule {
     }
     /// What the peek strip is about (the latest account to run low).
     var peekNear: NearLimit?
+    /// Emails show in full after a click on one, until the notch closes.
+    private(set) var revealsEmails = false
     /// Whether this copy peeks. The center tells one module, so Home's live copy doesn't.
     @ObservationIgnored private let peeks: Bool
     /// Rendering off-screen: plain lists instead of scroll views.
@@ -89,11 +91,17 @@ public final class AIUsageModule: NotchModule {
     public func notchDidClose() {
         closeMenu()
         hideHistory()
+        revealsEmails = false
     }
 
     public func userSwitchedAway() {
         closeMenu()
         hideHistory()
+        revealsEmails = false
+    }
+
+    func toggleEmails() {
+        revealsEmails.toggle()
     }
 
     private func hideHistory() {

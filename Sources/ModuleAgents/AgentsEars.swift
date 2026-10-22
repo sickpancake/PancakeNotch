@@ -1,9 +1,9 @@
 import AgentsCore
 import SwiftUI
 
-/// A still mark for a thread's status (nothing moves, in the list or the ear): a dotted circle while
-/// it works, a white disc with "!" when it needs you, and an outlined circle with a check, a stop
-/// square or an x for done, stopped and error.
+/// A still mark for a thread's status (nothing moves, in the list or the ear), in its color: a blue dotted
+/// circle while it works, an orange disc with "!" when it needs you, and an outlined circle with a check
+/// (green), a stop square (gray) or an x (red) for done, stopped and error.
 struct AgentMark: View {
     let status: AgentStatus
     let size: CGFloat
@@ -14,15 +14,15 @@ struct AgentMark: View {
             case .needsYou:
                 Image(systemName: "exclamationmark.circle.fill")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(.black, .white)
+                    .foregroundStyle(.black, StatusColors.color(for: status))
             case .working:
-                Image(systemName: "ellipsis.circle").foregroundStyle(.white.opacity(0.75))
+                Image(systemName: "ellipsis.circle").foregroundStyle(StatusColors.color(for: status))
             case .done:
-                Image(systemName: "checkmark.circle").foregroundStyle(.white.opacity(0.75))
+                Image(systemName: "checkmark.circle").foregroundStyle(StatusColors.color(for: status))
             case .stopped:
-                Image(systemName: "stop.circle").foregroundStyle(.white.opacity(0.75))
+                Image(systemName: "stop.circle").foregroundStyle(StatusColors.color(for: status))
             case .failed:
-                Image(systemName: "xmark.circle").foregroundStyle(.white.opacity(0.75))
+                Image(systemName: "xmark.circle").foregroundStyle(StatusColors.color(for: status))
             }
         }
         .font(.system(size: size * 0.92, weight: .regular))

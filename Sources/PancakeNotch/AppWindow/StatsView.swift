@@ -399,7 +399,7 @@ private struct AIUsageContent: View {
     }
 
     private var footnote: String {
-        let who = usage.selectedAccount.map(\.name) ?? String(localized: "all accounts")
+        let who = usage.selectedAccount.map { EmailPrivacy.masked($0.name) } ?? String(localized: "all accounts")
         let source = String(localized: "Shows \(who), read from your AI tools' own files on this Mac. API value is what the tokens would cost pay-per-use; plan accounts don't pay it.")
         guard let progress = usage.firstReadProgress else { return source }
         let done = progress.formatted(.percent.precision(.fractionLength(0)))
