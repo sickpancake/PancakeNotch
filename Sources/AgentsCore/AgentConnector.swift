@@ -23,6 +23,8 @@ public final class AgentConnector {
     private let home: URL
     private let settings: AgentsSettings
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "agents")
+    /// Pretend tools (app-window snapshots): Connect and Disconnect only change what's shown.
+    private var isPreview = false
 
     public init(settings: AgentsSettings, home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.settings = settings
@@ -30,11 +32,20 @@ public final class AgentConnector {
         refresh()
     }
 
+    /// Shows these states without reading or writing any file.
+    public static func preview(_ states: [AgentTool: State], settings: AgentsSettings) -> AgentConnector {
+        let connector = AgentConnector(settings: settings, home: URL(fileURLWithPath: "/var/empty"))
+        connector.isPreview = true
+        connector.states = states
+        return connector
+    }
+
     public func state(_ tool: AgentTool) -> State { states[tool] ?? .notFound }
 
     /// Reads the hook files again. A tool connected in one account folder is connected in all of them,
     /// so an account folder found later gets the hooks too.
     public func refresh() {
+        guard !isPreview else { return }
         var next: [AgentTool: State] = [:]
         for tool in AgentTool.allCases {
             let files = hookFiles(for: tool)
@@ -57,6 +68,10 @@ public final class AgentConnector {
     @discardableResult
     public func connect(_ tool: AgentTool) -> Bool {
         problem = nil
+        if isPreview {
+            states[tool] = .connected
+            return true
+        }
         guard HookHelper.install() else {
             problem = String(localized: "PancakeNotch couldn't set up its helper. Try again, or reinstall PancakeNotch.")
             return false
@@ -69,6 +84,10 @@ public final class AgentConnector {
     @discardableResult
     public func disconnect(_ tool: AgentTool) -> Bool {
         problem = nil
+        if isPreview {
+            states[tool] = .notConnected
+            return true
+        }
         let done = write(tool, connect: false)
         refresh()
         return done
@@ -76,7 +95,7 @@ public final class AgentConnector {
 
     /// Keeps the installed helper current (a newer PancakeNotch may bring a newer one).
     public func updateHelperIfConnected() {
-        if states.values.contains(.connected) { _ = HookHelper.install() }
+        if !isPreview, states.values.contains(.connected) { _ = HookHelper.install() }
     }
 
     // MARK: Files

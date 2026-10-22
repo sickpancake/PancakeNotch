@@ -26,7 +26,7 @@ public final class ModuleArrangement {
     public var navigation: NotchNavigation { didSet { defaults?.set(navigation.rawValue, forKey: Keys.navigation) } }
 
     /// Every module the app knows, in the default order.
-    public static let knownModules = ["nowPlaying", "shelf"]
+    public static let knownModules = ["nowPlaying", "shelf", "agents", "aiUsage"]
 
     @ObservationIgnored private let defaults: UserDefaults?
 

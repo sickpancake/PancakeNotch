@@ -1048,6 +1048,8 @@ private enum StatsFormat {
         switch id {
         case "nowPlaying": String(localized: "Now Playing")
         case "shelf": String(localized: "Shelf")
+        case "agents": String(localized: "Agents")
+        case "aiUsage": String(localized: "AI Usage")
         default: id
         }
     }
@@ -1056,6 +1058,8 @@ private enum StatsFormat {
         switch id {
         case "nowPlaying": "music.note"
         case "shelf": "tray"
+        case "agents": "sparkles"
+        case "aiUsage": "gauge.with.dots.needle.50percent"
         default: "square.grid.2x2"
         }
     }

@@ -1,3 +1,4 @@
+import AgentsCore
 import AppKit
 import HotKey
 import Learn
@@ -113,6 +114,10 @@ extension AppWindowController {
         let statsStore = StatsStore(url: nil)
         sampleStatistics(statsStore)
         let updates = Updates(snapshotPendingVersion: nil, lastCheck: Date().addingTimeInterval(-3 * 3600))
+        let agentsSettings = AgentsSettings(defaults: defaults)
+        let agents = AgentsCenter.practice()
+        let usage = UsageCenter.practice()
+        let connector = AgentConnector.preview([.claude: .connected, .codex: .notConnected, .cursor: .notFound], settings: agentsSettings)
         let context = AppContext(
             preferences: preferences,
             shortcuts: noShortcut,
@@ -125,6 +130,10 @@ extension AppWindowController {
             nowPlaying: nowPlaying,
             statsStore: statsStore,
             updates: updates,
+            agentsSettings: agentsSettings,
+            agents: agents,
+            usage: usage,
+            connector: connector,
             makeLiveModules: {
                 var modules: [any NotchModule] = []
                 if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
@@ -138,7 +147,8 @@ extension AppWindowController {
             let pageContext = shortcuts === noShortcut ? context : AppContext(
                 preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
-                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules
             )
             pageContext.navigation.section = section
             pageContext.navigation.lesson = lesson
@@ -205,7 +215,8 @@ extension AppWindowController {
             AppContext(
                 preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
-                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules
             )
         }
         let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))

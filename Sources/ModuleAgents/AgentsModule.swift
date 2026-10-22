@@ -15,9 +15,12 @@ public final class AgentsModule: NotchModule {
 
     /// What the peek strip is about (the latest alert).
     var peekAlert: AgentAlert?
+    /// Whether this copy peeks for alerts. The center tells one module, so Home's live copy doesn't.
+    @ObservationIgnored private let peeks: Bool
 
-    public init(center: AgentsCenter) {
+    public init(center: AgentsCenter, peeks: Bool = true) {
         self.center = center
+        self.peeks = peeks
     }
 
     // MARK: NotchModule
@@ -44,10 +47,10 @@ public final class AgentsModule: NotchModule {
     public func attach(to notch: NotchViewModel?) {
         self.notch = notch
         guard notch != nil else {
-            center.onAlert = nil
+            if peeks { center.onAlert = nil }
             return
         }
-        center.onAlert = { [weak self] alert in self?.alerted(alert) }
+        if peeks { center.onAlert = { [weak self] alert in self?.alerted(alert) } }
         observeCenter()
         notch?.activityChanged()
     }

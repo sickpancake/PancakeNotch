@@ -315,7 +315,7 @@ struct NotchModulesTests {
 struct ModuleArrangementTests {
     @Test func defaultsPutNowPlayingFirst() {
         let arrangement = ModuleArrangement()
-        #expect(arrangement.order == ["nowPlaying", "shelf"])
+        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage"])
         #expect(arrangement.isFavorite("shelf"))
         #expect(arrangement.navigation == .tabsAndMenu)
         #expect(!arrangement.swapsEarSides)
@@ -330,7 +330,7 @@ struct ModuleArrangementTests {
         arrangement.toggleFavorite("nowPlaying")
         arrangement.navigation = .menu
         let again = ModuleArrangement(defaults: defaults)
-        #expect(again.order == ["shelf", "nowPlaying"])
+        #expect(again.order == ["shelf", "nowPlaying", "agents", "aiUsage"])
         #expect(!again.isFavorite("nowPlaying"))
         #expect(again.navigation == .menu)
     }
@@ -340,17 +340,17 @@ struct ModuleArrangementTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(["shelf"], forKey: "modules.order")
-        #expect(ModuleArrangement(defaults: defaults).order == ["shelf", "nowPlaying"])
+        #expect(ModuleArrangement(defaults: defaults).order == ["shelf", "nowPlaying", "agents", "aiUsage"])
     }
 
     @Test func moveByOneIsClamped() {
         let arrangement = ModuleArrangement()
         arrangement.move("nowPlaying", by: -1)
-        #expect(arrangement.order == ["nowPlaying", "shelf"])
+        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage"])
         arrangement.move("nowPlaying", by: 1)
-        #expect(arrangement.order == ["shelf", "nowPlaying"])
+        #expect(arrangement.order == ["shelf", "nowPlaying", "agents", "aiUsage"])
         arrangement.move("nowPlaying", by: 5)
-        #expect(arrangement.order == ["shelf", "nowPlaying"])
+        #expect(arrangement.order == ["shelf", "agents", "aiUsage", "nowPlaying"])
     }
 }
 

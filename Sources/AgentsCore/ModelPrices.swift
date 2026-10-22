@@ -108,7 +108,7 @@ enum ModelPrices {
         return cost / 1_000_000
     }
 
-    /// "Opus 5.5", "Sonnet 4.5", "GPT-6.1 Sol", "o3"; anything else as written.
+    /// "Opus 5.5", "Sonnet 4.5", "GPT-6.1 Sol", "o3".
     static func displayName(_ model: String) -> String {
         let name = normalized(model)
         if name.hasPrefix("claude-") {
@@ -127,6 +127,9 @@ enum ModelPrices {
             let rest = parts.dropFirst().map { $0 == "codex" ? "Codex" : $0.capitalized }
             return (["GPT-\(version)"] + rest).joined(separator: " ")
         }
-        return model
+        // "o3", "o4-mini" stay as OpenAI writes them; "codex-auto-review" → "Codex auto review".
+        if name.first == "o", name.dropFirst().first?.isNumber == true { return name }
+        let words = name.split(separator: "-").joined(separator: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
     }
 }

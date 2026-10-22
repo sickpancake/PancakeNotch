@@ -1,5 +1,7 @@
+import AgentsCore
 import AppKit
 import Learn
+import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
@@ -49,6 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var nowPlayingModule: NowPlayingModule?
     /// Listening, usage and app-health statistics, in a local file (ADR-0018).
     private let statistics = StatsStore(url: StatsStore.defaultURL())
+    private let agentsSettings = AgentsSettings()
+    /// Agent threads. Follows the tools only while Agents is switched on.
+    private lazy var agents = AgentsCenter(settings: agentsSettings)
+    /// AI accounts, limits and token history. Follows them only while AI Usage is switched on.
+    private lazy var usage = UsageCenter(settings: agentsSettings, stats: statistics)
+    /// Reads the tools' hook files when first asked (Agents switched on, or its settings shown).
+    private lazy var connector = AgentConnector(settings: agentsSettings)
+    /// Exists only while Agents is switched on.
+    private var agentsModule: AgentsModule?
     /// Keeps at most one app-health sample per 10 minutes, taken when the notch or window opens.
     private var healthSampler = HealthSampler()
     private var lastStatisticsCleanup: Date?
@@ -72,6 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nowPlaying: nowPlaying,
             statsStore: statistics,
             updates: updates,
+            agentsSettings: agentsSettings,
+            agents: agents,
+            usage: usage,
+            connector: connector,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
@@ -237,14 +252,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var modules: [any NotchModule] = []
         if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
         if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
+        if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
         return modules
     }
 
     /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
     /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
     private func observeModules() {
-        let (nowPlayingOn, shelfOn) = withObservationTracking {
-            (nowPlayingSettings.isEnabled, shelfSettings.isEnabled)
+        let (nowPlayingOn, shelfOn, agentsOn) = withObservationTracking {
+            (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
@@ -265,7 +281,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             shelf = nil
         }
-        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf].compactMap { $0 }
+        if agentsOn {
+            if agentsModule == nil {
+                agentsModule = AgentsModule(center: agents)
+                agents.start()
+                connector.updateHelperIfConnected()
+            }
+        } else if agentsModule != nil {
+            agentsModule = nil
+            agents.stop()
+        }
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule].compactMap { $0 }
     }
 
     /// Counts items put on the Shelf and sent with AirDrop, for the statistics.
