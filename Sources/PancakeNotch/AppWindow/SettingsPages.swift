@@ -129,6 +129,8 @@ struct NotchSettingsView: View {
         var kinds: Set<PracticeKind> = []
         if context.nowPlayingSettings.isEnabled { kinds.insert(.nowPlaying) }
         if context.shelfSettings.isEnabled { kinds.insert(.shelf) }
+        if context.agentsSettings.agentsEnabled { kinds.insert(.agents) }
+        if context.agentsSettings.usageEnabled { kinds.insert(.aiUsage) }
         return kinds
     }
 

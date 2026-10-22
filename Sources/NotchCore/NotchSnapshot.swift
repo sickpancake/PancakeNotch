@@ -30,7 +30,9 @@ public enum NotchSnapshot {
         .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
+        // Keep a long contact sheet below the renderer's large-image limit.
+        let sheetHeight = models.reduce(CGFloat(24)) { $0 + $1.layout.windowFrame(for: .expanded).size.height + 12 } - 12
+        renderer.scale = min(2, 16_000 / sheetHeight)
         guard let image = renderer.cgImage,
               let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
         else { throw CocoaError(.fileWriteUnknown) }

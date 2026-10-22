@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, nowPlaying, shelf
+    case basics, nowPlaying, shelf, agents, aiUsage
 
     public var id: Self { self }
 }
@@ -13,7 +13,9 @@ public enum LessonSignal: Hashable, Sendable {
          shelfItemAdded, shelfItemOpened, shelfItemClosed, shelfMenuOpened,
          shelfDraggedOut, shelfSeveralSelected, shelfCleared,
          musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
-         moduleSwitched
+         moduleSwitched,
+         agentAllowed, agentOpened, agentsCleared,
+         usageAccountsOpened, usageAccountChosen, usageRangeChosen
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -57,13 +59,15 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, nowPlaying, shelf] }
+    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
         case .basics: basics
         case .nowPlaying: nowPlaying
         case .shelf: shelf
+        case .agents: agents
+        case .aiUsage: aiUsage
         }
     }
 
@@ -227,6 +231,68 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Click Clear all, then click it again to confirm.", comment: "Lesson step detail"),
                 symbol: "trash",
                 signal: .shelfCleared
+            ),
+        ]
+    )
+
+    /// Answering a request, opening a thread and clearing the finished ones, on pretend agents.
+    public static let agents = Lesson(
+        id: .agents,
+        title: String(localized: "Agents", comment: "Lesson title"),
+        summary: String(localized: "See your AI agents and answer them.", comment: "Lesson summary"),
+        symbol: "sparkles",
+        steps: [
+            LessonStep(
+                id: "agents.allow",
+                title: String(localized: "Allow a request", comment: "Lesson step title"),
+                detail: String(localized: "A pretend agent wants to run a command. Open the notch and click Allow once. Deny says no.", comment: "Lesson step detail"),
+                symbol: "checkmark.circle",
+                signal: .agentAllowed
+            ),
+            LessonStep(
+                id: "agents.open",
+                title: String(localized: "Open a thread", comment: "Lesson step title"),
+                detail: String(localized: "Click a thread to go to its app. In your real notch, that brings the app to the front.", comment: "Lesson step detail"),
+                symbol: "arrow.up.forward.app",
+                signal: .agentOpened
+            ),
+            LessonStep(
+                id: "agents.clear",
+                title: String(localized: "Clear finished", comment: "Lesson step title"),
+                detail: String(localized: "Click Clear finished, beside the notch, to remove the threads that are done.", comment: "Lesson step detail"),
+                symbol: "trash",
+                signal: .agentsCleared
+            ),
+        ]
+    )
+
+    /// Choosing an account and a range on pretend accounts.
+    public static let aiUsage = Lesson(
+        id: .aiUsage,
+        title: String(localized: "AI Usage", comment: "Lesson title"),
+        summary: String(localized: "Check your plan limits and token use.", comment: "Lesson summary"),
+        symbol: "gauge.with.dots.needle.50percent",
+        steps: [
+            LessonStep(
+                id: "aiUsage.accounts",
+                title: String(localized: "Open the account menu", comment: "Lesson step title"),
+                detail: String(localized: "These are pretend accounts. Open the notch, then click the account at the top to see the list.", comment: "Lesson step detail"),
+                symbol: "person.crop.circle",
+                signal: .usageAccountsOpened
+            ),
+            LessonStep(
+                id: "aiUsage.account",
+                title: String(localized: "Pick an account", comment: "Lesson step title"),
+                detail: String(localized: "Choose one to see its limits. All accounts adds token use and API value together; limits stay separate.", comment: "Lesson step detail"),
+                symbol: "person.2",
+                signal: .usageAccountChosen
+            ),
+            LessonStep(
+                id: "aiUsage.range",
+                title: String(localized: "Change the range", comment: "Lesson step title"),
+                detail: String(localized: "Switch between Today, 7 days and 30 days to see more or less history.", comment: "Lesson step detail"),
+                symbol: "calendar",
+                signal: .usageRangeChosen
             ),
         ]
     )

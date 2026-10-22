@@ -10,6 +10,9 @@ enum HelpTopic: String, CaseIterable {
     case fullScreen = "full-screen"
     case shortcut
     case shelf
+    case agents
+    case agentsConnect = "agents-connect"
+    case aiUsage = "ai-usage"
     case updates
     case launchAtLogin = "launch-at-login"
     case privacy

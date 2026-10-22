@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import { useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { Cover, Icon, Thumb, type IconName } from './notch/art'
-import { EXAMPLES } from './notch/data'
+import { Cover, Icon, StatusMark, Thumb, leftTone, type IconName } from './notch/art'
+import { EXAMPLES, type ThreadState } from './notch/data'
 
 /* What the app does, as a row of cards you can scroll sideways: swipe, drag with the mouse, use the
    arrow buttons or the arrow keys. Each card has a small drawing made from the same pieces as the live
@@ -14,6 +14,8 @@ type Feature = { title: string; line: string; art: ReactNode; top?: boolean }
 const FEATURES: Feature[] = [
   { title: 'Now Playing', line: 'The cover, the song and the sound bars, right in the notch.', art: <NowPlayingArt />, top: true },
   { title: 'Shelf', line: 'Drop files, notes and links. Pick them up later.', art: <ShelfArt /> },
+  { title: 'Agents', line: 'Claude Code, Codex and Cursor at work. Allow or Deny from the notch.', art: <AgentsArt /> },
+  { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, for every account.', art: <UsageArt /> },
   { title: 'Module Menu', line: 'Every module in one place. Your favorites get a tab.', art: <MenuArt /> },
   { title: 'Statistics', line: 'What you listen to, and how light the app stays.', art: <StatsArt /> },
   { title: 'Full screen', line: 'Steps aside while you watch a video.', art: <FullScreenArt /> },
@@ -191,6 +193,48 @@ function ShelfArt() {
     <div className={cn('flex items-end gap-2.5 rounded-2xl p-3.5', SURFACE)}>
       {EXAMPLES.slice(0, 3).map((item) => (
         <Thumb key={item.id} item={item} />
+      ))}
+    </div>
+  )
+}
+
+function AgentsArt() {
+  const rows: { mark: ThreadState; width: string }[] = [
+    { mark: 'working', width: 'w-24' },
+    { mark: 'needs', width: 'w-16' },
+    { mark: 'done', width: 'w-20' },
+  ]
+  return (
+    <div aria-hidden="true" className={cn('w-[14.5rem] space-y-3.5 rounded-2xl p-3.5', SURFACE)}>
+      {rows.map(({ mark, width }) => (
+        <div key={mark} className="flex items-center gap-2.5">
+          <StatusMark state={mark} className="text-lg" />
+          <span className={cn('h-1.5 rounded-full bg-white/18', width)} />
+          {mark === 'needs' && <span className="ml-auto grid h-5 place-items-center rounded-full bg-white px-2.5 text-[11px] leading-none font-semibold text-black">Allow</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function UsageArt() {
+  const limits = [
+    { name: 'Session', left: 63, pace: 55 },
+    { name: 'Weekly', left: 77, pace: 80 },
+  ]
+  return (
+    <div aria-hidden="true" className={cn('w-[14.5rem] space-y-4 rounded-2xl p-3.5', SURFACE)}>
+      {limits.map(({ name, left, pace }) => (
+        <div key={name}>
+          <div className="flex justify-between text-[11px] leading-none font-medium text-soft">
+            <span>{name}</span>
+            <span className="text-ink tabular-nums">{left}% left</span>
+          </div>
+          <div className="relative mt-2 h-1.5 rounded-full bg-white/12">
+            <span className={cn('block h-full rounded-full bg-current', leftTone(left))} style={{ width: `${left}%` }} />
+            <span className="absolute -top-1 h-3.5 w-0.5 rounded-full bg-white/45" style={{ left: `${pace}%` }} />
+          </div>
+        </div>
       ))}
     </div>
   )

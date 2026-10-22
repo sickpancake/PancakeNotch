@@ -2,15 +2,20 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { AnimatePresence, m, useReducedMotion, type Transition } from 'motion/react'
 import { ScrambleText } from '@/components/ScrambleText'
 import { cn } from '@/lib/utils'
-import { Cover, Icon, type IconName } from './art'
-import { EXAMPLES, SONGS, VIEWS, count, kindOf, type Item, type Module } from './data'
+import { Cover, Icon, StatusMark, type IconName } from './art'
+import { useAgents } from './agents'
+import { EXAMPLES, SONGS, VIEWS, count, earOf, kindOf, nearLimit, spokenName, summary, usageStatus, type Item, type Module, type Selection } from './data'
 import { usePlayer } from './player'
-import { MenuView, NowPlayingView, ShelfView } from './views'
+import { useUsage } from './usage'
+import { AccountMenu, AccountPill, UsageEar, UsageView } from './usageViews'
+import { AgentsView, MenuView, NowPlayingView, ShelfView } from './views'
 
 /* A working copy of the notch, hanging from the top edge of the box it's in (a pretend screen).
    Hover it to open it (tap on touch screens): a pretend, silent song plays, the Shelf holds a few
-   examples, and the Module Menu switches between them. Sizes are the app's own, in points. It tells
-   its owner what's showing (`onStatus`), so the words beside it can follow along. */
+   examples, three pretend AI agents wait in Agents (one asks to be allowed), three pretend AI accounts
+   show their limits in AI Usage, and the Module Menu switches between them. Sizes are the app's own,
+   in points. It tells its owner what's showing
+   (`onStatus`), so the words beside it can follow along. */
 
 const NW = 185 // the hardware cutout
 const NH = 32
@@ -31,7 +36,7 @@ type How = 'hover' | 'click' | 'keyboard' | 'touch' // how it was opened, for th
 export type NotchStatus = { open: boolean; module: Module; item: Item['kind'] | null; touch: boolean }
 
 type Props = {
-  /** On screen and reachable: the song starts, the bars move, the hint shows. */
+  /** On screen and reachable: the song starts, the bars move, the agents' answers play out, the hint shows. */
   active: boolean
   onStatus?: (status: NotchStatus) => void
 }
@@ -39,6 +44,8 @@ type Props = {
 export function LiveNotch({ active, onStatus }: Props) {
   const reduce = useReducedMotion() ?? false
   const [player, actions] = usePlayer()
+  const [agents, agentActions] = useAgents(active)
+  const [usage, usageActions] = useUsage()
   const [open, setOpen] = useState(false)
   const [how, setHow] = useState<How>('hover')
   const [module, setModule] = useState<Module>('np')
@@ -49,6 +56,7 @@ export function LiveNotch({ active, onStatus }: Props) {
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState('')
   const [peeking, setPeeking] = useState(false)
+  const [peekOf, setPeekOf] = useState<'song' | 'agent'>('song')
   const [width, setWidth] = useState(640) // of the pretend screen
   const touch = useSyncExternalStore(onPointerKind, () => TOUCH.matches, () => false)
 
@@ -68,7 +76,11 @@ export function LiveNotch({ active, onStatus }: Props) {
     sizes.observe(root)
     return () => sizes.disconnect()
   }, [])
-  const compact = player.started // a song that has played keeps its spots beside the notch, even paused
+  const agentEar = active ? earOf(agents.threads) : null
+  const usageEar = active ? nearLimit() : null // an account nearly out of a limit
+  const compact = player.started || agentEar !== null || usageEar !== null // a song that has played (even paused), an agent or a limit to show keeps spots beside the notch
+  // Wider spots when the agents' mark and the usage ring join the song's bars (less on a very narrow screen).
+  const earWidth = Math.min(EAR + (agentEar ? 18 : 0) + (usageEar ? 34 : 0), Math.max(EAR, (width - NW) / 2))
   const openItem = items.find((item) => item.id === openId) ?? null
 
   /* ---------- Opening and closing ---------- */
@@ -82,6 +94,7 @@ export function LiveNotch({ active, onStatus }: Props) {
     setOpen(false)
     closeItem()
     setConfirming(false)
+    usageActions.close()
   }
 
   // Hover (mouse only), with the app's delays.
@@ -96,9 +109,9 @@ export function LiveNotch({ active, onStatus }: Props) {
     hovering.current = false
     hoverLocked.current = false
     clearTimeout(timer.current)
-    // An open item holds it open, so a note can be read without keeping the pointer on it. Opened
-    // with the keyboard, it waits for Escape.
-    if (open && openId === null && how !== 'keyboard') timer.current = window.setTimeout(close, 300)
+    // An open item or account menu holds it open, so a note can be read without keeping the pointer on
+    // it. Opened with the keyboard, it waits for Escape.
+    if (open && openId === null && !usage.menu && how !== 'keyboard') timer.current = window.setTimeout(close, 300)
   }
 
   const toggle = (event: MouseEvent) => {
@@ -136,11 +149,13 @@ export function LiveNotch({ active, onStatus }: Props) {
     const cancel = () => {
       outside = null
     }
-    // Escape steps back once: out of an open item, then closes the notch.
+    // Escape steps back once: out of the account menu or an open item, then closes the notch.
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      if (openId !== null) {
+      if (usage.menu) {
+        closeMenu()
+      } else if (openId !== null) {
         refocus.current = `[data-item="${openId}"]`
         closeItem()
       } else {
@@ -174,13 +189,31 @@ export function LiveNotch({ active, onStatus }: Props) {
   const [seenChanges, setSeenChanges] = useState(player.changes)
   if (seenChanges !== player.changes) {
     setSeenChanges(player.changes)
-    if (!open && compact && active) setPeeking(true)
+    if (!open && compact && active) {
+      setPeekOf('song')
+      setPeeking(true)
+    }
+  }
+  // So does a thread that needs you, once the notch is in view.
+  const asking = agents.threads.find((thread) => thread.state === 'needs')
+  const [seenAsking, setSeenAsking] = useState<number | null>(null)
+  if (active && seenAsking !== (asking?.id ?? null)) {
+    setSeenAsking(asking?.id ?? null)
+    if (asking && !open) {
+      setPeekOf('agent')
+      setPeeking(true)
+    }
   }
   useEffect(() => {
     if (!peeking) return
     const end = setTimeout(() => setPeeking(false), 3000)
     return () => clearTimeout(end)
-  }, [peeking, player.changes])
+  }, [peeking, player.changes, asking?.id])
+
+  // Looking at the agents counts as seeing what finished.
+  useEffect(() => {
+    if (open && module === 'agents' && agents.threads.some((thread) => thread.fresh)) agentActions.seen()
+  }, [open, module, agents.threads]) // eslint-disable-line react-hooks/exhaustive-deps -- `agentActions` is new each time, `seen` isn't
 
   // Where the keyboard goes once the Shelf has changed, so it isn't dropped when a button disappears:
   // back to an item's tile, the next tile, "Put the examples back", or an open item's Back button.
@@ -211,6 +244,30 @@ export function LiveNotch({ active, onStatus }: Props) {
     if (next !== 'menu') setLastModule(next)
     closeItem()
     setConfirming(false)
+    usageActions.close()
+  }
+
+  /* ---------- Agents ---------- */
+
+  const answer = (kind: 'allow' | 'deny', id: number) => {
+    refocus.current = `[data-thread="${id}"]` // the buttons go away, so the keyboard moves to the row
+    agentActions[kind](id)
+  }
+
+  /* ---------- AI Usage ---------- */
+
+  // The menu's buttons go away, so the keyboard moves to where it began: the pill, or the open menu's current choice.
+  const closeMenu = () => {
+    refocus.current = '[data-pill]'
+    usageActions.close()
+  }
+  const toggleMenu = () => {
+    refocus.current = usage.menu ? '[data-pill]' : `[data-pick="${usage.account}"]`
+    usageActions.toggleMenu()
+  }
+  const choose = (selection: Selection) => {
+    refocus.current = '[data-pill]'
+    usageActions.choose(selection)
   }
 
   /* ---------- The Shelf ---------- */
@@ -259,7 +316,7 @@ export function LiveNotch({ active, onStatus }: Props) {
   const size = open
     ? { width: EW, height: EH, radius: 26, ears: 1 }
     : compact
-      ? { width: NW + 2 * EAR + (peeking ? 28 : 0), height: NH + (peeking ? 24 : 0), radius: 14, ears: 1 / 3 }
+      ? { width: NW + 2 * earWidth + (peeking ? 28 : 0), height: NH + (peeking ? 24 : 0), radius: 14, ears: 1 / 3 }
       : { width: NW, height: NH, radius: 14, ears: 0 }
   const spring = reduce ? INSTANT : open ? OPEN : peeking ? SWITCH : CLOSE
 
@@ -268,7 +325,7 @@ export function LiveNotch({ active, onStatus }: Props) {
       ? 'Press Esc to close it'
       : touch
         ? 'Tap outside the notch to close it'
-        : openId !== null
+        : openId !== null || usage.menu
           ? 'Click outside the notch to close it'
           : 'Move the pointer away to close it'
     : touch
@@ -276,7 +333,7 @@ export function LiveNotch({ active, onStatus }: Props) {
       : 'Hover the notch'
   const hintIcon: IconName = open && how === 'keyboard' ? 'key' : touch ? 'tap' : 'cursor'
   const song = SONGS[player.song]
-  const label = player.started ? `Notch: ${song.title} by ${song.artist}, ${player.playing ? 'playing' : 'paused'}` : 'Notch'
+  const label = `${player.started ? `Notch: ${song.title} by ${song.artist}, ${player.playing ? 'playing' : 'paused'}` : 'Notch'}${asking ? `. ${asking.name} needs you` : ''}${usageEar ? `. ${spokenName(usageEar.account)} is nearly out of ${usageEar.account.tool}: ${usageEar.limit.left}% left` : ''}`
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 flex flex-col items-center text-white select-none">
@@ -322,19 +379,39 @@ export function LiveNotch({ active, onStatus }: Props) {
           animate={{ borderBottomLeftRadius: size.radius, borderBottomRightRadius: size.radius, boxShadow: open ? OPEN_RING : RING }}
           transition={spring}
         >
-          <Ears shown={compact && !open} playing={player.playing} song={player.song} moving={active && !reduce} spring={reduce ? INSTANT : SWITCH} />
+          <Ears
+            shown={compact && !open}
+            ear={earWidth}
+            started={player.started}
+            playing={player.playing}
+            song={player.song}
+            agent={agentEar}
+            usage={usageEar?.limit.left ?? null}
+            moving={active && !reduce}
+            spring={reduce ? INSTANT : SWITCH}
+          />
 
           <div
             aria-hidden="true"
             className={cn(
-              'absolute inset-x-0 flex h-[22px] items-center justify-center gap-1.5 px-3.5 text-[11px] leading-none font-semibold whitespace-nowrap transition-opacity',
+              'absolute inset-x-0 flex h-[22px] items-center justify-center gap-1.5 px-3.5 text-[11px] leading-[1.35] font-semibold whitespace-nowrap transition-opacity',
               peeking && !open ? 'opacity-100 delay-150 duration-300' : 'opacity-0 duration-100',
             )}
             style={{ top: NH }}
           >
-            <Cover song={player.song} className="size-3.5 flex-none rounded-[3.5px]" />
-            <span className="min-w-0 truncate">{song.title}</span>
-            <span className="min-w-0 shrink-[2] truncate font-normal text-white/55">{song.artist}</span>
+            {peekOf === 'agent' && asking ? (
+              <>
+                <StatusMark state="needs" className="size-3.5 flex-none" />
+                <span className="min-w-0 truncate">{asking.name}</span>
+                <span className="min-w-0 shrink-[2] truncate font-normal text-white/55">Needs you</span>
+              </>
+            ) : (
+              <>
+                <Cover song={player.song} className="size-3.5 flex-none rounded-[3.5px]" />
+                <span className="min-w-0 truncate">{song.title}</span>
+                <span className="min-w-0 shrink-[2] truncate font-normal text-white/55">{song.artist}</span>
+              </>
+            )}
           </div>
 
           <AnimatePresence>
@@ -354,7 +431,7 @@ export function LiveNotch({ active, onStatus }: Props) {
                     the top row, so on a narrow phone, where the sides reach in under the cutout, their
                     controls still get the taps. */}
                 <div className="absolute inset-x-0 top-0 grid items-center px-4" style={{ height: NH, gridTemplateColumns: `1fr ${NW}px 1fr` }}>
-                  <div className="pointer-events-auto flex min-w-0 items-center gap-1.5">
+                  <div className={cn('pointer-events-auto flex min-w-0 items-center', EW < 420 ? 'gap-0.5' : 'gap-1.5')}>
                     {openItem ? (
                       <>
                         <Round
@@ -373,6 +450,8 @@ export function LiveNotch({ active, onStatus }: Props) {
                         <span aria-hidden="true" className="mx-1 h-3.5 w-px flex-none bg-white/20" /* taste-skill-ignore: the app's own interface, drawn in the pretend screen */ />
                         <Tab label="Now Playing" icon="note" on={module === 'np'} onClick={() => go('np')} />
                         <Tab label="Shelf" icon="tray" on={module === 'shelf'} onClick={() => go('shelf')} />
+                        <Tab label="Agents" icon="agents" on={module === 'agents'} onClick={() => go('agents')} />
+                        <Tab label="AI Usage" icon="usage" on={module === 'usage'} onClick={() => go('usage')} />
                         {module === 'shelf' && items.length > 0 && (
                           <span className="ml-1.5 text-[11.5px] whitespace-nowrap text-white/50 tabular-nums">{count(items.length)}</span>
                         )}
@@ -382,6 +461,23 @@ export function LiveNotch({ active, onStatus }: Props) {
                   <div />
                   <div className="pointer-events-auto flex min-w-0 items-center justify-end gap-1.5">
                     {module === 'np' && <span className={cn(pill, 'bg-white/8 text-white/70')}>Demo player</span>}
+                    {module === 'usage' && <AccountPill usage={usage} onMenu={toggleMenu} onEmail={usageActions.toggleEmail} narrow={EW < 420} />}
+                    {module === 'agents' &&
+                      (asking ? (
+                        <span className={cn(pill, 'bg-white/8 text-white/70')}>Demo agents</span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label="Replay the demo"
+                          onClick={() => {
+                            refocus.current = '[data-thread]'
+                            agentActions.reset()
+                          }}
+                          className={cn(pill, 'cursor-pointer bg-white/12 hover:bg-white/20')}
+                        >
+                          Replay
+                        </button>
+                      ))}
                     {module === 'shelf' && !openItem && items.length > 0 && (
                       <button
                         type="button"
@@ -422,9 +518,16 @@ export function LiveNotch({ active, onStatus }: Props) {
                   >
                     {module === 'np' && <NowPlayingView player={player} actions={actions} visible={active} narrow={EW < 420} />}
                     {module === 'shelf' && <ShelfView items={items} open={openItem} onOpen={openTile} onEdit={edit} onRestore={restore} />}
-                    {module === 'menu' && <MenuView current={lastModule} song={song.title} items={items.length} onGo={go} />}
+                    {module === 'agents' && (
+                      <AgentsView threads={agents.threads} narrow={EW < 420} onAllow={(id) => answer('allow', id)} onDeny={(id) => answer('deny', id)} />
+                    )}
+                    {module === 'usage' && <UsageView usage={usage} onRange={usageActions.setRange} onEmail={usageActions.toggleEmail} narrow={EW < 420} />}
+                    {module === 'menu' && (
+                      <MenuView current={lastModule} song={song.title} items={items.length} agents={summary(agents.threads)} usage={usageStatus(usage.account)} narrow={EW < 420} onGo={go} />
+                    )}
                   </m.div>
                 </div>
+                {module === 'usage' && <AccountMenu usage={usage} top={NH} reduce={reduce} onChoose={choose} onClose={closeMenu} onEmail={usageActions.toggleEmail} />}
                 <span role="status" className="sr-only">
                   {copied || (confirming ? `Press again to clear ${count(items.length)}` : '')}
                 </span>
@@ -480,19 +583,39 @@ function Round({ label, icon, onClick }: { label: string; icon: IconName; onClic
   )
 }
 
-/** The small spots beside the closed notch: the album art on the left, sound bars on the right. */
-function Ears({ shown, playing, song, moving, spring }: { shown: boolean; playing: boolean; song: number; moving: boolean; spring: Transition }) {
-  const tuck = EAR + 8 // closed, they slide in under the notch
+/** The small spots beside the closed notch: the album art on the left; on the right, the sound bars, the agents' mark and the ring of an account that's nearly out. */
+function Ears({
+  shown,
+  ear,
+  started,
+  playing,
+  song,
+  agent,
+  usage,
+  moving,
+  spring,
+}: {
+  shown: boolean
+  ear: number // each spot's width
+  started: boolean // a song has played
+  playing: boolean
+  song: number
+  agent: ReturnType<typeof earOf>
+  usage: number | null // the share left of the limit that's nearly out
+  moving: boolean
+  spring: Transition
+}) {
+  const tuck = ear + 8 // closed, they slide in under the notch
   return (
-    <div aria-hidden="true" className="absolute top-0 left-1/2 flex -translate-x-1/2 justify-between" style={{ width: NW + 2 * EAR, height: NH }}>
+    <div aria-hidden="true" className="absolute top-0 left-1/2 flex -translate-x-1/2 justify-between" style={{ width: NW + 2 * ear, height: NH }}>
       <m.span
         className="grid place-items-center"
-        style={{ width: EAR }}
+        style={{ width: ear }}
         initial={false}
         animate={{ x: shown ? 0 : tuck, opacity: shown ? 1 : 0 }}
         transition={{ ...spring, opacity: { duration: shown ? 0.18 : 0.12, delay: shown ? 0 : 0.3 } }}
       >
-        <span className="relative overflow-hidden rounded-md" style={{ width: NH - 11, height: NH - 11 }}>
+        <span className={cn('relative overflow-hidden rounded-md transition-opacity duration-300', !started && 'opacity-0')} style={{ width: NH - 11, height: NH - 11 }}>
           <Cover song={song} className={cn('transition-opacity duration-300', !playing && 'opacity-45')} />
           <Icon
             name="pause"
@@ -501,26 +624,35 @@ function Ears({ shown, playing, song, moving, spring }: { shown: boolean; playin
         </span>
       </m.span>
       <m.span
-        className="grid place-items-center"
-        style={{ width: EAR }}
+        className="flex items-center justify-center gap-1.5"
+        style={{ width: ear }}
         initial={false}
         animate={{ x: shown ? 0 : -tuck, opacity: shown ? 1 : 0 }}
         transition={{ ...spring, opacity: { duration: shown ? 0.18 : 0.12, delay: shown ? 0 : 0.3 } }}
       >
-        <span className="flex items-center gap-0.5" style={{ height: NH - 17 }}>
-          {BARS.map((bar, i) => (
-            <i
-              key={i}
-              className="block h-full w-[2.5px] rounded-sm bg-white/90 transition-transform duration-300"
-              style={{
-                transform: `scaleY(${playing ? bar.still : bar.rest})`,
-                animation: playing && shown && moving ? `bar-dance ${bar.d}s ease-in-out ${bar.delay}s infinite alternate backwards` : undefined,
-                ['--from' as string]: bar.from,
-                ['--to' as string]: bar.to,
-              }}
-            />
-          ))}
-        </span>
+        {started && (
+          <span className="flex items-center gap-0.5" style={{ height: NH - 17 }}>
+            {BARS.map((bar, i) => (
+              <i
+                key={i}
+                className="block h-full w-[2.5px] rounded-sm bg-white/90 transition-transform duration-300"
+                style={{
+                  transform: `scaleY(${playing ? bar.still : bar.rest})`,
+                  animation: playing && shown && moving ? `bar-dance ${bar.d}s ease-in-out ${bar.delay}s infinite alternate backwards` : undefined,
+                  ['--from' as string]: bar.from,
+                  ['--to' as string]: bar.to,
+                }}
+              />
+            ))}
+          </span>
+        )}
+        {agent && (
+          <span className="flex items-center gap-[3px]">
+            <StatusMark state={agent.mark} className="text-[13px]" />
+            {agent.count > 0 && <span className="text-[11px] leading-none font-semibold tabular-nums">{agent.count}</span>}
+          </span>
+        )}
+        {usage !== null && <UsageEar left={usage} />}
       </m.span>
     </div>
   )

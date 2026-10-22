@@ -1,4 +1,6 @@
+import AgentsCore
 import Learn
+import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
@@ -17,14 +19,18 @@ struct LearnView: View {
             title: String(localized: "Learn"),
             subtitle: String(localized: "Short lessons you do with your own hands, in a practice notch.")
         ) {
-            HStack(spacing: 12) {
-                ForEach(Lesson.all) { item in
-                    LessonCard(lesson: item, isSelected: item.id == lesson, isDone: progress.isDone(item.id)) {
-                        lesson = item.id
+            // Three to a row, so the cards stay wide enough to read.
+            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                ForEach(Array(stride(from: 0, to: Lesson.all.count, by: 3)), id: \.self) { first in
+                    GridRow {
+                        ForEach(Lesson.all[first..<min(first + 3, Lesson.all.count)]) { item in
+                            LessonCard(lesson: item, isSelected: item.id == lesson, isDone: progress.isDone(item.id)) {
+                                lesson = item.id
+                            }
+                        }
                     }
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
 
             LessonPlayer(
                 lesson: Lesson.lesson(lesson),
@@ -116,6 +122,9 @@ struct LessonPlayer: View {
     @State private var practice: PracticeShelf?
     /// The pretend player (the Now Playing lesson), next to a practice Shelf to switch to.
     @State private var nowPlaying: PracticeNowPlaying?
+    /// Pretend agent threads (the Agents lesson) or accounts (the AI Usage lesson), on their own.
+    @State private var agents: AgentsModule?
+    @State private var usage: AIUsageModule?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
 
@@ -140,15 +149,20 @@ struct LessonPlayer: View {
 
     private var usesShelf: Bool { lesson.id == .shelf }
     private var usesNowPlaying: Bool { lesson.id == .nowPlaying }
+    private var usesAgents: Bool { lesson.id == .agents }
+    private var usesUsage: Bool { lesson.id == .aiUsage }
 
-    /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf.
+    /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf;
+    /// the Agents and AI Usage lessons have only their own.
     private var practiceModules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, practice?.module].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage].compactMap { $0 }
     }
 
     private var hint: String? {
         if usesShelf { return String(localized: "This is a practice Shelf: nothing here touches your real one.") }
         if usesNowPlaying { return String(localized: "A practice player: the songs are made up and silent, and your music isn't touched.") }
+        if usesAgents { return String(localized: "Practice agents: they're made up, and your real ones aren't touched.") }
+        if usesUsage { return String(localized: "Practice accounts: they're made up, and nothing is read from your Mac.") }
         return nil
     }
 
@@ -272,7 +286,7 @@ struct LessonPlayer: View {
     private func start() {
         // Only a lesson done without skipping (optional steps aside) gets its checkmark.
         runner.onFinish = { [weak runner] in if runner?.isComplete == true { onFinish() } }
-        if practice == nil { makePractice() }
+        if practiceModules.isEmpty { makePractice() }
         stepChanged()
     }
 
@@ -282,6 +296,10 @@ struct LessonPlayer: View {
         practice = nil
         nowPlaying?.close()
         nowPlaying = nil
+        agents?.center.onPracticeEvent = nil
+        agents = nil
+        usage?.center.onPracticeEvent = nil
+        usage = nil
     }
 
     private func restart() {
@@ -290,7 +308,21 @@ struct LessonPlayer: View {
         start()
     }
 
+    /// Fresh pretend threads or accounts each time the lesson starts.
     private func makePractice() {
+        if usesAgents || usesUsage {
+            let signals = AgentsLessonSignals(runner: runner)
+            if usesAgents {
+                let module = AgentsModule(center: .practice(), peeks: false)
+                module.center.onPracticeEvent = { event in signals.handle(event) }
+                agents = module
+            } else {
+                let module = AIUsageModule(center: .practice(), peeks: false)
+                module.center.onPracticeEvent = { event in signals.handle(event) }
+                usage = module
+            }
+            return
+        }
         if usesNowPlaying {
             let player = PracticeNowPlaying()
             let signals = NowPlayingSignals(runner: runner)
@@ -330,6 +362,16 @@ struct LessonPlayer: View {
         if step.signal == .musicPlayed, let center = nowPlaying?.module.center, center.track?.isPlaying == true {
             center.send(.pause)
         }
+        // Each Agents step needs something to act on (the pretend threads come back when it's gone).
+        if let center = agents?.center {
+            let doable = switch step.signal {
+            case .agentAllowed: center.threads.contains(where: \.canAnswer)
+            case .agentOpened: center.threads.contains(where: \.canOpen)
+            case .agentsCleared: center.hasFinished
+            default: true
+            }
+            if !doable { center.reset() }
+        }
         guard usesShelf, let practice else { return }
         let needed = switch step.signal {
         case .shelfSeveralSelected: 2
@@ -365,6 +407,34 @@ private final class NowPlayingSignals {
         case .shuffleChanged, .repeatChanged: runner.receive(.musicModeChanged)
         case .artworkClicked: runner.receive(.musicArtworkClicked)
         case .switchedAway: runner.receive(.moduleSwitched)
+        }
+    }
+}
+
+/// Turns what happens in the practice agents and accounts into lesson signals. A class the centers'
+/// callbacks hold, so they don't keep the page alive.
+@MainActor
+private final class AgentsLessonSignals {
+    private weak var runner: LessonRunner?
+
+    init(runner: LessonRunner) {
+        self.runner = runner
+    }
+
+    func handle(_ event: AgentsPracticeEvent) {
+        switch event {
+        case .allowed: runner?.receive(.agentAllowed)
+        case .opened: runner?.receive(.agentOpened)
+        case .cleared: runner?.receive(.agentsCleared)
+        case .denied: break
+        }
+    }
+
+    func handle(_ event: UsagePracticeEvent) {
+        switch event {
+        case .openedAccounts: runner?.receive(.usageAccountsOpened)
+        case .choseAccount: runner?.receive(.usageAccountChosen)
+        case .choseRange: runner?.receive(.usageRangeChosen)
         }
     }
 }

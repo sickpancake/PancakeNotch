@@ -1,3 +1,4 @@
+import AgentsCore
 import Learn
 import ModuleNowPlaying
 import ModuleShelf
@@ -42,9 +43,17 @@ final class AppContext {
     let statsStore: StatsStore
     /// Sparkle's update checks (released builds only).
     let updates: Updates
+    /// Agents and AI Usage options, and their data shared with the real notch.
+    let agentsSettings: AgentsSettings
+    let agents: AgentsCenter
+    let usage: UsageCenter
+    /// Connect and Disconnect for the tools' hooks.
+    let connector: AgentConnector
     let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
+    /// Which AI tools are on this Mac, for the offer to switch on Agents and AI Usage.
+    let detectTools: () -> [AgentTool]
 
     init(
         preferences: Preferences,
@@ -58,7 +67,12 @@ final class AppContext {
         nowPlaying: NowPlayingCenter,
         statsStore: StatsStore,
         updates: Updates,
-        makeLiveModules: @escaping () -> [any NotchModule]
+        agentsSettings: AgentsSettings,
+        agents: AgentsCenter,
+        usage: UsageCenter,
+        connector: AgentConnector,
+        makeLiveModules: @escaping () -> [any NotchModule],
+        detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() }
     ) {
         self.preferences = preferences
         self.shortcuts = shortcuts
@@ -71,7 +85,12 @@ final class AppContext {
         self.nowPlaying = nowPlaying
         self.statsStore = statsStore
         self.updates = updates
+        self.agentsSettings = agentsSettings
+        self.agents = agents
+        self.usage = usage
+        self.connector = connector
         self.makeLiveModules = makeLiveModules
+        self.detectTools = detectTools
     }
 
     /// Whether a module is switched on (its card's switch on the Modules page).
@@ -79,6 +98,8 @@ final class AppContext {
         switch moduleID {
         case "nowPlaying": nowPlayingSettings.isEnabled
         case "shelf": shelfSettings.isEnabled
+        case "agents": agentsSettings.agentsEnabled
+        case "aiUsage": agentsSettings.usageEnabled
         default: false
         }
     }
@@ -87,6 +108,8 @@ final class AppContext {
         switch moduleID {
         case "nowPlaying": nowPlayingSettings.isEnabled = enabled
         case "shelf": shelfSettings.isEnabled = enabled
+        case "agents": agentsSettings.agentsEnabled = enabled
+        case "aiUsage": agentsSettings.usageEnabled = enabled
         default: break
         }
     }
@@ -96,6 +119,8 @@ final class AppContext {
         switch moduleID {
         case "nowPlaying": (String(localized: "Now Playing", comment: "Module name"), "music.note")
         case "shelf": (String(localized: "Shelf", comment: "Module name"), "tray")
+        case "agents": (String(localized: "Agents", comment: "Module name"), "sparkles")
+        case "aiUsage": (String(localized: "AI Usage", comment: "Module name"), "gauge.with.dots.needle.50percent")
         default: (moduleID, "square")
         }
     }

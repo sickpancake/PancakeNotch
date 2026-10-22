@@ -1,3 +1,4 @@
+import AgentsCore
 import Learn
 import ModuleNowPlaying
 import ModuleShelf
@@ -12,8 +13,16 @@ struct ModulesView: View {
     /// Opens a module's lesson on Learn.
     let openLesson: (LessonID) -> Void
     /// Modules whose "Settings" dropdown is open.
-    @State private var openSettings: Set<String> = []
+    @State private var openSettings: Set<String>
+    /// The AI tools found on this Mac, for the offer to switch on Agents and AI Usage.
+    @State private var foundTools: [AgentTool] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(context: AppContext, openLesson: @escaping (LessonID) -> Void, openSettings: Set<String> = []) {
+        self.context = context
+        self.openLesson = openLesson
+        _openSettings = State(initialValue: openSettings)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -21,6 +30,10 @@ struct ModulesView: View {
                 title: String(localized: "Modules"),
                 subtitle: String(localized: "Small tools that live inside the notch.")
             ) {
+                if let offer = AgentsOffer(found: foundTools, settings: context.agentsSettings) {
+                    AgentsOfferCard(context: context, offer: offer)
+                        .transition(.opacity)
+                }
                 YourModulesCard(context: context) { moduleID in showSettings(moduleID, proxy: proxy) }
                 NowPlayingModuleCard(context: context, showsSettings: settingsBinding("nowPlaying")) { openLesson(.nowPlaying) }
                 ShelfModuleCard(
@@ -30,7 +43,10 @@ struct ModulesView: View {
                     store: context.shelfStore,
                     showsSettings: settingsBinding("shelf")
                 ) { openLesson(.shelf) }
+                AgentsModuleCard(context: context, showsSettings: settingsBinding("agents")) { openLesson(.agents) }
+                AIUsageModuleCard(context: context, showsSettings: settingsBinding("aiUsage")) { openLesson(.aiUsage) }
             }
+            .onAppear { foundTools = context.detectTools() }
         }
     }
 
@@ -761,7 +777,7 @@ enum PlayerName {
 // MARK: Shared parts
 
 /// A module's name with its switch, what it does, and its "Learn" button.
-private struct ModuleAbout: View {
+struct ModuleAbout: View {
     let symbol: String
     let title: String
     let summary: String

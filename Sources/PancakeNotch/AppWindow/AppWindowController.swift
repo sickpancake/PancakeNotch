@@ -1,3 +1,4 @@
+import AgentsCore
 import AppKit
 import HotKey
 import Learn
@@ -113,6 +114,10 @@ extension AppWindowController {
         let statsStore = StatsStore(url: nil)
         sampleStatistics(statsStore)
         let updates = Updates(snapshotPendingVersion: nil, lastCheck: Date().addingTimeInterval(-3 * 3600))
+        let agentsSettings = AgentsSettings(defaults: defaults)
+        let agents = AgentsCenter.practice()
+        let usage = UsageCenter.practice()
+        let connector = AgentConnector.preview([.claude: .connected, .codex: .notConnected, .cursor: .notFound], settings: agentsSettings)
         let context = AppContext(
             preferences: preferences,
             shortcuts: noShortcut,
@@ -125,24 +130,31 @@ extension AppWindowController {
             nowPlaying: nowPlaying,
             statsStore: statsStore,
             updates: updates,
+            agentsSettings: agentsSettings,
+            agents: agents,
+            usage: usage,
+            connector: connector,
             makeLiveModules: {
                 var modules: [any NotchModule] = []
                 if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
                 if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
                 return modules
-            }
+            },
+            // Pretend tools, so the offer reads the same on every Mac.
+            detectTools: { [.claude, .codex] }
         )
 
         func render(_ name: String, section: AppSection, lesson: LessonID = .basics, shortcuts: ShortcutController = noShortcut,
-                    size: CGSize = AppWindowView.defaultSize) throws {
+                    size: CGSize = AppWindowView.defaultSize, settle: TimeInterval = 0.3) throws {
             let pageContext = shortcuts === noShortcut ? context : AppContext(
                 preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
-                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
             pageContext.navigation.section = section
             pageContext.navigation.lesson = lesson
-            try render(name, rootView: AppWindowView(context: pageContext), size: size)
+            try render(name, rootView: AppWindowView(context: pageContext), size: size, settle: settle)
         }
 
         /// `then` runs once the page has settled, before a second wait (e.g. to open an item).
@@ -195,6 +207,30 @@ extension AppWindowController {
         nowPlayingSettings.soundBars = .gentle
         nowPlayingSettings.soundBarsAccess = .unknown
 
+        // Agents and AI Usage switched on: both modules with their settings open, the lessons, the
+        // Statistics section and Help. Their practice centers show pretend threads and accounts.
+        agentsSettings.agentsEnabled = true
+        agentsSettings.usageEnabled = true
+        let modulesWithSettings = ModulesView(context: context, openLesson: { _ in }, openSettings: ["agents", "aiUsage"])
+            .background(AppPalette.background)
+        try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 3500))
+        try render("learn-agents", section: .learn, lesson: .agents)
+        try render("learn-aiusage", section: .learn, lesson: .aiUsage)
+        try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
+        try render("help-long", section: .help, size: CGSize(width: 1000, height: 2600))
+        // Codex connected too: its /hooks step shows.
+        connector.connect(.codex)
+        let agentRows = AgentsSettingsRows(settings: agentsSettings, connector: connector)
+            .frame(width: 760)
+            .glassPanel()
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppPalette.background)
+        try render("agents-settings-codex", rootView: agentRows.appWindowStyle(), size: CGSize(width: 820, height: 640))
+        connector.disconnect(.codex)
+        agentsSettings.agentsEnabled = false
+        agentsSettings.usageEnabled = false
+
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
             try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(context: context, step: step).appWindowStyle())
@@ -205,7 +241,8 @@ extension AppWindowController {
             AppContext(
                 preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
-                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, makeLiveModules: context.makeLiveModules
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
         }
         let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))

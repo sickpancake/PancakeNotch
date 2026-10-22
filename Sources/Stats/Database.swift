@@ -34,7 +34,7 @@ struct SQLRow {
 /// store on the main thread never waits on the disk.
 final class Database: @unchecked Sendable {
     /// Bumped when the tables change; `migrate()` brings older files up to date.
-    static let schemaVersion: Int64 = 1
+    static let schemaVersion: Int64 = 2
 
     private let url: URL?
     private var handle: OpaquePointer?
@@ -115,7 +115,7 @@ final class Database: @unchecked Sendable {
         sqlite3_finalize(statement)
         if version >= Self.schemaVersion { return true }
         // Version 1: daily counters, plays and health samples.
-        return exec(db, """
+        if version < 1, !exec(db, """
             BEGIN;
             CREATE TABLE IF NOT EXISTS counters (
                 day TEXT NOT NULL,
@@ -142,6 +142,32 @@ final class Database: @unchecked Sendable {
             );
             CREATE INDEX IF NOT EXISTS health_time ON health (time);
             PRAGMA user_version = 1;
+            COMMIT;
+            """) { return false }
+        // Version 2: AI token counts per message (ADR-0037) and how far each AI tool's log has been read.
+        // `cost` is NULL for models without a known price.
+        return exec(db, """
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS ai_usage (
+                account TEXT NOT NULL,
+                id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                model TEXT NOT NULL,
+                input INTEGER NOT NULL,
+                output INTEGER NOT NULL,
+                cache_write INTEGER NOT NULL,
+                cache_read INTEGER NOT NULL,
+                cost REAL,
+                PRIMARY KEY (account, id)
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS ai_usage_day ON ai_usage (day, account);
+            CREATE TABLE IF NOT EXISTS ai_files (
+                path TEXT PRIMARY KEY,
+                size INTEGER NOT NULL,
+                offset INTEGER NOT NULL,
+                state TEXT NOT NULL DEFAULT ''
+            ) WITHOUT ROWID;
+            PRAGMA user_version = 2;
             COMMIT;
             """)
     }

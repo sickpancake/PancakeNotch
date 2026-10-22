@@ -7,7 +7,7 @@ import { m, useReducedMotion, useScroll, useTransform, type MotionValue } from '
    when it's about halfway up. No extra scrolling, it just moves with the page.
    Reduce Motion: all the words are lit. It's plain text throughout, so screen readers read it as is. */
 
-const SENTENCE = 'Your notch sits idle all day. Give it a job, and it still barely touches your Mac.'
+const SENTENCE = 'Your notch sits idle all day. Give it a job, like music, AI agents or AI usage, and it still barely touches your Mac.'
 const WORDS = SENTENCE.split(' ')
 
 export function ScrollWords() {

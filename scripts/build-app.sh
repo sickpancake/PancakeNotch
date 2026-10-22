@@ -21,6 +21,9 @@ BIN_DIR="$("$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64 --show-bin-p
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN_DIR/PancakeNotch" "$APP/Contents/MacOS/PancakeNotch"
+# Agents' hook helper (ADR-0037): a small C program the AI tools run after Connect, which copies it
+# to Application Support so the tools' settings don't depend on where the app is.
+cp "$BIN_DIR/pancakenotch-hook" "$APP/Contents/MacOS/pancakenotch-hook"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
@@ -59,6 +62,7 @@ rm -rf "$SPARKLE_DIR/Versions/B/Headers" "$SPARKLE_DIR/Versions/B/PrivateHeaders
   "$SPARKLE_DIR/Headers" "$SPARKLE_DIR/PrivateHeaders" "$SPARKLE_DIR/Modules"
 if [[ "$CONFIG" == "release" ]]; then
   strip -S -x "$APP/Contents/MacOS/PancakeNotch" 2>/dev/null
+  strip -S -x "$APP/Contents/MacOS/pancakenotch-hook" 2>/dev/null
   # Toolchain paths baked in at link time (they don't exist on people's Macs; Swift lives in /usr/lib/swift).
   otool -l "$APP/Contents/MacOS/PancakeNotch" | awk '/LC_RPATH/ { getline; getline; print $2 }' | while read -r RPATH; do
     case "$RPATH" in /usr/lib/*|@*) ;; *) install_name_tool -delete_rpath "$RPATH" "$APP/Contents/MacOS/PancakeNotch" ;; esac
@@ -77,6 +81,7 @@ sign "$SPARKLE/Autoupdate"
 sign "$SPARKLE/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
+sign "$APP/Contents/MacOS/pancakenotch-hook"
 sign "$APP"
 
 echo "Built $APP"

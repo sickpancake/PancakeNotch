@@ -1,3 +1,5 @@
+import AgentsCore
+import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
@@ -5,7 +7,7 @@ import SwiftUI
 
 /// Practice modules a stage can make for itself: the real module code on throwaway data.
 enum PracticeKind: Hashable {
-    case nowPlaying, shelf
+    case nowPlaying, shelf, agents, aiUsage
 }
 
 /// A stage's own practice modules: they exist only while it shows, and start fresh each time.
@@ -14,9 +16,12 @@ enum PracticeKind: Hashable {
 final class PracticeSet {
     private(set) var nowPlaying: PracticeNowPlaying?
     private(set) var shelf: PracticeShelf?
+    /// Pretend threads and accounts: nothing real is read.
+    private(set) var agents: AgentsModule?
+    private(set) var usage: AIUsageModule?
 
     var modules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, shelf?.module].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, shelf?.module, agents, usage].compactMap { $0 }
     }
 
     func update(_ kinds: Set<PracticeKind>) {
@@ -31,6 +36,16 @@ final class PracticeSet {
         } else {
             shelf?.close()
             shelf = nil
+        }
+        if kinds.contains(.agents) {
+            if agents == nil { agents = AgentsModule(center: .practice(), peeks: false) }
+        } else {
+            agents = nil
+        }
+        if kinds.contains(.aiUsage) {
+            if usage == nil { usage = AIUsageModule(center: .practice(), peeks: false) }
+        } else {
+            usage = nil
         }
     }
 

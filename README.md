@@ -9,6 +9,8 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 
 - **Now Playing** — album art and sound bars beside the notch; open it to pause, skip, scrub, shuffle and repeat, for any app that plays.
 - **Shelf** — drag files onto the notch to park them; drag them out, share them or AirDrop them later.
+- **Agents** — follow Claude Code and Codex threads, plus Cursor after Connect. See who is working, needs you, or finished; answer permission requests from the notch after Connect.
+- **AI Usage** — choose between accounts, check plan limits, and see tokens and estimated API value for today, 7 days, or 30 days. Both AI modules are optional and read files already on your Mac.
 - **Module Menu** — tabs for your favorite modules, a menu with all of them, or a two-finger swipe.
 - **The PancakeNotch window** — settings, favorites, statistics (listening, usage, and the app's own memory use), short hands-on lessons, and a Help page with quick fixes.
 
@@ -44,7 +46,7 @@ open build/PancakeNotch.app
 
 ## Privacy
 
-No analytics, no accounts, no telemetry. Everything stays on your Mac. The only network request is the once-a-day update check, which sends nothing about you and can be turned off in **General**.
+No analytics, no PancakeNotch account, no telemetry. Your history stays on your Mac. PancakeNotch checks for updates once a day (turn this off in **General**). When you open AI Usage, it also asks your installed Codex for current plan limits; Codex contacts OpenAI using its own sign-in. Claude limits come from local files. PancakeNotch never reads sign-in tokens or the Keychain.
 
 ## Thanks
 
