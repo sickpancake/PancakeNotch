@@ -79,7 +79,7 @@ final class LiveAgentSources {
     }
 
     /// The tools' own answer format (Claude Code and Codex share it).
-    static func decision(allow: Bool, tool: AgentTool) -> String {
+    nonisolated static func decision(allow: Bool, tool: AgentTool) -> String {
         var decision: [String: Any] = ["behavior": allow ? "allow" : "deny"]
         if !allow { decision["message"] = "Denied from PancakeNotch." }
         let output: [String: Any] = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]

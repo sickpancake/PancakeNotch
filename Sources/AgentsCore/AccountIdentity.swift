@@ -28,7 +28,7 @@ enum AccountIdentity {
            (cached["accountUuid"] as? String).map({ $0 == account["accountUuid"] as? String }) ?? true,
            let utilization = cached["utilization"] as? [String: Any] {
             let found = claudeLimits(utilization)
-            let fetched = (cached["fetchedAtMs"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+            let fetched = number(cached["fetchedAtMs"]).map { Date(timeIntervalSince1970: $0 / 1000) }
             if !found.isEmpty { limits = AccountLimits(state: .available, limits: found, updatedAt: fetched) }
         }
         return Claude(email: account["emailAddress"] as? String, plan: plan, billing: .plan, limits: limits)
@@ -57,12 +57,12 @@ enum AccountIdentity {
             ("seven_day_sonnet", .weeklyModel("Sonnet"), 7 * 86_400),
         ]
         let named = windows.compactMap { key, kind, window -> UsageLimit? in
-            guard let value = utilization[key] as? [String: Any], let used = value["utilization"] as? Double else { return nil }
+            guard let value = utilization[key] as? [String: Any], let used = number(value["utilization"]) else { return nil }
             return UsageLimit(kind: kind, usedPercent: used, resetsAt: (value["resets_at"] as? String).flatMap(date), window: window)
         }
         guard named.isEmpty, let list = utilization["limits"] as? [[String: Any]] else { return named }
         return list.compactMap { value in
-            guard let used = value["percent"] as? Double else { return nil }
+            guard let used = number(value["percent"]) else { return nil }
             let kind: UsageLimit.Kind
             if value["kind"] as? String == "session" {
                 kind = .session
@@ -110,6 +110,11 @@ enum AccountIdentity {
         base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
         guard let data = Data(base64Encoded: base64) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    /// A number from decoded JSON, whole or not.
+    static func number(_ value: Any?) -> Double? {
+        (value as? NSNumber)?.doubleValue
     }
 
     /// "2026-10-22T00:19:59.86164+00:00", with or without fractions or a time zone (then UTC).

@@ -16,9 +16,9 @@ struct CodexRateLimits: Equatable, Sendable {
 
     init?(_ object: [String: Any], at date: Date) {
         func window(_ key: String) -> Window? {
-            guard let value = object[key] as? [String: Any], let used = value["used_percent"] as? Double else { return nil }
-            return Window(usedPercent: used, windowMinutes: value["window_minutes"] as? Double,
-                          resetsAt: (value["resets_at"] as? Double).map { Date(timeIntervalSince1970: $0) })
+            guard let value = object[key] as? [String: Any], let used = AccountIdentity.number(value["used_percent"]) else { return nil }
+            return Window(usedPercent: used, windowMinutes: AccountIdentity.number(value["window_minutes"]),
+                          resetsAt: AccountIdentity.number(value["resets_at"]).map { Date(timeIntervalSince1970: $0) })
         }
         primary = window("primary")
         secondary = window("secondary")

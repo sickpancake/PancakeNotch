@@ -40,7 +40,7 @@ enum AccountFinder {
             guard name.hasPrefix(base), name.count > base.count + 1 else { continue }
             let separator = name[name.index(name.startIndex, offsetBy: base.count)]
             let rest = name.dropFirst(base.count + 1)
-            if "-_.".contains(separator), !rest.contains("."), !rest.hasPrefix("before"), !rest.hasSuffix("backup") {
+            if "-_".contains(separator), !rest.contains("."), !rest.hasPrefix("before"), !rest.hasSuffix("backup") {
                 return tool
             }
         }
