@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Stats
 
 /// AI Usage's data: the accounts on this Mac, their plan limits, and what the chosen range adds up to
 /// (ADR-0037). Limits follow the tools' own files as they change. The token history is read only
@@ -81,14 +82,20 @@ public final class UsageCenter {
 
     @ObservationIgnored private var live: LiveUsageSources?
     @ObservationIgnored private var warned: Set<String> = []
+    /// Where the token history is kept; nil keeps none (snapshots).
+    @ObservationIgnored private let stats: StatsStore?
+    /// How many views showing the history are on screen (AI Usage and Statistics can both be).
+    @ObservationIgnored private var viewers = 0
 
-    public init(settings: AgentsSettings) {
+    public init(settings: AgentsSettings, stats: StatsStore?) {
         self.settings = settings
+        self.stats = stats
         isPractice = false
     }
 
     private init(practiceSettings: AgentsSettings) {
         settings = practiceSettings
+        stats = nil
         isPractice = true
     }
 
@@ -97,7 +104,7 @@ public final class UsageCenter {
     /// Finds the accounts and follows their limits (AI Usage or Agents was switched on).
     public func start() {
         guard !isPractice, live == nil else { return }
-        let sources = LiveUsageSources(center: self)
+        let sources = LiveUsageSources(center: self, stats: stats)
         live = sources
         sources.start()
     }
@@ -108,16 +115,19 @@ public final class UsageCenter {
         accounts = []
         limits = [:]
         totals = .zero
+        firstReadProgress = nil
         warned = []
     }
 
     /// AI Usage (or Statistics) is on screen: catch up on the token history and keep it live.
     public func viewShown() {
+        viewers += 1
         live?.setVisible(true)
     }
 
     public func viewHidden() {
-        live?.setVisible(false)
+        viewers = max(0, viewers - 1)
+        if viewers == 0 { live?.setVisible(false) }
     }
 
     /// Looks for account folders again (one was added or removed in Settings).

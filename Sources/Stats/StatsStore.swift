@@ -11,9 +11,9 @@ public final class StatsStore: Sendable {
     /// How many days of statistics are kept (and the longest range the page shows).
     public static let retentionDays = 90
 
-    private let database: Database
-    private let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.stats", qos: .utility)
-    private let calendar: Calendar
+    let database: Database
+    let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.stats", qos: .utility)
+    let calendar: Calendar
 
     /// Gregorian days in the Mac's current time zone (followed as it changes, e.g. after a flight), so
     /// day keys sort the same for every user.
@@ -122,13 +122,15 @@ public final class StatsStore: Sendable {
             database.run("DELETE FROM counters WHERE day < ?", [.text(key)])
             database.run("DELETE FROM plays WHERE day < ?", [.text(key)])
             database.run("DELETE FROM health WHERE time < ?", [.real(time)])
+            database.run("DELETE FROM ai_usage WHERE day < ?", [.text(key)])
         }
     }
 
-    /// Deletes all statistics, and compacts the file so the old rows are really gone from disk.
+    /// Deletes all statistics, and compacts the file so the old rows are really gone from disk. How far
+    /// the AI tools' logs were read is kept, so cleared AI usage isn't read back in.
     public func clear() {
         queue.async { [database] in
-            database.execute("DELETE FROM counters; DELETE FROM plays; DELETE FROM health;")
+            database.execute("DELETE FROM counters; DELETE FROM plays; DELETE FROM health; DELETE FROM ai_usage;")
             database.execute("VACUUM")
             // Empties the write-ahead log too, so no old row waits there either.
             database.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -172,17 +174,17 @@ public final class StatsStore: Sendable {
     private static let topCount = 5
 
     /// "2026-10-11": sorts like the dates it stands for, so ranges are simple string comparisons.
-    private func dayKey(_ date: Date) -> String {
+    func dayKey(_ date: Date) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04ld-%02ld-%02ld", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 
-    private func firstDay(of count: Int, now: Date) -> Date {
+    func firstDay(of count: Int, now: Date) -> Date {
         let today = calendar.startOfDay(for: now)
         return calendar.date(byAdding: .day, value: -(count - 1), to: today) ?? today
     }
 
-    private func dayStarts(count: Int, now: Date) -> [Date] {
+    func dayStarts(count: Int, now: Date) -> [Date] {
         let today = calendar.startOfDay(for: now)
         return (0..<count).reversed().map { offset in
             calendar.date(byAdding: .day, value: -offset, to: today) ?? today
