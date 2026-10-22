@@ -36,7 +36,8 @@ let package = Package(
         // AI agents and their usage: the tools' own files, the hook socket, Connect, prices (ADR-0037). No UI.
         .target(
             name: "AgentsCore",
-            dependencies: ["Stats"]
+            dependencies: ["Stats"],
+            linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .target(
             name: "ModuleAgents",

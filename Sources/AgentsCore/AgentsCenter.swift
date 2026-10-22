@@ -50,9 +50,9 @@ public final class AgentsCenter {
     @ObservationIgnored private var practice: PracticeAgents?
 
     /// How long a finished thread stays after it was seen.
-    static let keepAfterSeen: TimeInterval = 30 * 60
+    nonisolated static let keepAfterSeen: TimeInterval = 30 * 60
     /// A finish pops up only after this much work.
-    static let worthAPeek: TimeInterval = 30
+    nonisolated static let worthAPeek: TimeInterval = 30
 
     public init(settings: AgentsSettings) {
         self.settings = settings
@@ -168,7 +168,7 @@ public final class AgentsCenter {
     // MARK: Updates from the sources
 
     /// What a source learned about one thread. Fields left nil don't change.
-    struct Update {
+    struct Update: Sendable {
         var id: String
         var tool: AgentTool
         var at: Date
