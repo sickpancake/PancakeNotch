@@ -88,4 +88,10 @@ public enum AgentsDetection {
         if AccountFinder.hasCursor(home: home) { tools.insert(.cursor) }
         return AgentTool.allCases.filter(tools.contains)
     }
+
+    /// The tool a folder picked with "Add account folder…" belongs to, or nil when it's neither a
+    /// Claude Code nor a Codex folder.
+    public static func tool(ofFolder folder: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> AgentTool? {
+        AccountFinder.tool(of: folder, home: home)
+    }
 }
