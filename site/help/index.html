@@ -233,6 +233,7 @@
           <li><strong>Working</strong> (a dotted circle): the agent is busy.</li>
           <li><strong>Needs you</strong> (a white circle with a !): the agent is waiting for you, either to allow something or to answer a question.</li>
           <li><strong>Done</strong> (a check in a circle): the thread has finished. It leaves the list 30 minutes after you've seen it.</li>
+          <li><strong>Stopped</strong> (a square in a circle): the thread was stopped, or its tool quit.</li>
           <li><strong>Error</strong> (an x in a circle): something went wrong in that thread.</li>
         </ul>
         <h3>With the notch closed</h3>
@@ -292,7 +293,7 @@
           <li><strong>No Claude limits yet</strong>They appear after you've used Claude Code once.</li>
           <li><strong>Codex tokens look low</strong>Older Codex sessions that Codex has compressed (shrunk to save space) aren't counted.</li>
         </ul>
-        <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Everything comes from files Claude Code and Codex already keep on your Mac, and it all works offline: no accounts, no network and no Keychain. PancakeNotch keeps only daily token counts, for 90 days, and never any text. It stays under 50 MB of memory.</p></div>
+        <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Everything comes from files Claude Code and Codex already keep on your Mac, and it all works offline: no accounts, no network and no Keychain. PancakeNotch keeps only token counts and model names, for 90 days, and never any text.</p></div>
       </section>
 
       <section class="topic" id="updates" aria-labelledby="updates-title">
@@ -318,7 +319,7 @@
           <li><strong>Everything stays on your Mac.</strong> No accounts, no ads, no analytics and no tracking.</li>
           <li><strong>One network request:</strong> the once-a-day update check, which only asks GitHub for the latest version. You can turn it off (see <a class="text-link" href="#updates">Updates</a>).</li>
           <li><strong>Statistics are a file on your Mac.</strong> Listening and notch use are counted locally and kept for 90 days. Delete them any time with <strong>Clear Statistics</strong> on the <strong>Statistics</strong> page.</li>
-          <li><strong>Agents and AI Usage only read files already on your Mac.</strong> They work offline, with no accounts, no network and no Keychain, and keep only daily token counts for 90 days, never any text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
+          <li><strong>Agents and AI Usage only read files already on your Mac.</strong> They work offline, with no accounts, no network and no Keychain, and keep only token counts and model names for 90 days, never any text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
           <li><strong>Permissions only when needed:</strong> controlling Music and Spotify in limited mode, System Audio Recording for the optional "Follow the music" bars, and Login Items if you turn on launch at login.</li>
           <li>This website has no cookies and no analytics either.</li>
         </ul>
