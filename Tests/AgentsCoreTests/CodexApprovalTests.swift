@@ -69,6 +69,7 @@ struct CodexApprovalTests {
 
 @MainActor
 struct CodexApprovalSocketTests {
+    @MainActor
     private final class Received {
         weak var server: HookServer?
         var events: [HookEvent] = []
@@ -86,7 +87,13 @@ struct CodexApprovalSocketTests {
 
         func receive(_ event: HookEvent) {
             events.append(event)
-            sources.handle(event)
+            // The helper's real parent is this test runner inside the frontmost app. Model a
+            // background agent so the existing frontmost-app suppression doesn't hide its controls.
+            var background = HookEvent(tool: event.tool, name: event.name, parentPID: 0,
+                                       payload: ["session_id": event.sessionID ?? "", "turn_id": event.turnID ?? "",
+                                                 "transcript_path": event.transcriptPath ?? ""])
+            background.requestID = event.requestID
+            sources.handle(background)
             if let id = event.requestID { server?.answer(id, with: LiveAgentSources.decision(allow: false, tool: event.tool)) }
         }
     }
