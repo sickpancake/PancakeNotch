@@ -62,19 +62,27 @@ private struct ShelfHeader: View {
         let count = module.store.items.count
         HStack(spacing: 0) {
             HStack(spacing: 6) {
+                // With many tabs the room beside the notch is small: a shorter title, or none, instead of "1…".
                 if case .choosing = module.prompt {
-                    Text("Choose items to remove")
-                        .font(.system(size: 12, weight: .semibold))
+                    ViewThatFits(in: .horizontal) {
+                        Text("Choose items to remove")
+                        Text("Choose items", comment: "Short form of \"Choose items to remove\" when space is tight")
+                        Color.clear.frame(width: 0)
+                    }
+                    .font(.system(size: 12, weight: .semibold))
                 } else {
                     if barWidth == 0 {
                         Text("Shelf")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     if count > 0 {
-                        Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .monospacedDigit()
+                        ViewThatFits(in: .horizontal) {
+                            Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
+                            Color.clear.frame(width: 0)
+                        }
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .monospacedDigit()
                     }
                 }
             }

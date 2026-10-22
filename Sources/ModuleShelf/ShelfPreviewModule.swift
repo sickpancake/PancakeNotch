@@ -50,9 +50,13 @@ private struct ShelfPreviewPanel: View {
                     Text("Shelf")
                         .font(.system(size: 12, weight: .semibold))
                 }
-                Text("\(ShelfPreviewModule.samples.count) items", comment: "Shelf header item count")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.5))
+                // Hidden when the tabs leave too little room beside the notch, instead of truncating.
+                ViewThatFits(in: .horizontal) {
+                    Text("\(ShelfPreviewModule.samples.count) items", comment: "Shelf header item count")
+                    Color.clear.frame(width: 0)
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.5))
                 Spacer(minLength: 0)
             }
             .padding(.leading, max(0, barWidth - ShelfLayout.sidePadding))
