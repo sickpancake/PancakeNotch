@@ -15,10 +15,11 @@ while IFS= read -r -d '' file; do
     echo "Personal path in ${file#"$APP"/}: $paths" >&2
     problems=1
   fi
-  # Third-party licences name their authors; that's theirs to publish, not ours.
+  # Third-party licences name their authors; that's theirs to publish, not ours. The practice notches'
+  # pretend accounts use the reserved example.com / example.org addresses.
   [[ "$(basename "$file")" == *LICENSE* ]] && continue
   emails="$(strings -a "$file" 2>/dev/null | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
-    | grep -viE '@(apple\.com|sparkle-project\.org|github\.com|noreply\.github\.com|2x|3x)' | sort -u || true)"
+    | grep -viE '@(apple\.com|sparkle-project\.org|github\.com|noreply\.github\.com|example\.(com|org)|2x|3x)' | sort -u || true)"
   if [[ -n "$emails" ]]; then
     echo "Email address in ${file#"$APP"/}: $emails" >&2
     problems=1

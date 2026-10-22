@@ -33,9 +33,14 @@ public struct AgentAccount: Identifiable, Hashable, Sendable {
         self.name = name ?? email ?? tool.shortName
     }
 
-    /// Two letters for the avatar: the email's first letter and its domain's ("ad" for a@d.com),
-    /// else the name's first two letters.
+    /// For the avatar: a nickname's first letters ("W" for Work, "WM" for Work Max), else the email's
+    /// first letter and its domain's ("AD" for a@d.com), else the name's first two letters.
     public var initials: String {
+        if name != email, name != tool.shortName {
+            let words = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2)
+            let letters = words.compactMap(\.first).map(String.init).joined()
+            if !letters.isEmpty { return letters.uppercased() }
+        }
         if let email, let at = email.firstIndex(of: "@"), at != email.startIndex {
             let domain = email[email.index(after: at)...]
             return (String(email.prefix(1)) + String(domain.prefix(1))).uppercased()

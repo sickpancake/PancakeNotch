@@ -45,6 +45,9 @@ enum HookHelper {
             try? fm.removeItem(at: temporary)
             try fm.copyItem(at: source, to: temporary)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+            // A downloaded app's files carry the download mark; the tools run this copy from Terminal,
+            // where that mark would stop it with a warning the person can't see.
+            removexattr(temporary.path, "com.apple.quarantine", 0)
             _ = try fm.replaceItemAt(installedURL, withItemAt: temporary)
             return true
         } catch {

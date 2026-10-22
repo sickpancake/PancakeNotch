@@ -6,7 +6,7 @@ enum PracticeUsage {
     static let accounts: [AgentAccount] = [
         AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/practice/.claude"), email: "sam@example.com",
                      plan: "Pro", billing: .plan, name: String(localized: "Personal", comment: "Practice account name")),
-        AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/practice/.claude-work"), email: "sam@studio.dev",
+        AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/practice/.claude-work"), email: "sam@example.org",
                      plan: "Max 5×", billing: .plan, name: String(localized: "Work", comment: "Practice account name")),
         AgentAccount(tool: .codex, folder: URL(fileURLWithPath: "/practice/.codex"), email: "sam@example.com",
                      plan: "Plus", billing: .plan),
