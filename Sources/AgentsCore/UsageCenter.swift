@@ -150,14 +150,14 @@ public final class UsageCenter {
 
     /// Tokens and money per day for the last `days` days, oldest first (the Statistics chart).
     public func daily(days: Int) async -> [DailyUsage] {
-        guard let live else { return isPractice ? PracticeUsage.daily(days: days) : [] }
+        guard let live else { return isPractice ? PracticeUsage.daily(days: days, selection: selection) : [] }
         return await live.daily(days: days, accountIDs: shownAccounts.map(\.id))
     }
 
     /// Tokens and money per model for the last `days` days, biggest first (the Statistics page's top
     /// models, which follow its own range rather than AI Usage's).
     public func models(days: Int) async -> [ModelUsage] {
-        guard let live else { return isPractice ? PracticeUsage.totals(for: selection, range: days <= 1 ? .today : days <= 7 ? .week : .month).models : [] }
+        guard let live else { return isPractice ? PracticeUsage.totals(for: selection, days: days).models : [] }
         return await live.models(days: days, accountIDs: shownAccounts.map(\.id))
     }
 
@@ -214,7 +214,11 @@ public final class UsageCenter {
     }
 
     /// Stop an in-progress first import from bringing cleared history back.
-    public func statisticsWillClear() { live?.discardHistory(before: .now) }
+    public func statisticsWillClear() {
+        let now = Date()
+        settings.historyClearedAt = now
+        live?.discardHistory(before: now)
+    }
 
     /// Asks for the selected range's totals again (selection, range or history changed).
     func refreshTotals() {

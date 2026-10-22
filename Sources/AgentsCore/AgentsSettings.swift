@@ -35,6 +35,8 @@ public final class AgentsSettings {
     public var nicknames: [String: String] { didSet { defaults.set(nicknames, forKey: Keys.nicknames) } }
     /// Account folders the user added ("Add account folder…"), as paths.
     public var addedFolders: [String] { didSet { defaults.set(addedFolders, forKey: Keys.addedFolders) } }
+    /// Ignore older requests even if a tool later moves a cleared log into its archive.
+    public var historyClearedAt: Date? { didSet { defaults.set(historyClearedAt, forKey: Keys.historyClearedAt) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -51,6 +53,7 @@ public final class AgentsSettings {
         range = defaults.string(forKey: Keys.range).flatMap(UsageRange.init(rawValue:)) ?? .today
         nicknames = defaults.dictionary(forKey: Keys.nicknames) as? [String: String] ?? [:]
         addedFolders = defaults.stringArray(forKey: Keys.addedFolders) ?? []
+        historyClearedAt = defaults.object(forKey: Keys.historyClearedAt) as? Date
     }
 
     /// Sets or clears (empty text) an account's nickname.
@@ -70,6 +73,7 @@ public final class AgentsSettings {
         static let range = "aiUsage.range"
         static let nicknames = "aiUsage.nicknames"
         static let addedFolders = "aiUsage.addedFolders"
+        static let historyClearedAt = "aiUsage.historyClearedAt"
         static let allAccounts = "*all*"
     }
 }

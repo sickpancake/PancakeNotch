@@ -52,17 +52,40 @@ enum PracticeUsage {
         return UsageTotals(tokens: sorted.reduce(0) { $0 + $1.tokens }, cost: sorted.reduce(0) { $0 + $1.cost }, models: sorted)
     }
 
-    static func daily(days: Int, now: Date = .now) -> [DailyUsage] {
+    static func totals(for selection: AccountSelection, days: Int) -> UsageTotals {
+        var value = totals(for: selection, range: days <= 1 ? .today : days <= 7 ? .week : .month)
+        if days > 30 {
+            let factor = Double(days) / 30
+            value.models = value.models.map { ModelUsage(name: $0.name, tokens: Int64(Double($0.tokens) * factor), cost: $0.cost * factor) }
+            value.tokens = value.models.reduce(0) { $0 + $1.tokens }
+            value.cost = value.models.reduce(0) { $0 + $1.cost }
+        }
+        return value
+    }
+
+    static func daily(days: Int, selection: AccountSelection = .all, now: Date = .now) -> [DailyUsage] {
+        guard days > 0 else { return [] }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
-        return (0..<days).reversed().compactMap { offset in
+        let dates = (0..<days).reversed().compactMap { offset -> (Date, Double)? in
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             // A steady-looking but uneven pretend month: busier on weekdays.
             let weekday = calendar.component(.weekday, from: day)
             let busy = weekday == 1 || weekday == 7 ? 0.35 : 1.0
             let wave = 0.7 + 0.3 * sin(Double(offset) * 0.9)
-            let tokens = Int64(20_400_000 * busy * wave)
-            return DailyUsage(day: day, tokens: tokens, cost: Double(tokens) / 1_000_000 * 0.82)
+            return (day, busy * wave)
+        }
+        let total = totals(for: selection, days: days)
+        let weight = dates.reduce(0) { $0 + $1.1 }
+        var tokensLeft = total.tokens
+        var costLeft = total.cost
+        return dates.enumerated().map { index, value in
+            let isLast = index == dates.count - 1
+            let tokens = isLast ? tokensLeft : Int64(Double(total.tokens) * value.1 / weight)
+            let cost = isLast ? costLeft : total.cost * value.1 / weight
+            tokensLeft -= tokens
+            costLeft -= cost
+            return DailyUsage(day: value.0, tokens: tokens, cost: cost)
         }
     }
 }

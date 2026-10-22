@@ -35,6 +35,7 @@ final class LiveUsageSources {
     }
 
     func start() {
+        discardedBefore = center.settings.historyClearedAt
         refreshAccounts()
     }
 

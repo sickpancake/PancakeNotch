@@ -127,7 +127,8 @@ struct AccountTests {
             "plan_type": "plus",
         ], at: .now))
         #expect(limits.limits.map(\.kind) == [.session, .weekly])
-        #expect(limits.limits.map(\.window) == [5 * 3600, 7 * 86_400])
+        let expected: [TimeInterval?] = [5 * 3600, 7 * 86_400]
+        #expect(limits.limits.map(\.window) == expected)
         #expect(limits.plan == "plus")
     }
 }
