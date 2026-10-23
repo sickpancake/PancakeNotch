@@ -108,6 +108,25 @@ struct AgentsCenterTests {
         #expect(center.threads.map(\.id) == ["codex:real"])
     }
 
+    @Test func aHostAppsHelperIsMatchedFromItsFirstPromptHook() async throws {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let task = "Review the notch views for alignment. Read only."
+        let main = try temporaryFolder().appending(path: "main.jsonl")
+        try Data((#"{"type":"user","message":{"role":"user","content":"Polish the app"}}"# + "\n"
+            + #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__t3-code__delegate_task","input":{"title":"Notch review","task":"\#(task)"}}]}}"# + "\n").utf8).write(to: main)
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "main", "transcript_path": main.path, "prompt": "Polish the app"]))
+        // The helper's own transcript isn't written yet: its hook carries the task.
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "helper", "transcript_path": "/nonexistent/helper.jsonl",
+                                           "prompt": "Act as the review sub-agent for this task.\n\n\(task)"]))
+        for _ in 0..<200 where center.threads.count != 1 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(center.threads.map(\.id) == ["claude:main"])
+        #expect(center.threads.first?.subagents.map(\.title) == ["Notch review"])
+    }
+
     @Test func twoVisibleListsKeepFinishedThreadsSeenUntilBothClose() {
         let center = center()
         center.listShown()

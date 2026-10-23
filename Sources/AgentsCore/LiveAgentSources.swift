@@ -43,6 +43,13 @@ final class LiveAgentSources {
     /// Look-ups so far per unmatched thread (its first message may not be written yet).
     private var delegationTries: [String: Int] = [:]
     private var resolvingDelegations = false
+    /// Asked again while a look-up ran: look again when it ends, so no new thread is missed.
+    private var resolvesAgain = false
+    /// First prompts the hooks delivered, for threads not matched yet (a helper's task, before its
+    /// transcript may hold it).
+    private var hookPrompts: [String: String] = [:]
+    /// Transcripts the hooks named, for conversations missing from the tools' session lists.
+    private var hookTranscripts: [String: String] = [:]
     private var detailed = false
     private var stopped = false
 
@@ -85,6 +92,8 @@ final class LiveAgentSources {
         codexSubagents = [:]
         delegationChecked = []
         delegationTries = [:]
+        hookPrompts = [:]
+        hookTranscripts = [:]
     }
 
     private func stopWatching(_ list: inout [FolderWatcher]) {
@@ -175,6 +184,7 @@ final class LiveAgentSources {
         lastActivity[id] = now
         var update = AgentsCenter.Update(id: id, tool: event.tool, at: now, accountID: accountID(for: event),
                                          title: event.title, cwd: event.cwd, processID: event.parentPID)
+        if event.tool != .cursor, let path = event.transcriptPath, !path.isEmpty { hookTranscripts[id] = path }
         switch (event.tool, event.name) {
         case (_, "UserPromptSubmit"), (.cursor, "beforeSubmitPrompt"):
             requestSettled(id)
@@ -233,12 +243,19 @@ final class LiveAgentSources {
             center.ended(id, at: now)
             lastHookEvent[id] = nil
             lastActivity[id] = nil
+            hookPrompts[id] = nil
+            hookTranscripts[id] = nil
             codexHelpers[event.transcriptPath ?? session] = nil
             return
         default:
             return
         }
         center.apply(update)
+        // A host app's helper gets its task as its first prompt: match it now, while it starts.
+        if event.tool != .cursor, !delegationChecked.contains(id), let prompt = event.fullPrompt, !prompt.isEmpty {
+            if hookPrompts[id] == nil { hookPrompts[id] = prompt }
+            resolveDelegations()
+        }
     }
 
     /// From the hook's rollout (its first line, read once per rollout), else the session's model or a
@@ -351,10 +368,15 @@ final class LiveAgentSources {
     /// Matches new Claude Code and Codex threads to the conversation that delegated them through a host
     /// app (T3 Code), so they show under it. Each thread is looked up a few times at most, as it changes.
     private func resolveDelegations() {
-        guard !resolvingDelegations, !stopped else { return }
+        guard !stopped else { return }
+        guard !resolvingDelegations else {
+            resolvesAgain = true
+            return
+        }
         let threads = center.allThreads.filter { $0.tool != .cursor }
-        let children = threads.filter { !delegationChecked.contains($0.id) }.compactMap { thread in
-            transcriptLocator(thread.id).map { (id: thread.id, locate: $0) }
+        let children = threads.filter { !delegationChecked.contains($0.id) }.compactMap { thread -> (id: String, prompt: String?, locate: (@Sendable () -> URL?)?)? in
+            let prompt = hookPrompts[thread.id], locate = transcriptLocator(thread.id)
+            return prompt == nil && locate == nil ? nil : (thread.id, prompt, locate)
         }
         guard !children.isEmpty else { return }
         let parents = threads.compactMap { thread in transcriptLocator(thread.id).map { (id: thread.id, locate: $0) } }
@@ -363,7 +385,7 @@ final class LiveAgentSources {
         queue.async { [weak self] in
             let parentFiles = parents.compactMap { parent in parent.locate().map { (id: parent.id, url: $0) } }
             let results = children.map { child -> (id: String, match: DelegatedHelpers.Delegation?, hasPrompt: Bool) in
-                guard let url = child.locate(), let prompt = DelegatedHelpers.firstPrompt(of: url) else { return (child.id, nil, false) }
+                guard let prompt = child.prompt ?? child.locate?().flatMap(DelegatedHelpers.firstPrompt) else { return (child.id, nil, false) }
                 return (child.id, delegated.parent(of: prompt, among: parentFiles.filter { $0.id != child.id }), true)
             }
             Task { @MainActor in
@@ -374,6 +396,7 @@ final class LiveAgentSources {
                     if let match = result.match {
                         self.center.setParent(of: result.id, to: match.parentID, title: match.title)
                         self.delegationChecked.insert(result.id)
+                        self.hookPrompts[result.id] = nil
                         continue
                     }
                     let tries = (self.delegationTries[result.id] ?? 0) + 1
@@ -382,7 +405,12 @@ final class LiveAgentSources {
                     if tries >= (result.hasPrompt ? 3 : 10) {
                         self.delegationChecked.insert(result.id)
                         self.delegationTries[result.id] = nil
+                        self.hookPrompts[result.id] = nil
                     }
+                }
+                if self.resolvesAgain {
+                    self.resolvesAgain = false
+                    self.resolveDelegations()
                 }
             }
         }
@@ -394,6 +422,10 @@ final class LiveAgentSources {
             let folder = entry.folder
             let session = entry.session
             return { ClaudeTranscript.url(folder: folder, sessionID: session.sessionID, cwd: session.cwd) }
+        }
+        if let path = hookTranscripts[id] {
+            let url = URL(fileURLWithPath: path)
+            return { url }
         }
         guard id.hasPrefix("codex:") else { return nil }
         let reader = codex

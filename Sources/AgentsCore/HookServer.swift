@@ -22,6 +22,8 @@ struct HookEvent: Sendable {
     var title: String?
     /// The first line of the prompt just sent (UserPromptSubmit, beforeSubmitPrompt).
     var prompt: String?
+    /// The whole prompt (up to 64 KB), to tell a host app's helper by its task. Never shown or kept.
+    var fullPrompt: String?
     /// "Wants to run: npm test" (permission requests) or "Running npm test" (Cursor's steps).
     var summary: String?
     /// `summary` shows all of what Allow would approve (`AgentSteps.isFullyShown`).
@@ -45,6 +47,7 @@ struct HookEvent: Sendable {
         transcriptPath = payload["transcript_path"] as? String
         title = payload["session_title"] as? String
         prompt = AgentNames.oneLine(payload["prompt"] as? String)
+        fullPrompt = (payload["prompt"] as? String).map { String($0.prefix(64 * 1024)) }
         notificationType = payload["notification_type"] as? String
         message = payload["message"] as? String ?? payload["error"] as? String
         status = payload["status"] as? String
