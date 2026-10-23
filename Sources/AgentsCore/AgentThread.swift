@@ -58,8 +58,13 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public let tool: AgentTool
     /// The account it runs under, when known (see `AgentAccount.id`).
     public var accountID: String?
-    /// The thread's name, or its project folder when it has none.
+    /// The conversation's title, or its project folder when it has none. In `AgentsCenter.threads`, the
+    /// name the user picked in Settings (`name(_:)`).
     public var title: String
+    /// The last message the user sent it (one line), when known.
+    public var lastMessage: String?
+    /// The git branch of its project folder, when it's in a repository.
+    public var branch: String?
     /// The project folder's name ("PancakeNotch").
     public var project: String
     public var status: AgentStatus
@@ -83,7 +88,7 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public init(id: String, tool: AgentTool, accountID: String? = nil, title: String, project: String,
                 status: AgentStatus, statusSince: Date, workStarted: Date? = nil, step: String? = nil,
                 request: String? = nil, canAnswer: Bool = false, canOpen: Bool = false, isSeen: Bool = false,
-                subagents: [AgentSubagent] = []) {
+                subagents: [AgentSubagent] = [], lastMessage: String? = nil, branch: String? = nil) {
         self.id = id
         self.tool = tool
         self.accountID = accountID
@@ -98,6 +103,17 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
         self.canOpen = canOpen
         self.isSeen = isSeen
         self.subagents = subagents
+        self.lastMessage = lastMessage
+        self.branch = branch
+    }
+
+    /// What names it in the list: the chosen kind of name, else its title.
+    public func name(_ style: AgentNameStyle) -> String {
+        switch style {
+        case .title: title
+        case .lastMessage: lastMessage ?? title
+        case .branch: branch ?? title
+        }
     }
 }
 
@@ -122,7 +138,9 @@ public struct AgentSubagent: Identifiable, Equatable, Sendable {
 public enum AgentsAttention: Equatable, Sendable {
     /// `count` threads need the user.
     case needsYou(count: Int)
-    /// `count` threads finished and haven't been seen.
+    /// `count` threads stopped with an error and haven't been seen.
+    case failed(count: Int)
+    /// `count` threads finished (or were stopped) and haven't been seen.
     case finished(count: Int)
     /// `count` threads are working.
     case working(count: Int)

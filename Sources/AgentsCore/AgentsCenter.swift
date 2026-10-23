@@ -4,8 +4,8 @@ import Observation
 
 /// Every agent thread PancakeNotch can see, merged from the tools' own files and, after Connect, their
 /// hooks (ADR-0037). Event-driven: sources report changes; nothing here runs on a timer. Finished
-/// threads are dropped lazily (30 minutes after they were seen) whenever something changes or the list
-/// is shown.
+/// threads are dropped lazily (as long after they were seen as Settings say) whenever something changes
+/// or the list is shown.
 @MainActor
 @Observable
 public final class AgentsCenter {
@@ -13,26 +13,38 @@ public final class AgentsCenter {
     /// Pretend threads for the practice notches (app window, lessons): nothing real is read.
     public let isPractice: Bool
 
-    /// Needs you first, then working, then finished; newest first within each.
+    /// Needs you first (oldest first, so rows with Allow / Deny don't move when another asks), then
+    /// working, then finished (newest first). Shown as picked in Settings: its tool not hidden, named the
+    /// chosen way, with or without steps and subagents.
     public var threads: [AgentThread] {
-        storage.values.sorted {
+        shown.sorted {
             if $0.status.sortRank != $1.status.sortRank { return $0.status.sortRank < $1.status.sortRank }
-            return $0.statusSince > $1.statusSince
+            if $0.statusSince != $1.statusSince { return $0.status.needsYou ? $0.statusSince < $1.statusSince : $0.statusSince > $1.statusSince }
+            return $0.id < $1.id
         }
+        .map(presented)
     }
 
     /// The most urgent thing for the closed notch's ear, or nil when nothing's going on.
     public var attention: AgentsAttention? {
-        let values = storage.values
+        let values = shown
         let needing = values.count { $0.status.needsYou }
         if needing > 0 { return .needsYou(count: needing) }
+        let failed = values.count { $0.status == .failed && !$0.isSeen }
+        if failed > 0 { return .failed(count: failed) }
         let unseen = values.count { $0.status.isFinished && !$0.isSeen }
         if unseen > 0 { return .finished(count: unseen) }
         let working = values.count { $0.status == .working }
         return working > 0 ? .working(count: working) : nil
     }
 
-    public var hasFinished: Bool { storage.values.contains { $0.status.isFinished } }
+    public var hasFinished: Bool { shown.contains { $0.status.isFinished } }
+
+    /// The threads of the tools not hidden in Settings.
+    private var shown: [AgentThread] {
+        let hidden = settings.hiddenTools
+        return hidden.isEmpty ? Array(storage.values) : storage.values.filter { !hidden.contains($0.tool) }
+    }
 
     /// Told about needs-you and finishes worth a peek (smart rules applied).
     @ObservationIgnored public var onAlert: (@MainActor (AgentAlert) -> Void)?
@@ -45,12 +57,17 @@ public final class AgentsCenter {
     @ObservationIgnored private var processIDs: [String: pid_t] = [:]
     /// Apps named by the tool when there's no process ID (a Codex rollout's originator).
     @ObservationIgnored private var hostBundleIDs: [String: String] = [:]
+    /// Each thread's project folder path, for its branch.
+    @ObservationIgnored private var cwds: [String: String] = [:]
+    /// Threads whose title came from the tool (not just their project folder).
+    @ObservationIgnored private var hasOwnTitle: Set<String> = []
     @ObservationIgnored private var listViewers = 0
     private var listVisible: Bool { listViewers > 0 }
     @ObservationIgnored private var live: LiveAgentSources?
     @ObservationIgnored private var practice: PracticeAgents?
 
-    /// How long a finished thread stays after it was seen.
+    /// How far back a thread that finished before launch is still shown (and the default time a finished
+    /// thread stays after it was seen).
     nonisolated static let keepAfterSeen: TimeInterval = 30 * 60
     /// A finish pops up only after this much work.
     nonisolated static let worthAPeek: TimeInterval = 30
@@ -79,6 +96,7 @@ public final class AgentsCenter {
         guard isPractice else { return }
         storage = Dictionary(uniqueKeysWithValues: PracticeAgents.threads(now: now).map { ($0.id, $0) })
         seenAt = [:]
+        hasOwnTitle = Set(storage.keys)
     }
 
     // MARK: Running
@@ -100,6 +118,8 @@ public final class AgentsCenter {
         seenAt = [:]
         processIDs = [:]
         hostBundleIDs = [:]
+        cwds = [:]
+        hasOwnTitle = []
     }
 
     /// A configured account folder changed. Restart the file sources so both tools follow the new set.
@@ -186,6 +206,7 @@ public final class AgentsCenter {
         var at: Date
         var accountID: String?
         var title: String?
+        var lastMessage: String?
         var cwd: String?
         var status: AgentStatus?
         /// `.some(nil)` clears it.
@@ -205,9 +226,21 @@ public final class AgentsCenter {
             statusSince: update.at, isSeen: update.quietly
         )
         if let accountID = update.accountID { thread.accountID = accountID }
-        if let cwd = update.cwd, !cwd.isEmpty { thread.project = URL(fileURLWithPath: cwd).lastPathComponent }
-        if let title = update.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty { thread.title = title }
-        if thread.title.isEmpty { thread.title = thread.project.isEmpty ? update.tool.name : thread.project }
+        if let cwd = update.cwd, !cwd.isEmpty {
+            thread.project = URL(fileURLWithPath: cwd).lastPathComponent
+            // The branch can change between turns: look again when one starts.
+            if cwd != cwds[update.id] || (update.status == .working && previous?.status != .working) {
+                cwds[update.id] = cwd
+                thread.branch = GitBranch.name(cwd: cwd)
+            }
+        }
+        if let title = update.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            thread.title = title
+            hasOwnTitle.insert(update.id)
+        }
+        // Until it has a title of its own, it goes by its project folder.
+        if !hasOwnTitle.contains(update.id) { thread.title = thread.project.isEmpty ? update.tool.name : thread.project }
+        if let message = AgentNames.oneLine(update.lastMessage) { thread.lastMessage = message }
         if let step = update.step { thread.step = step }
         if let request = update.request { thread.request = request }
         if let canAnswer = update.canAnswer { thread.canAnswer = canAnswer }
@@ -234,7 +267,7 @@ public final class AgentsCenter {
                 seenAt[update.id] = nil
             }
         }
-        thread.canOpen = hostApp(for: update.id) != nil
+        if !isPractice { thread.canOpen = hostApp(for: update.id) != nil }
         storage[update.id] = thread
         if !update.quietly { alertIfWorthIt(thread, previous: previous) }
         prune(now: update.at)
@@ -269,27 +302,39 @@ public final class AgentsCenter {
         seenAt[id] = nil
         processIDs[id] = nil
         hostBundleIDs[id] = nil
+        cwds[id] = nil
+        hasOwnTitle.remove(id)
     }
 
     func thread(_ id: String) -> AgentThread? { storage[id] }
 
+    /// The thread as Settings say to show it.
+    private func presented(_ thread: AgentThread) -> AgentThread {
+        var shown = thread
+        shown.title = thread.name(settings.nameStyle)
+        if !settings.showsSteps { shown.step = nil }
+        if !settings.showsSubagents { shown.subagents = [] }
+        return shown
+    }
+
     private func alertIfWorthIt(_ thread: AgentThread, previous: AgentThread?) {
-        guard thread.status != previous?.status, !isFrontmost(thread.id) else { return }
+        guard thread.status != previous?.status, !settings.hiddenTools.contains(thread.tool), !isFrontmost(thread.id) else { return }
         switch thread.status {
         case .needsYou where settings.peeksOnNeedsYou:
-            onAlert?(AgentAlert(kind: .needsYou, thread: thread))
+            onAlert?(AgentAlert(kind: .needsYou, thread: presented(thread)))
         case .done, .failed:
             guard settings.peeksOnFinish, let previous, !previous.status.isFinished,
                   let started = previous.workStarted ?? thread.workStarted,
                   Date().timeIntervalSince(started) >= Self.worthAPeek else { return }
-            onAlert?(AgentAlert(kind: thread.status == .failed ? .failed : .finished, thread: thread))
+            onAlert?(AgentAlert(kind: thread.status == .failed ? .failed : .finished, thread: presented(thread)))
         default:
             break
         }
     }
 
     private func prune(now: Date) {
-        for (id, seen) in seenAt where now.timeIntervalSince(seen) > Self.keepAfterSeen {
+        guard let keep = settings.keepFinished.interval else { return }
+        for (id, seen) in seenAt where now.timeIntervalSince(seen) > keep {
             if storage[id]?.status.isFinished ?? true { forget(id) }
         }
     }

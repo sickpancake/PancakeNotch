@@ -46,7 +46,7 @@ struct SubagentCenterTests {
         let sources = LiveAgentSources(center: center)
         let now = Date()
         func update(_ id: String, parent: String? = nil, status: AgentStatus = .working) -> CodexReader.ThreadUpdate {
-            .init(threadID: id, folder: URL(fileURLWithPath: "/tmp/codex"), cwd: "/tmp/app", title: id,
+            .init(threadID: id, folder: URL(fileURLWithPath: "/tmp/codex"), cwd: "/tmp/app", title: id, lastMessage: nil,
                   status: status, statusAt: now, step: nil, hostBundleID: nil, parentThreadID: parent,
                   modified: now, isCatchUp: false)
         }
@@ -129,6 +129,8 @@ struct SubagentFilesTests {
     @Test func aFolderNameIsntATitle() throws {
         let derived = try #require(ClaudeSession(data: Data(#"{"pid": 1, "sessionId": "s", "status": "busy", "name": "pancakenotch-5a", "nameSource": "derived"}"#.utf8)))
         #expect(derived.name == nil)
+        let auto = try #require(ClaudeSession(data: Data(#"{"pid": 1, "sessionId": "s", "status": "busy", "name": "can you finish this", "nameSource": "auto"}"#.utf8)))
+        #expect(auto.name == nil)
         let named = try #require(ClaudeSession(data: Data(#"{"pid": 1, "sessionId": "s", "status": "busy", "name": "Login work", "nameSource": "user"}"#.utf8)))
         #expect(named.name == "Login work")
     }
@@ -156,7 +158,8 @@ struct CodexTitleRefreshTests {
         defer { sqlite3_close(db) }
         #expect(sqlite3_exec(db, "CREATE TABLE threads (id TEXT, title TEXT, name TEXT); INSERT INTO threads VALUES ('t1', 'Conversation title', '');", nil, nil, nil) == SQLITE_OK)
         let reader = CodexReader()
-        #expect(reader.refreshTitle(folder: folder, threadID: "t1") == "Conversation title")
+        // Until it's named, Codex's title is only the first message: not a name.
+        #expect(reader.refreshTitle(folder: folder, threadID: "t1") == nil)
         #expect(sqlite3_exec(db, "UPDATE threads SET name = 'My renamed conversation';", nil, nil, nil) == SQLITE_OK)
         #expect(reader.refreshTitle(folder: folder, threadID: "t1") == "My renamed conversation")
         let log = folder.appending(path: "rollout-test.jsonl")
@@ -167,8 +170,8 @@ struct CodexTitleRefreshTests {
         """.utf8).write(to: log)
         let updates = reader.read(changed: [log.path], folders: [folder])
         #expect(updates.first?.title == "My renamed conversation")
-        // The old schema, without a separate name, still works.
+        // The old schema, without a separate name, has only first messages.
         #expect(sqlite3_exec(db, "ALTER TABLE threads DROP COLUMN name;", nil, nil, nil) == SQLITE_OK)
-        #expect(reader.refreshTitle(folder: folder, threadID: "t1") == "Conversation title")
+        #expect(reader.refreshTitle(folder: folder, threadID: "t1") == nil)
     }
 }

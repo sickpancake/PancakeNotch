@@ -18,8 +18,9 @@ struct ClaudeSession: Equatable, Sendable {
         self.pid = pid_t(pid)
         self.sessionID = sessionID
         cwd = object["cwd"] as? String ?? ""
-        // A "derived" name is only the folder's ("pancakenotch-5a"); the transcript's title is better.
-        name = object["nameSource"] as? String == "derived" ? nil
+        // Only a name the user gave it (/rename). The others are the folder's ("pancakenotch-5a") or made
+        // from what was asked last; the transcript's title is better.
+        name = object["nameSource"] as? String != "user" ? nil
             : (object["name"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "untitled session" ? nil : $0 }
         self.status = status
         waitingFor = (object["waitingFor"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -55,10 +56,10 @@ struct ClaudeSession: Equatable, Sendable {
     }
 }
 
-/// The current step and the title of a Claude Code session, from the end of its transcript: the last
-/// tool call of the newest assistant message, and the newest title line (a name the user gave it, else
-/// Claude's own, both rewritten every so often). Reads at most the last 256 KB, only while the Agents
-/// list is on screen.
+/// The current step, the title and the last message of a Claude Code session, from the end of its
+/// transcript: the last tool call of the newest assistant message, the newest title line (a name the user
+/// gave it, else Claude's own, both rewritten every so often) and the newest prompt. Reads at most the
+/// last 256 KB, when a session appears or starts a turn, and while the Agents list is on screen.
 enum ClaudeTranscript {
     /// `<config>/projects/<folder>/<session id>.jsonl`. The folder is the cwd with `/` and `.` as `-`,
     /// but rather than rely on that, look for the file name in each project folder.
@@ -72,21 +73,35 @@ enum ClaudeTranscript {
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    static func details(at url: URL, wantsStep: Bool) -> (step: String?, title: String?) {
-        guard let tail = JSONLines.tail(of: url, bytes: 256 * 1024) else { return (nil, nil) }
+    static func details(at url: URL, wantsStep: Bool) -> (step: String?, title: String?, lastMessage: String?) {
+        guard let tail = JSONLines.tail(of: url, bytes: 256 * 1024) else { return (nil, nil, nil) }
         var step: String?
         var customTitle: String?
         var aiTitle: String?
-        for line in tail.reversed() where customTitle == nil || (wantsStep && step == nil) {
+        var lastMessage: String?
+        for line in tail.reversed() where customTitle == nil || lastMessage == nil || (wantsStep && step == nil) {
             if line.contains("\"custom-title\"") {
                 customTitle = customTitle ?? title(line, key: "customTitle")
             } else if line.contains("\"ai-title\"") {
                 aiTitle = aiTitle ?? title(line, key: "aiTitle")
+            } else if line.contains("\"last-prompt\"") {
+                lastMessage = lastMessage ?? title(line, key: "lastPrompt").flatMap { AgentNames.oneLine($0) }
+            } else if lastMessage == nil, line.contains("\"type\":\"user\""), !line.contains("\"tool_result\"") {
+                lastMessage = prompt(line)
             } else if wantsStep, step == nil {
                 step = currentStep(line)
             }
         }
-        return (step, customTitle ?? aiTitle)
+        return (step, customTitle ?? aiTitle, lastMessage)
+    }
+
+    /// What the user typed, from a user message line (not a tool's result or a line the tool added).
+    private static func prompt(_ line: String) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              object["isMeta"] as? Bool != true, let message = object["message"] as? [String: Any] else { return nil }
+        let text = message["content"] as? String
+            ?? (message["content"] as? [[String: Any]])?.first { $0["type"] as? String == "text" }?["text"] as? String
+        return AgentNames.oneLine(text)
     }
 
     private static func title(_ line: String, key: String) -> String? {
@@ -154,6 +169,21 @@ enum JSONLines {
         // A tail that starts mid-file starts mid-line.
         if start > 0, !lines.isEmpty { lines.removeFirst() }
         return lines
+    }
+
+    /// Just past the file's last newline (0 without one), looking back from its end 64 KB at a time.
+    static func endOfLastLine(of url: URL) -> UInt64 {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return 0 }
+        defer { try? handle.close() }
+        guard var end = try? handle.seekToEnd() else { return 0 }
+        while end > 0 {
+            let start = end > 64 * 1024 ? end - 64 * 1024 : 0
+            try? handle.seek(toOffset: start)
+            guard let chunk = try? handle.read(upToCount: Int(end - start)), !chunk.isEmpty else { return 0 }
+            if let newline = chunk.lastIndex(of: UInt8(ascii: "\n")) { return start + UInt64(newline - chunk.startIndex + 1) }
+            end = start
+        }
+        return 0
     }
 
     /// The file's first line, read in pieces (Codex's first line can be large).

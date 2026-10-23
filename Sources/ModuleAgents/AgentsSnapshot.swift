@@ -52,7 +52,7 @@ public enum AgentsSnapshot {
         row(.expanded, withMenu) { _ in withMenu.openMenu() }
         row(.compact, usage())
         let low = usage()
-        low.peekNear = low.center.nearLimit
+        low.peekNear = low.center.earReading
         row(.compact, low) { $0.peekForSnapshot(low) }
         row(.expanded, usage(UsageCenter(settings: emptySettings, stats: nil)))
         return rows

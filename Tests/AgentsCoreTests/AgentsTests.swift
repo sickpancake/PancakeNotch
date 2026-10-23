@@ -94,6 +94,15 @@ struct AgentsCenterTests {
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
                                  payload: ["session_id": "real", "model": "gpt-6.1-sol"]))
         #expect(center.threads.map(\.id) == ["codex:real"])
+        // The reviewer's hooks carry its parent's session ID: the parent stays.
+        let review = try temporaryFolder().appending(path: "review.jsonl")
+        try Data(#"{"type":"session_meta","payload":{"id":"guardian","session_id":"real","source":{"subagent":{"other":"guardian"}}}}"#.utf8).write(to: review)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "real", "transcript_path": review.path]))
+        sources.handle(HookEvent(tool: .codex, name: "SessionEnd", parentPID: 0,
+                                 payload: ["session_id": "real", "transcript_path": review.path]))
+        #expect(center.threads.map(\.id) == ["codex:real"])
+        #expect(center.threads.first?.status == .working)
         sources.stop()
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0, payload: ["session_id": "late"]))
         #expect(center.threads.map(\.id) == ["codex:real"])

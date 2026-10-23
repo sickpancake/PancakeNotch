@@ -52,6 +52,7 @@ struct AgentsTextTests {
     @Test func attentionPicksTheMarkAndTheWords() {
         #expect(AgentsAttention.needsYou(count: 2).count == 2)
         #expect(AgentsAttention.finished(count: 1).status == .done)
+        #expect(AgentsAttention.failed(count: 1).status == .failed)
         #expect(AgentsText.spoken(.needsYou(count: 1)) == "An agent needs you")
         #expect(AgentsText.spoken(.working(count: 3)) == "3 agents are working")
     }

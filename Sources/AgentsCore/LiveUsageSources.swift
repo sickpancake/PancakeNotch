@@ -208,7 +208,9 @@ final class LiveUsageSources {
         let paths = accounts.flatMap { account in
             (account.tool == .claude ? ["projects"] : ["sessions", "archived_sessions"]).map { account.folder.appending(path: $0).path }
         }
-        historyWatcher = FolderWatcher(paths: paths, latency: 2, queue: queue) { [weak self] _ in
+        historyWatcher = FolderWatcher(paths: paths, latency: 2, queue: queue) { [weak self] changed in
+            // A missing folder means its parent is watched: ignore everything but the logs.
+            guard changed.contains(where: { $0.hasSuffix(".jsonl") }) else { return }
             Task { @MainActor in self?.scan() }
         }
     }

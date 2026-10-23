@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 import os
 
-/// One event from the hook helper, with the few fields PancakeNotch uses (never prompts or file
-/// contents).
+/// One event from the hook helper, with the few fields PancakeNotch uses (never file contents; of a
+/// prompt, only its first line, to name the thread).
 struct HookEvent: Sendable {
     let tool: AgentTool
     /// The tool's event name ("PermissionRequest", "Stop", "beforeSubmitPrompt"…).
@@ -20,6 +20,8 @@ struct HookEvent: Sendable {
     var cwd: String?
     var transcriptPath: String?
     var title: String?
+    /// The first line of the prompt just sent (UserPromptSubmit, beforeSubmitPrompt).
+    var prompt: String?
     /// "Wants to run: npm test" (permission requests) or "Running npm test" (Cursor's steps).
     var summary: String?
     var notificationType: String?
@@ -40,6 +42,7 @@ struct HookEvent: Sendable {
         cwd = payload["cwd"] as? String ?? (payload["workspace_roots"] as? [String])?.first
         transcriptPath = payload["transcript_path"] as? String
         title = payload["session_title"] as? String
+        prompt = AgentNames.oneLine(payload["prompt"] as? String)
         notificationType = payload["notification_type"] as? String
         message = payload["message"] as? String ?? payload["error"] as? String
         status = payload["status"] as? String
@@ -67,6 +70,8 @@ final class HookServer: @unchecked Sendable {
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "agents")
 
     private var listener: DispatchSourceRead?
+    /// Our socket file's inode: another copy of the app may have replaced it since.
+    private var socketInode: ino_t?
     private var clients: [Int32: Client] = [:]
     private var waiting: [Int: Int32] = [:]
     private var nextRequest = 1
@@ -103,7 +108,9 @@ final class HookServer: @unchecked Sendable {
             for client in clients.values { client.source?.cancel() }
             clients = [:]
             waiting = [:]
-            unlink(path)
+            var info = stat()
+            if let socketInode, stat(path, &info) == 0, info.st_ino == socketInode { unlink(path) }
+            socketInode = nil
         }
     }
 
@@ -147,6 +154,8 @@ final class HookServer: @unchecked Sendable {
             Darwin.close(fd)
             return false
         }
+        var info = stat()
+        socketInode = stat(path, &info) == 0 ? info.st_ino : nil
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptAll(fd) }

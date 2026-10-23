@@ -156,9 +156,18 @@ public struct AccountLimits: Equatable, Sendable {
 
     public static let notYet = AccountLimits(state: .notYet)
 
-    /// The tightest limit (least left), for the near-limit ear.
+    /// The tightest limit (least left).
     public func tightest(now: Date = .now) -> UsageLimit? {
         limits.min { $0.leftPercent(now: now) < $1.leftPercent(now: now) }
+    }
+
+    /// The limit the closed notch follows: the session one, the tightest weekly one, or the tightest.
+    public func followed(_ choice: UsageEarLimit, now: Date = .now) -> UsageLimit? {
+        switch choice {
+        case .closest: tightest(now: now)
+        case .session: limits.first { $0.kind == .session }
+        case .weekly: limits.filter { $0.kind != .session }.min { $0.leftPercent(now: now) < $1.leftPercent(now: now) }
+        }
     }
 }
 
@@ -244,7 +253,7 @@ public struct DailyUsage: Identifiable, Equatable, Sendable {
     }
 }
 
-/// An account that dropped under 10% left on one of its limits.
+/// An account and the limit the closed notch shows for it (under 10% left, unless it always shows).
 public struct NearLimit: Equatable, Sendable {
     public let account: AgentAccount
     public let limit: UsageLimit

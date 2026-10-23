@@ -108,6 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var fullScreen = FullScreenWatch(preferences: preferences, nowPlaying: nowPlaying, notch: notchController)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Writing to a helper that already quit (Codex's limits request) is an error, not a reason to quit.
+        signal(SIGPIPE, SIG_IGN)
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
             writeSnapshot(to: path)
             return

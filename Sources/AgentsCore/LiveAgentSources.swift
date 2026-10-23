@@ -29,8 +29,11 @@ final class LiveAgentSources {
     private var lastHookEvent: [String: Date] = [:]
     /// The last sign of life per Codex and Cursor thread, for spotting ones that quit without a word.
     private var lastActivity: [String: Date] = [:]
-    /// Codex sessions known to be its own helpers (true) or real threads (false), by session ID.
-    private var codexHelpers: [String: Bool] = [:]
+    /// Whether a Codex hook's sender is one of its helpers, and the helper's own thread ID, by the hook's
+    /// transcript path (or session ID without one).
+    private var codexHelpers: [String: (isHelper: Bool, id: String?)] = [:]
+    /// Spawned agents seen in their rollouts, by their own thread ID.
+    private var codexSpawned: Set<String> = []
     /// Helpers may be read before their parent, or spawn helpers of their own.
     private var codexSubagents: [String: (parentID: String, agent: AgentSubagent)] = [:]
     private var detailed = false
@@ -71,6 +74,7 @@ final class LiveAgentSources {
         lastHookEvent = [:]
         lastActivity = [:]
         codexHelpers = [:]
+        codexSpawned = []
         codexSubagents = [:]
     }
 
@@ -83,7 +87,7 @@ final class LiveAgentSources {
     // MARK: Allow / Deny
 
     func answer(threadID: String, allow: Bool) {
-        guard let requestID = pending.removeValue(forKey: threadID), let thread = center.thread(threadID) else { return }
+        guard let thread = center.thread(threadID), let requestID = pending.removeValue(forKey: threadID) else { return }
         server?.answer(requestID, with: Self.decision(allow: allow, tool: thread.tool))
         // Either way the agent carries on: with the command, or with the news that it was denied.
         center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), canAnswer: false))
@@ -125,6 +129,9 @@ final class LiveAgentSources {
     private func requestSettled(_ threadID: String) {
         guard let requestID = pending.removeValue(forKey: threadID) else { return }
         server?.answer(requestID, with: nil)
+        if let thread = center.thread(threadID), thread.canAnswer {
+            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, canAnswer: false, quietly: true))
+        }
     }
 
     // MARK: Hooks
@@ -135,11 +142,10 @@ final class LiveAgentSources {
             if let requestID = event.requestID { server?.answer(requestID, with: nil) }
             return
         }
-        // Codex's own helpers (its automatic reviewer, spawned agents) aren't threads of their own.
-        if event.tool == .codex, isCodexHelper(event, session: session) {
-            let id = "codex:\(session)"
-            center.forget(id)
-            if var entry = codexSubagents[id] {
+        // Codex's own helpers (its automatic reviewer, spawned agents) aren't threads of their own. Their
+        // hooks can carry their parent's session ID: only the helper's own ID is ever touched.
+        if event.tool == .codex, case let helper = codexHelper(event, session: session), helper.isHelper {
+            if let own = helper.id, case let id = "codex:\(own)", var entry = codexSubagents[id] {
                 switch event.name {
                 case "Stop": entry.agent.status = .done
                 case "Interrupt", "SessionEnd": entry.agent.status = .stopped
@@ -148,8 +154,9 @@ final class LiveAgentSources {
                 codexSubagents[id] = entry
                 codexRead([])
             }
+            if let own = helper.id { center.forget("codex:\(own)") }
             if let requestID = event.requestID { server?.answer(requestID, with: nil) }
-            if event.name == "SessionEnd" { codexHelpers[session] = nil }
+            if event.name == "SessionEnd" { codexHelpers[event.transcriptPath ?? session] = nil }
             return
         }
         let id = "\(event.tool.rawValue):\(session)"
@@ -162,6 +169,7 @@ final class LiveAgentSources {
         case (_, "UserPromptSubmit"), (.cursor, "beforeSubmitPrompt"):
             requestSettled(id)
             update.status = .working
+            update.lastMessage = event.prompt
         case (_, "PermissionRequest"):
             update.status = .needsYou(.permission)
             update.request = .some(event.summary)
@@ -215,7 +223,7 @@ final class LiveAgentSources {
             center.ended(id, at: now)
             lastHookEvent[id] = nil
             lastActivity[id] = nil
-            codexHelpers[session] = nil
+            codexHelpers[event.transcriptPath ?? session] = nil
             return
         default:
             return
@@ -223,17 +231,22 @@ final class LiveAgentSources {
         center.apply(update)
     }
 
-    /// From the session's model, or its rollout's first line (read once per session). A session without a
-    /// rollout yet is taken as a real thread until its rollout says otherwise.
-    private func isCodexHelper(_ event: HookEvent, session: String) -> Bool {
-        if event.model?.hasPrefix("codex-auto-review") == true { return true }
-        if let known = codexHelpers[session] { return known }
-        guard let path = event.transcriptPath, let first = JSONLines.firstLine(of: URL(fileURLWithPath: path)) else { return false }
+    /// From the hook's rollout (its first line, read once per rollout), else the session's model or a
+    /// spawned agent's ID. A session without a rollout yet is taken as a real thread until it has one.
+    private func codexHelper(_ event: HookEvent, session: String) -> (isHelper: Bool, id: String?) {
+        let key = event.transcriptPath ?? session
+        if let known = codexHelpers[key] { return known }
         var rollout = CodexRollout()
-        _ = rollout.consume(Data(first.utf8))
-        guard rollout.threadID != nil else { return false }
-        codexHelpers[session] = rollout.isHelper
-        return rollout.isHelper
+        if let path = event.transcriptPath, let first = JSONLines.firstLine(of: URL(fileURLWithPath: path)) {
+            _ = rollout.consume(Data(first.utf8))
+        }
+        let isReviewer = event.model?.hasPrefix("codex-auto-review") == true
+        guard let threadID = rollout.threadID else {
+            return codexSpawned.contains(session) ? (true, session) : (isReviewer, nil)
+        }
+        let result = (isHelper: rollout.isHelper || isReviewer, id: rollout.isHelper || isReviewer ? threadID : nil)
+        codexHelpers[key] = result
+        return result
     }
 
     /// The account folder a hook event's transcript lives in (else the tool's standard folder).
@@ -309,8 +322,10 @@ final class LiveAgentSources {
             }
             if existing == nil, update.status == nil { continue }
             center.apply(update)
-            // A new session gets its title right away; steps and subagents only while the list shows.
-            if existing == nil || (detailed && update.status == .working) { readClaudeDetails(id) }
+            // A new session or a new turn gets its title and last message right away; steps and subagents
+            // only while the list shows.
+            let turnStarted = update.status == .working && existing?.status != .working
+            if existing == nil || turnStarted || (detailed && update.status == .working) { readClaudeDetails(id) }
         }
         // Sessions that left the list quit.
         for (id, entry) in claudeSessions where entry.folder == folder && !seen.contains(id) {
@@ -349,8 +364,8 @@ final class LiveAgentSources {
     /// The current step (while it works) and the working subagents of a live session.
     private func readClaudeDetails(_ id: String) {
         guard let entry = claudeSessions[id], let thread = center.thread(id) else { return }
-        let wantsStep = detailed && thread.status == .working
-        let wantsSubagents = detailed && !thread.status.isFinished
+        let wantsStep = detailed && thread.status == .working && center.settings.showsSteps
+        let wantsSubagents = detailed && !thread.status.isFinished && center.settings.showsSubagents
         queue.async { [weak self] in
             let url = ClaudeTranscript.url(folder: entry.folder, sessionID: entry.session.sessionID, cwd: entry.session.cwd)
             let details = url.map { ClaudeTranscript.details(at: $0, wantsStep: wantsStep) }
@@ -360,8 +375,10 @@ final class LiveAgentSources {
                 let step = self.detailed && thread.status == .working ? details?.step : nil
                 // A name the user gave the session in Claude Code wins over the transcript's title.
                 let title = entry.session.name == nil ? details?.title : nil
-                if step != nil || title != nil {
-                    self.center.apply(.init(id: id, tool: .claude, at: .now, title: title, step: step.map { .some($0) }, quietly: true))
+                let lastMessage = details?.lastMessage
+                if step != nil || title != nil || lastMessage != nil {
+                    self.center.apply(.init(id: id, tool: .claude, at: .now, title: title, lastMessage: lastMessage,
+                                            step: step.map { .some($0) }, quietly: true))
                 }
                 if self.detailed { self.center.setSubagents(subagents, of: id) }
             }
@@ -412,7 +429,7 @@ final class LiveAgentSources {
             lastActivity[id] = item.modified
             var update = AgentsCenter.Update(id: id, tool: .codex, at: item.statusAt ?? item.modified,
                                              accountID: AgentAccount(tool: .codex, folder: item.folder).id,
-                                             title: item.title, cwd: item.cwd, hostBundleID: item.hostBundleID)
+                                             title: item.title, lastMessage: item.lastMessage, cwd: item.cwd, hostBundleID: item.hostBundleID)
             let existing = center.thread(id)
             if pending[id] != nil {
                 // Waiting for Allow / Deny: only a finished turn changes that (answered elsewhere).
@@ -433,6 +450,8 @@ final class LiveAgentSources {
                 guard let status = item.status else { continue }
                 // At launch, a finished thread shows (seen) only if it finished in the last half hour.
                 if item.isCatchUp, status.isFinished, Date().timeIntervalSince(item.statusAt ?? item.modified) > AgentsCenter.keepAfterSeen { continue }
+                // Still "working" in a rollout untouched for an hour: it quit without a word (a crash).
+                if item.isCatchUp, !status.isFinished, Date().timeIntervalSince(item.modified) > Self.quietLimit { continue }
                 update.quietly = item.isCatchUp
             }
             center.apply(update)
@@ -476,7 +495,7 @@ extension LiveAgentSources {
     /// A spawned subagent: under its parent while it works. One that went quiet before launch is gone.
     fileprivate func codexSubagentRead(_ item: CodexReader.ThreadUpdate, id: String, parentID: String) {
         // Its hooks may have come in before its rollout said what it is.
-        codexHelpers[item.threadID] = true
+        codexSpawned.insert(item.threadID)
         if center.thread(id) != nil { center.forget(id) }
         guard let status = item.status,
               !(item.isCatchUp && Date().timeIntervalSince(item.modified) > ClaudeSubagents.quietLimit) else { return }
@@ -492,6 +511,7 @@ final class CodexReader: @unchecked Sendable {
         let folder: URL
         let cwd: String?
         let title: String?
+        let lastMessage: String?
         let status: AgentStatus?
         let statusAt: Date?
         let step: String?
@@ -556,6 +576,7 @@ final class CodexReader: @unchecked Sendable {
         }
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .now
         return ThreadUpdate(threadID: threadID, folder: folder, cwd: rollout.cwd, title: titles[threadID].flatMap { $0.isEmpty ? nil : $0 },
+                            lastMessage: rollout.lastMessage,
                             status: rollout.status, statusAt: rollout.statusAt, step: rollout.step,
                             hostBundleID: rollout.hostBundleID, parentThreadID: rollout.parentThreadID,
                             modified: modified, isCatchUp: catchUp)

@@ -77,10 +77,16 @@ enum AIUsageText {
         return (subject, detail(near.limit, now: now))
     }
 
-    /// Read while the notch is compact: "Work is nearly out of Claude Code: 8% left".
+    /// Read while the notch is compact: "Work is nearly out of Claude Code: 8% left", or when it always
+    /// shows, "Work, Claude Code: 64% left".
     static func spoken(_ near: NearLimit, now: Date) -> String {
-        String(localized: "\(EmailPrivacy.masked(near.account.name)) is nearly out of \(near.account.tool.name): \(left(near.limit, now: now))",
-               comment: "VoiceOver, compact notch: an account is almost at its limit")
+        let name = EmailPrivacy.masked(near.account.name)
+        guard near.limit.leftPercent(now: now) < UsageCenter.nearLimitPercent else {
+            return String(localized: "\(name), \(near.account.tool.name): \(left(near.limit, now: now))",
+                          comment: "VoiceOver, compact notch: how much of an account's limit is left")
+        }
+        return String(localized: "\(name) is nearly out of \(near.account.tool.name): \(left(near.limit, now: now))",
+                      comment: "VoiceOver, compact notch: an account is almost at its limit")
     }
 
     // MARK: Account circles
