@@ -294,11 +294,11 @@ private struct AnswerButtons: View {
             }
             AnswerButton(title: String(localized: "Deny"), label: String(localized: "Deny"),
                          help: String(localized: "Say no to this request")) {
-                module.center.deny(thread.id)
+                module.center.deny(thread)
             }
             AnswerButton(title: String(localized: "Allow"), label: String(localized: "Allow once"),
                          help: String(localized: "Say yes to this request, this once"), prominent: true) {
-                module.center.allow(thread.id)
+                module.center.allow(thread)
             }
         }
     }

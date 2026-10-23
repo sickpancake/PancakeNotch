@@ -24,6 +24,8 @@ struct HookEvent: Sendable {
     var prompt: String?
     /// "Wants to run: npm test" (permission requests) or "Running npm test" (Cursor's steps).
     var summary: String?
+    /// `summary` shows all of what Allow would approve (`AgentSteps.isFullyShown`).
+    var isFullyShown = false
     var notificationType: String?
     /// A notification's text, or an error's.
     var message: String?
@@ -50,6 +52,7 @@ struct HookEvent: Sendable {
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
             summary = AgentSteps.request(tool: toolName, input: input)
+            isFullyShown = AgentSteps.isFullyShown(tool: toolName, input: input, cwd: cwd)
         } else if name == "afterShellExecution" {
             summary = AgentSteps.step(tool: "Shell", input: payload)
         } else if name == "afterFileEdit" {
@@ -138,7 +141,8 @@ final class HookServer: @unchecked Sendable {
             logger.error("Agents socket path too long")
             return false
         }
-        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             buffer.copyBytes(from: bytes)
             buffer[bytes.count] = 0

@@ -62,15 +62,53 @@ enum AgentSteps {
         return name
     }
 
+    /// Whether `request` shows everything an answer would approve, so the notch may offer Allow: a
+    /// one-line command short enough to show whole, or one file inside the project. Anything else (a cut
+    /// or multi-line command, a file elsewhere, several files, a web address, another tool's arguments) is
+    /// answered in the tool's own window, where it's shown in full.
+    static func isFullyShown(tool name: String, input: [String: Any], cwd: String?) -> Bool {
+        switch kind(of: name) {
+        case .run:
+            guard let text = commandText(in: input)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+            return !text.isEmpty && !text.contains(where: \.isNewline) && text.count <= commandLimit
+        case .edit, .read:
+            guard let cwd, !cwd.isEmpty, let path = singleFilePath(in: input) else { return false }
+            let project = URL(fileURLWithPath: cwd, isDirectory: true).resolvingSymlinksInPath()
+            let file = URL(fileURLWithPath: path, relativeTo: project).resolvingSymlinksInPath()
+            return file.path.hasPrefix(project.path + "/")
+        case .search, .web, .agent, .plan, .other:
+            return false
+        }
+    }
+
+    private static let commandLimit = 60
+
+    private static func commandText(in input: [String: Any]) -> String? {
+        let value = input["command"] ?? input["cmd"]
+        return (value as? String) ?? (value as? [String]).map { $0.joined(separator: " ") }
+    }
+
+    /// The one file a call touches, as given; nil for none or several.
+    private static func singleFilePath(in input: [String: Any]) -> String? {
+        for key in ["file_path", "path", "notebook_path", "filename", "target_file"] {
+            if let path = input[key] as? String, !path.isEmpty { return path }
+        }
+        guard let patch = (input["command"] as? String) ?? (input["input"] as? String) ?? (input["patch"] as? String) else { return nil }
+        let paths = patch.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+            ["*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: "].lazy
+                .compactMap { line.hasPrefix($0) ? String(line.dropFirst($0.count)) : nil }.first
+        }
+        return paths.count == 1 ? paths[0] : nil
+    }
+
     /// The start of the command: its first line, cut at 60 characters.
     static func command(in input: [String: Any]) -> String? {
-        let value = input["command"] ?? input["cmd"]
-        let text: String? = (value as? String) ?? (value as? [String]).map { $0.joined(separator: " ") }
+        let text = commandText(in: input)
         guard let line = text?.split(whereSeparator: \.isNewline).first.map(String.init)?
             .trimmingCharacters(in: .whitespaces), !line.isEmpty else { return nil }
         // An `apply_patch` "command" is the patch itself.
         if line.hasPrefix("*** Begin Patch") { return nil }
-        return line.count > 60 ? String(line.prefix(59)) + "…" : line
+        return line.count > commandLimit ? String(line.prefix(commandLimit - 1)) + "…" : line
     }
 
     /// The file's name (not its folder).

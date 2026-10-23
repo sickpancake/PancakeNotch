@@ -40,10 +40,15 @@ public final class AgentsCenter {
 
     public var hasFinished: Bool { shown.contains { $0.status.isFinished } }
 
-    /// The threads of the tools not hidden in Settings.
+    /// The threads of the tools not hidden in Settings, without the helpers that show under another.
     private var shown: [AgentThread] {
         let hidden = settings.hiddenTools
-        return hidden.isEmpty ? Array(storage.values) : storage.values.filter { !hidden.contains($0.tool) }
+        return storage.values.filter { !hidden.contains($0.tool) && !isUnderParent($0) }
+    }
+
+    /// A host app's helper whose main conversation is in the list.
+    private func isUnderParent(_ thread: AgentThread) -> Bool {
+        thread.parentID.map { storage[$0] != nil } ?? false
     }
 
     /// Told about needs-you and finishes worth a peek (smart rules applied).
@@ -157,17 +162,21 @@ public final class AgentsCenter {
 
     // MARK: Answering and opening
 
-    public func allow(_ id: String) { answer(id, allow: true) }
-    public func deny(_ id: String) { answer(id, allow: false) }
+    /// Allow once / Deny the request `shown` was showing. Nothing happens if another request has
+    /// taken its place since.
+    public func allow(_ shown: AgentThread) { answer(shown, allow: true) }
+    public func deny(_ shown: AgentThread) { answer(shown, allow: false) }
 
-    private func answer(_ id: String, allow: Bool) {
-        guard let thread = storage[id], thread.canAnswer else { return }
+    private func answer(_ shown: AgentThread, allow: Bool) {
+        let id = shown.id
+        guard let thread = storage[id], thread.canAnswer, thread.answerID == shown.answerID else { return }
         if let practice {
             practice.answer(id, allow: allow)
             onPracticeEvent?(allow ? .allowed : .denied)
             return
         }
-        live?.answer(threadID: id, allow: allow)
+        guard let requestID = thread.answerID else { return }
+        live?.answer(threadID: id, requestID: requestID, allow: allow)
     }
 
     /// Brings the thread's app forward. A pending permission request goes back to the app, so it can
@@ -213,6 +222,7 @@ public final class AgentsCenter {
         var step: String??
         var request: String??
         var canAnswer: Bool?
+        var answerID: Int?
         var processID: pid_t?
         var hostBundleID: String?
         /// Only adds the thread if it's new (a session seen idle at launch): no alerts.
@@ -243,7 +253,10 @@ public final class AgentsCenter {
         if let message = AgentNames.oneLine(update.lastMessage) { thread.lastMessage = message }
         if let step = update.step { thread.step = step }
         if let request = update.request { thread.request = request }
-        if let canAnswer = update.canAnswer { thread.canAnswer = canAnswer }
+        if let canAnswer = update.canAnswer {
+            thread.canAnswer = canAnswer
+            thread.answerID = canAnswer ? update.answerID : nil
+        }
         if let pid = update.processID, pid > 0 { processIDs[update.id] = pid }
         if let bundleID = update.hostBundleID { hostBundleIDs[update.id] = bundleID }
 
@@ -256,6 +269,7 @@ public final class AgentsCenter {
             if !status.needsYou {
                 if update.request == nil { thread.request = nil }
                 thread.canAnswer = false
+                thread.answerID = nil
             }
             if status.isFinished {
                 thread.subagents = []
@@ -308,17 +322,42 @@ public final class AgentsCenter {
 
     func thread(_ id: String) -> AgentThread? { storage[id] }
 
-    /// The thread as Settings say to show it.
+    /// Every thread, helpers and hidden tools included.
+    var allThreads: [AgentThread] { Array(storage.values) }
+
+    /// The thread as Settings say to show it, with the working helpers a host app started for it among
+    /// its subagents (even once its own turn is over: the helpers carry on).
     private func presented(_ thread: AgentThread) -> AgentThread {
         var shown = thread
         shown.title = thread.name(settings.nameStyle)
         if !settings.showsSteps { shown.step = nil }
-        if !settings.showsSubagents { shown.subagents = [] }
+        if settings.showsSubagents {
+            let helpers = storage.values.filter { $0.parentID == thread.id && !$0.status.isFinished }.map { helper in
+                AgentSubagent(id: helper.id, title: helper.helperTitle ?? helper.name(settings.nameStyle),
+                              status: helper.status, statusSince: helper.statusSince)
+            }
+            if !helpers.isEmpty {
+                shown.subagents = (thread.subagents + helpers).sorted {
+                    $0.statusSince == $1.statusSince ? $0.id < $1.id : $0.statusSince < $1.statusSince
+                }
+            }
+        } else {
+            shown.subagents = []
+        }
         return shown
     }
 
+    /// `childID` is a helper a host app started for `parentID`.
+    func setParent(of childID: String, to parentID: String, title: String?) {
+        guard childID != parentID, var thread = storage[childID], thread.parentID != parentID else { return }
+        thread.parentID = parentID
+        thread.helperTitle = title
+        storage[childID] = thread
+    }
+
     private func alertIfWorthIt(_ thread: AgentThread, previous: AgentThread?) {
-        guard thread.status != previous?.status, !settings.hiddenTools.contains(thread.tool), !isFrontmost(thread.id) else { return }
+        guard thread.status != previous?.status, !settings.hiddenTools.contains(thread.tool), !isUnderParent(thread),
+              !isFrontmost(thread.id) else { return }
         switch thread.status {
         case .needsYou where settings.peeksOnNeedsYou:
             onAlert?(AgentAlert(kind: .needsYou, thread: presented(thread)))
@@ -335,7 +374,9 @@ public final class AgentsCenter {
     private func prune(now: Date) {
         guard let keep = settings.keepFinished.interval else { return }
         for (id, seen) in seenAt where now.timeIntervalSince(seen) > keep {
-            if storage[id]?.status.isFinished ?? true { forget(id) }
+            // A conversation stays while helpers it started still work.
+            let hasWorkingHelpers = storage.values.contains { $0.parentID == id && !$0.status.isFinished }
+            if storage[id]?.status.isFinished ?? true, !hasWorkingHelpers { forget(id) }
         }
     }
 }

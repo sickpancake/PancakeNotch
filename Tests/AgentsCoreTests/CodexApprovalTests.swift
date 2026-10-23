@@ -93,6 +93,8 @@ struct CodexApprovalSocketTests {
                                        payload: ["session_id": event.sessionID ?? "", "turn_id": event.turnID ?? "",
                                                  "transcript_path": event.transcriptPath ?? ""])
             background.requestID = event.requestID
+            background.summary = event.summary
+            background.isFullyShown = event.isFullyShown
             sources.handle(background)
             if let id = event.requestID { server?.answer(id, with: LiveAgentSources.decision(allow: false, tool: event.tool)) }
         }
@@ -116,7 +118,10 @@ struct CodexApprovalSocketTests {
             {"type":"turn_context","payload":{"turn_id":"current","approval_policy":"on-request","approvals_reviewer":"\(reviewer)"}}
 
             """.utf8).write(to: transcript)
-            let payload = try JSONSerialization.data(withJSONObject: ["session_id": "thread", "turn_id": "current", "transcript_path": transcript.path, "permission_mode": "default"])
+            let payload = try JSONSerialization.data(withJSONObject: [
+                "session_id": "thread", "turn_id": "current", "transcript_path": transcript.path, "permission_mode": "default",
+                "tool_name": "exec_command", "tool_input": ["cmd": "npm test"],
+            ] as [String: Any])
             let output = try await Task.detached {
                 let process = Process(), input = Pipe(), output = Pipe()
                 process.executableURL = helper

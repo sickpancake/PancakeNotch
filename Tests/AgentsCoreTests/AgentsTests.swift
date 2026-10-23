@@ -125,7 +125,7 @@ struct AgentsCenterTests {
         var events: [AgentsPracticeEvent] = []
         center.onPracticeEvent = { events.append($0) }
         let asking = try #require(center.threads.first { $0.status.needsYou })
-        center.allow(asking.id)
+        center.allow(asking)
         #expect(events == [.allowed])
         #expect(center.thread(asking.id)?.status == .working)
         center.reset()

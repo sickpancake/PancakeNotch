@@ -51,14 +51,14 @@ enum GitBranch {
     private static func branch(git: URL, isFolder: Bool) -> String? {
         var gitFolder = git
         if !isFolder {
-            guard let link = try? String(contentsOf: git, encoding: .utf8),
+            guard let link = JSONLines.smallText(git),
                   let path = link.split(separator: "\n").first?.trimmingCharacters(in: .whitespaces),
                   path.hasPrefix("gitdir:") else { return nil }
             let target = path.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
             gitFolder = target.hasPrefix("/") ? URL(fileURLWithPath: target)
                 : git.deletingLastPathComponent().appending(path: target)
         }
-        guard let head = try? String(contentsOf: gitFolder.appending(path: "HEAD"), encoding: .utf8) else { return nil }
+        guard let head = JSONLines.smallText(gitFolder.appending(path: "HEAD")) else { return nil }
         let ref = head.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ref.hasPrefix("ref: refs/heads/") else { return nil }
         let name = String(ref.dropFirst("ref: refs/heads/".count))

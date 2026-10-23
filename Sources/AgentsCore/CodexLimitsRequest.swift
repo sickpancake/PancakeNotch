@@ -44,6 +44,8 @@ enum CodexLimitsRequest {
             let chunk = output.fileHandleForReading.availableData
             if chunk.isEmpty { return nil }
             buffer.append(chunk)
+            // The answer is a few KB: a far longer line isn't it.
+            if buffer.count > 4 * 1024 * 1024 { return nil }
             while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
                 let line = buffer[buffer.startIndex..<newline]
                 buffer.removeSubrange(buffer.startIndex...newline)

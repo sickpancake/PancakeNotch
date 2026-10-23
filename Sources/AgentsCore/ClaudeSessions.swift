@@ -157,9 +157,29 @@ enum ClaudeSubagents {
 
 /// Reading JSON Lines files a piece at a time, so big logs never sit in memory.
 enum JSONLines {
+    /// Opens `url` only if it's an ordinary file. Paths come from other apps' files and hook messages:
+    /// a pipe or a device there would otherwise stall the read or never end.
+    static func open(_ url: URL) -> FileHandle? {
+        let fd = Darwin.open(url.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        var info = stat()
+        guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+            close(fd)
+            return nil
+        }
+        return FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+    }
+
+    /// A small ordinary file's text (Git's HEAD and the like), or nil if it's bigger than `limit`.
+    static func smallText(_ url: URL, limit: Int = 4096) -> String? {
+        guard let handle = open(url), let data = try? handle.read(upToCount: limit + 1),
+              data.count <= limit else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// The complete lines in the last `bytes` of a file.
     static func tail(of url: URL, bytes: Int) -> [String]? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        guard let handle = open(url) else { return nil }
         defer { try? handle.close() }
         guard let size = try? handle.seekToEnd() else { return nil }
         let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
@@ -173,7 +193,7 @@ enum JSONLines {
 
     /// Just past the file's last newline (0 without one), looking back from its end 64 KB at a time.
     static func endOfLastLine(of url: URL) -> UInt64 {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return 0 }
+        guard let handle = open(url) else { return 0 }
         defer { try? handle.close() }
         guard var end = try? handle.seekToEnd() else { return 0 }
         while end > 0 {
@@ -188,7 +208,7 @@ enum JSONLines {
 
     /// The file's first line, read in pieces (Codex's first line can be large).
     static func firstLine(of url: URL, limit: Int = 4 * 1024 * 1024) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        guard let handle = open(url) else { return nil }
         defer { try? handle.close() }
         var data = Data()
         while data.count < limit, let chunk = try? handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
@@ -207,7 +227,7 @@ enum JSONLines {
     @discardableResult
     static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
                      shouldContinue: () -> Bool = { true }, line: (Data) -> Void) -> UInt64 {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return offset }
+        guard let handle = open(url) else { return offset }
         defer { try? handle.close() }
         guard let size = try? handle.seekToEnd(), size > offset else { return offset }
         try? handle.seek(toOffset: offset)

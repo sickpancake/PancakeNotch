@@ -36,6 +36,13 @@ final class LiveAgentSources {
     private var codexSpawned: Set<String> = []
     /// Helpers may be read before their parent, or spawn helpers of their own.
     private var codexSubagents: [String: (parentID: String, agent: AgentSubagent)] = [:]
+    /// Host apps' helpers (T3 Code's delegated tasks), matched to the conversation that started them.
+    private let delegated = DelegatedHelpers()
+    /// Threads matched to their main conversation, or known not to be a helper.
+    private var delegationChecked: Set<String> = []
+    /// Look-ups so far per unmatched thread (its first message may not be written yet).
+    private var delegationTries: [String: Int] = [:]
+    private var resolvingDelegations = false
     private var detailed = false
     private var stopped = false
 
@@ -76,6 +83,8 @@ final class LiveAgentSources {
         codexHelpers = [:]
         codexSpawned = []
         codexSubagents = [:]
+        delegationChecked = []
+        delegationTries = [:]
     }
 
     private func stopWatching(_ list: inout [FolderWatcher]) {
@@ -86,8 +95,9 @@ final class LiveAgentSources {
 
     // MARK: Allow / Deny
 
-    func answer(threadID: String, allow: Bool) {
-        guard let thread = center.thread(threadID), let requestID = pending.removeValue(forKey: threadID) else { return }
+    func answer(threadID: String, requestID: Int, allow: Bool) {
+        guard let thread = center.thread(threadID), pending[threadID] == requestID else { return }
+        pending[threadID] = nil
         server?.answer(requestID, with: Self.decision(allow: allow, tool: thread.tool))
         // Either way the agent carries on: with the command, or with the news that it was denied.
         center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), canAnswer: false))
@@ -176,12 +186,12 @@ final class LiveAgentSources {
             if let requestID = event.requestID {
                 requestSettled(id)
                 center.apply(update)
-                // Already looking at its app: ask there right away.
-                if center.isFrontmost(id) {
+                // Already looking at its app, or more to it than the notch can show: ask there right away.
+                if center.isFrontmost(id) || !event.isFullyShown {
                     server?.answer(requestID, with: nil)
                 } else {
                     pending[id] = requestID
-                    center.apply(.init(id: id, tool: event.tool, at: now, canAnswer: true, quietly: true))
+                    center.apply(.init(id: id, tool: event.tool, at: now, canAnswer: true, answerID: requestID, quietly: true))
                 }
                 return
             }
@@ -333,6 +343,62 @@ final class LiveAgentSources {
             requestSettled(id)
             center.ended(id, at: .now)
         }
+        resolveDelegations()
+    }
+
+    // MARK: Host apps' helpers
+
+    /// Matches new Claude Code and Codex threads to the conversation that delegated them through a host
+    /// app (T3 Code), so they show under it. Each thread is looked up a few times at most, as it changes.
+    private func resolveDelegations() {
+        guard !resolvingDelegations, !stopped else { return }
+        let threads = center.allThreads.filter { $0.tool != .cursor }
+        let children = threads.filter { !delegationChecked.contains($0.id) }.compactMap { thread in
+            transcriptLocator(thread.id).map { (id: thread.id, locate: $0) }
+        }
+        guard !children.isEmpty else { return }
+        let parents = threads.compactMap { thread in transcriptLocator(thread.id).map { (id: thread.id, locate: $0) } }
+        let delegated = delegated
+        resolvingDelegations = true
+        queue.async { [weak self] in
+            let parentFiles = parents.compactMap { parent in parent.locate().map { (id: parent.id, url: $0) } }
+            let results = children.map { child -> (id: String, match: DelegatedHelpers.Delegation?, hasPrompt: Bool) in
+                guard let url = child.locate(), let prompt = DelegatedHelpers.firstPrompt(of: url) else { return (child.id, nil, false) }
+                return (child.id, delegated.parent(of: prompt, among: parentFiles.filter { $0.id != child.id }), true)
+            }
+            Task { @MainActor in
+                guard let self else { return }
+                self.resolvingDelegations = false
+                guard !self.stopped else { return }
+                for result in results {
+                    if let match = result.match {
+                        self.center.setParent(of: result.id, to: match.parentID, title: match.title)
+                        self.delegationChecked.insert(result.id)
+                        continue
+                    }
+                    let tries = (self.delegationTries[result.id] ?? 0) + 1
+                    self.delegationTries[result.id] = tries
+                    // A first message not written yet gets more chances than one that matched nothing.
+                    if tries >= (result.hasPrompt ? 3 : 10) {
+                        self.delegationChecked.insert(result.id)
+                        self.delegationTries[result.id] = nil
+                    }
+                }
+            }
+        }
+    }
+
+    /// Finds a thread's transcript (Claude Code) or rollout (Codex), on `queue`.
+    private func transcriptLocator(_ id: String) -> (@Sendable () -> URL?)? {
+        if let entry = claudeSessions[id] {
+            let folder = entry.folder
+            let session = entry.session
+            return { ClaudeTranscript.url(folder: folder, sessionID: session.sessionID, cwd: session.cwd) }
+        }
+        guard id.hasPrefix("codex:") else { return nil }
+        let reader = codex
+        let threadID = String(id.dropFirst("codex:".count))
+        return { reader.rolloutURL(threadID) }
     }
 
     // MARK: Current steps (while the list is on screen)
@@ -468,6 +534,7 @@ final class LiveAgentSources {
         for thread in center.threads where thread.tool == .codex {
             center.setSubagents(grouped[thread.id] ?? [], of: thread.id)
         }
+        resolveDelegations()
     }
 
     /// Reopening the list also picks up names changed while a thread wasn't writing its rollout.
@@ -524,6 +591,8 @@ final class CodexReader: @unchecked Sendable {
     }
 
     private var rollouts: [String: CodexRollout] = [:]
+    /// Each thread's rollout path.
+    private var paths: [String: String] = [:]
     private var titles: [String: String] = [:]
     /// When a title was last looked up (new titles and renames arrive after the first rollout line).
     private var titleCheckedAt: [String: Date] = [:]
@@ -574,12 +643,17 @@ final class CodexReader: @unchecked Sendable {
         } else if titles[threadID] == nil || Date().timeIntervalSince(titleCheckedAt[threadID] ?? .distantPast) > 30 {
             _ = refreshTitle(folder: folder, threadID: threadID)
         }
+        paths[threadID] = url.path
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .now
         return ThreadUpdate(threadID: threadID, folder: folder, cwd: rollout.cwd, title: titles[threadID].flatMap { $0.isEmpty ? nil : $0 },
                             lastMessage: rollout.lastMessage,
                             status: rollout.status, statusAt: rollout.statusAt, step: rollout.step,
                             hostBundleID: rollout.hostBundleID, parentThreadID: rollout.parentThreadID,
                             modified: modified, isCatchUp: catchUp)
+    }
+
+    func rolloutURL(_ threadID: String) -> URL? {
+        paths[threadID].map { URL(fileURLWithPath: $0) }
     }
 
     func refreshTitle(folder: URL, threadID: String) -> String? {

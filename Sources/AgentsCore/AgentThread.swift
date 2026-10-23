@@ -78,6 +78,12 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public var request: String?
     /// The request can be answered with Allow / Deny right in the notch (after Connect).
     public var canAnswer: Bool
+    /// The waiting request Allow / Deny would answer, so a click never answers one that replaced it.
+    var answerID: Int?
+    /// A helper a host app started for another conversation (`DelegatedHelpers`): that one's ID, and
+    /// the title it gave the task. It shows under that conversation, not as a thread of its own.
+    var parentID: String?
+    var helperTitle: String?
     /// The app it runs in is known, so a click can bring it forward.
     public var canOpen: Bool
     /// The user has seen it finished (the list was on screen).
