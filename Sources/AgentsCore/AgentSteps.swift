@@ -73,8 +73,11 @@ enum AgentSteps {
             return !text.isEmpty && !text.contains(where: \.isNewline) && text.count <= commandLimit
         case .edit, .read:
             guard let cwd, !cwd.isEmpty, let path = singleFilePath(in: input) else { return false }
-            let project = URL(fileURLWithPath: cwd, isDirectory: true).resolvingSymlinksInPath()
-            let file = URL(fileURLWithPath: path, relativeTo: project).resolvingSymlinksInPath()
+            // Whole paths on both sides: a relative URL resolves differently across macOS versions.
+            let folder = URL(fileURLWithPath: cwd, isDirectory: true)
+            let project = folder.standardizedFileURL.resolvingSymlinksInPath()
+            let given = path.hasPrefix("/") ? URL(fileURLWithPath: path) : folder.appending(path: path)
+            let file = given.standardizedFileURL.resolvingSymlinksInPath()
             return file.path.hasPrefix(project.path + "/")
         case .search, .web, .agent, .plan, .other:
             return false
