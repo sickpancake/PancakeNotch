@@ -84,6 +84,9 @@ enum AgentsText {
         case .needsYou(let count):
             count == 1 ? String(localized: "An agent needs you", comment: "VoiceOver, compact notch")
                 : String(localized: "\(count) agents need you", comment: "VoiceOver, compact notch")
+        case .failed(let count):
+            count == 1 ? String(localized: "An agent stopped with an error", comment: "VoiceOver, compact notch")
+                : String(localized: "\(count) agents stopped with an error", comment: "VoiceOver, compact notch")
         case .finished(let count):
             count == 1 ? String(localized: "An agent finished", comment: "VoiceOver, compact notch")
                 : String(localized: "\(count) agents finished", comment: "VoiceOver, compact notch")
@@ -97,7 +100,7 @@ enum AgentsText {
 extension AgentsAttention {
     var count: Int {
         switch self {
-        case .needsYou(let count), .finished(let count), .working(let count): count
+        case .needsYou(let count), .failed(let count), .finished(let count), .working(let count): count
         }
     }
 
@@ -105,6 +108,7 @@ extension AgentsAttention {
     var status: AgentStatus {
         switch self {
         case .needsYou: .needsYou(.permission)
+        case .failed: .failed
         case .finished: .done
         case .working: .working
         }

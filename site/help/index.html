@@ -228,19 +228,27 @@
         </ol>
         <h3>What a row shows</h3>
         <p>Each thread has its own row: the tool's icon, the thread's name, its project folder, its status with the time, and what it's doing right now, like "Editing NotchView.swift" or "Running tests". Click a row to bring that tool's app forward: Terminal, Ghostty, VS Code, T3 Code, the Codex app and so on.</p>
+        <h3>Agents settings</h3>
+        <p>In <strong>Modules</strong>, open Agents' <strong>Settings</strong> to choose:</p>
+        <ul>
+          <li><strong>Name agents by</strong>: the conversation's <strong>Title</strong> as Claude Code or Codex keeps it (its project folder until it has one), the <strong>Last message</strong> you sent it, or the git <strong>Branch</strong> it works on.</li>
+          <li><strong>Show agents from</strong>: leave out Claude Code, Codex or Cursor.</li>
+          <li><strong>Keep finished agents</strong>: 5 minutes, 30 minutes, or until you click <strong>Clear finished</strong>.</li>
+          <li>Whether to show what each agent is doing, and its subagents.</li>
+        </ul>
         <h3>What the statuses mean</h3>
         <ul>
           <li><strong>Working</strong> (a dotted circle): the agent is busy.</li>
           <li><strong>Needs you</strong> (a white circle with a !): the agent is waiting for you, either to allow something or to answer a question.</li>
-          <li><strong>Done</strong> (a check in a circle): the thread has finished. It leaves the list 30 minutes after you've seen it.</li>
+          <li><strong>Done</strong> (a check in a circle): the thread has finished. It leaves the list 30 minutes after you've seen it (you can change this in Settings).</li>
           <li><strong>Stopped</strong> (a square in a circle): the thread was stopped, or its tool quit.</li>
           <li><strong>Error</strong> (an x in a circle): something went wrong in that thread.</li>
         </ul>
         <p>Each mark has its own color so you can tell them apart at a glance: blue for Working, orange for Needs you, green for Done, gray for Stopped and red for Error.</p>
         <h3>Subagents</h3>
-        <p>When an agent hands part of its work to helpers (Claude Code's subagents, or agents that Codex spawns), they don't get rows of their own. The thread's row shows a small <strong>2 subagents</strong> button instead: click it to see each helper's task and how long it has been working, and click again to hide them. Helpers leave the list as soon as they finish. Helper threads that another app starts as separate conversations, like T3 Code's, still show as threads of their own, because nothing in the tools' files says which thread they belong to.</p>
+        <p>When an agent hands part of its work to helpers (Claude Code's subagents, or agents that Codex spawns), they don't get rows of their own. The thread's row shows a small <strong>2 subagents</strong> button instead: click it to see each helper's task and how long it has been working, and click again to hide them. Helpers leave the list as soon as they finish. Helpers that T3 Code starts for a conversation (its delegated tasks) show under that conversation too, named after their task, and stay there while they work even after the conversation itself is done.</p>
         <h3>With the notch closed</h3>
-        <p>One side of the closed notch shows a small mark and a number: how many threads are working. It changes to a <strong>!</strong> when one needs you, and to a <strong>✓</strong> when one has finished. A slim strip also pops out under the notch for a moment when a thread needs you, or when one finishes after working for 30 seconds or more. It never pops out for an app you're already looking at.</p>
+        <p>One side of the closed notch shows a small mark and a number: how many threads are working. It changes to a <strong>!</strong> when one needs you, to an <strong>x</strong> when one stopped with an error, and to a <strong>✓</strong> when one has finished. A slim strip also pops out under the notch for a moment when a thread needs you, or when one finishes after working for 30 seconds or more. It never pops out for an app you're already looking at.</p>
       </section>
 
       <section class="topic" id="agents-connect" aria-labelledby="agents-connect-title">
@@ -283,6 +291,7 @@
         <p>The <strong>AI Usage</strong> module shows how much of your Claude and Codex limits are left, and what you've used, for each of your accounts. Turn it on under <strong>Modules</strong>, the same way as Agents. It's offered once PancakeNotch finds Claude Code or Codex on your Mac.</p>
         <h3>Limits</h3>
         <p>Each limit is a bar showing how much is left, with the time until it resets, for example <strong>Session 63% left · resets in 2h 14m</strong> or <strong>Weekly 77% left</strong>. A small pace mark on the bar shows where it would be if you used your limit evenly until it resets. When an account drops under 10% left, its gauge shows beside the closed notch, so you notice before you run out.</p>
+        <p>In AI Usage's <strong>Settings</strong> you can choose when that gauge shows (<strong>Never</strong>, <strong>When close</strong> or <strong>Always</strong>), which account it follows (or whichever is closest to its limit), and which limit: <strong>Session</strong>, <strong>Weekly</strong> or the <strong>Closest</strong> of the two. The pop-up under the notch follows the same account and limit, and can be switched off.</p>
         <p>The bars change color as a limit runs low: green with half or more left, yellow from 20 to 49%, orange from 10 to 19%, and red under 10%.</p>
         <p>Codex limits refresh when you open AI Usage (PancakeNotch asks Codex, which checks with OpenAI). Claude limits update when Claude Code next sends a request; older readings show an "as of" time.</p>
         <h3>Tokens, "API value" and "Cost"</h3>

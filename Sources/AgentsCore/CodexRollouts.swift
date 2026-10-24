@@ -56,6 +56,8 @@ struct CodexRollout: Sendable {
     var status: AgentStatus?
     var statusAt: Date?
     var step: String?
+    /// The last message the user sent (one line).
+    var lastMessage: String?
     var rateLimits: CodexRateLimits?
 
     /// Reads the lines from `offset` on. Returns whether anything about the thread changed.
@@ -72,7 +74,8 @@ struct CodexRollout: Sendable {
     mutating func readTail(_ url: URL) {
         if let first = JSONLines.firstLine(of: url) { _ = consume(Data(first.utf8)) }
         for line in JSONLines.tail(of: url, bytes: 512 * 1024) ?? [] { _ = consume(Data(line.utf8)) }
-        offset = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64) ?? 0
+        // A last line still being written is read whole next time.
+        offset = JSONLines.endOfLastLine(of: url)
     }
 
     mutating func consume(_ line: Data) -> Bool {
@@ -81,9 +84,11 @@ struct CodexRollout: Sendable {
         if head.contains("\"type\":\"session_meta\"") {
             kind = .meta
         } else if head.contains("\"type\":\"event_msg\"") {
-            guard let event = ["task_started", "task_complete", "turn_aborted", "token_count", "\"error\""]
+            guard let event = ["task_started", "task_complete", "turn_aborted", "token_count", "user_message", "\"error\""]
                 .first(where: { head.contains($0) }) else { return false }
             kind = .event(event)
+        } else if head.contains("\"type\":\"response_item\""), head.contains("\"role\":\"user\"") {
+            kind = .userMessage
         } else if head.contains("\"type\":\"response_item\""),
                   head.contains("\"function_call\"") || head.contains("\"custom_tool_call\"") || head.contains("\"local_shell_call\"") {
             kind = .call
@@ -110,6 +115,9 @@ struct CodexRollout: Sendable {
             case "task_complete": set(.done, at: date)
             case "turn_aborted": set(.stopped, at: date)
             case "error": set(.failed, at: date)
+            case "user_message":
+                guard let message = AgentNames.oneLine(payload["message"] as? String) else { return false }
+                lastMessage = message
             case "token_count":
                 if let limits = (payload["rate_limits"] as? [String: Any]).flatMap({ CodexRateLimits($0, at: date) }) {
                     rateLimits = limits
@@ -122,11 +130,17 @@ struct CodexRollout: Sendable {
             guard status == .working else { return false }
             step = Self.step(payload)
             return true
+        case .userMessage:
+            // Instructions and context Codex adds as user messages start with a tag or a heading.
+            let text = (payload["content"] as? [[String: Any]])?.first { $0["type"] as? String == "input_text" }?["text"] as? String
+            guard let message = AgentNames.oneLine(text) else { return false }
+            lastMessage = message
+            return true
         }
     }
 
     private enum LineKind {
-        case meta, event(String), call
+        case meta, event(String), call, userMessage
     }
 
     /// Its nickname and the last part of its path ("/root/kimi_qwen_signals" → "kimi qwen signals").
@@ -186,8 +200,9 @@ struct CodexRollout: Sendable {
     }
 }
 
-/// Codex keeps a thread list in `state_<n>.sqlite`; its `title` is what the Codex app shows. Read once
-/// per new thread, read-only (Codex may be writing; SQLite lets readers in alongside).
+/// Codex keeps a thread list in `state_<n>.sqlite`; its `name` is the thread's title. (Its `title` is
+/// only the first message until then, so it's never used.) Read once per new thread, read-only (Codex may
+/// be writing; SQLite lets readers in alongside).
 enum CodexThreadTitles {
     static func title(folder: URL, threadID: String) -> String? {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
@@ -202,10 +217,8 @@ enum CodexThreadTitles {
         defer { sqlite3_close_v2(db) }
         sqlite3_busy_timeout(db, 200)
         var statement: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT COALESCE(NULLIF(name, ''), title) FROM threads WHERE id = ?", -1, &statement, nil) != SQLITE_OK {
-            // Older schemas have a title but no separate name.
-            guard sqlite3_prepare_v2(db, "SELECT title FROM threads WHERE id = ?", -1, &statement, nil) == SQLITE_OK else { return nil }
-        }
+        // Older schemas have no name: only the first message.
+        guard sqlite3_prepare_v2(db, "SELECT name FROM threads WHERE id = ?", -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, threadID, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         guard sqlite3_step(statement) == SQLITE_ROW, let raw = sqlite3_column_text(statement, 0) else { return nil }

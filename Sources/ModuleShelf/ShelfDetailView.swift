@@ -220,11 +220,13 @@ private struct ShelfLinkEditor: View {
                 Label(String(localized: "Not a valid link. The last valid address is kept."), systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
+                    .transition(.opacity)
             }
 
             Spacer(minLength: 0)
             openIn
         }
+        .animation(.easeOut(duration: 0.15), value: isValid)
     }
 }
 

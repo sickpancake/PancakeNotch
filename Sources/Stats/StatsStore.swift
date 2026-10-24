@@ -30,7 +30,9 @@ public final class StatsStore: Sendable {
         }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let folder = support.appending(path: "PancakeNotch", directoryHint: .isDirectory)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // Only this user may look inside: it holds statistics and AI Usage history.
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
         return folder.appending(path: "statistics.sqlite", directoryHint: .notDirectory)
     }
 

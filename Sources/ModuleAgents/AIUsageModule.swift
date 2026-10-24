@@ -51,10 +51,10 @@ public final class AIUsageModule: NotchModule {
         return AIUsageText.menuStatus(account: account, limits: account.flatMap { center.limits[$0.id] })
     }
 
-    /// An ear while an account is under 10% left.
-    public var isActive: Bool { center.nearLimit != nil }
+    /// An ear while the followed account is under 10% left, or always (Settings).
+    public var isActive: Bool { center.earReading != nil }
 
-    public var accessibilityStatus: String? { center.nearLimit.map { AIUsageText.spoken($0, now: .now) } }
+    public var accessibilityStatus: String? { center.earReading.map { AIUsageText.spoken($0, now: .now) } }
 
     public func attach(to notch: NotchViewModel?) {
         self.notch = notch
@@ -115,7 +115,7 @@ public final class AIUsageModule: NotchModule {
     /// Re-checks the ear whenever the limits change. Observation only: nothing is polled.
     private func observeCenter() {
         withObservationTracking {
-            _ = center.nearLimit
+            _ = center.earReading
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.notch != nil else { return }

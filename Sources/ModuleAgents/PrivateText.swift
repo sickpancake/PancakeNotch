@@ -35,6 +35,7 @@ public struct PrivateText: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { toggle?() }
+            .allowsHitTesting(toggle != nil)
             .help(toggle == nil ? Text(verbatim: "") : revealed ? Text("Click to hide") : Text("Click to show"))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(revealed ? Text(text) : Text("\(EmailPrivacy.masked(text)), partly hidden"))

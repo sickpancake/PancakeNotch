@@ -127,6 +127,7 @@ struct LessonPlayer: View {
     @State private var usage: AIUsageModule?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         lesson: Lesson,
@@ -192,6 +193,7 @@ struct LessonPlayer: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .glassPanel()
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: runner.isFinished)
         .onAppear(perform: start)
         .onDisappear(perform: stop)
         .onChange(of: runner.stepIndex) { stepChanged() }
@@ -502,6 +504,8 @@ private struct StepRow<Extra: View>: View {
                     extra
                 }
             }
+            // The first line sits level with the middle of the 26 pt badge.
+            .padding(.top, 4)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)

@@ -17,7 +17,7 @@ struct AgentsView: View {
                 .padding(.horizontal, AgentsLayout.sidePadding)
             if threads.isEmpty {
                 PanelNote(symbol: "sparkles", title: "No agents running",
-                          detail: "Start Claude Code, Codex or Cursor and they'll show up here.")
+                          detail: "Start Claude Code or Codex and they'll show up here. Cursor too, after Connect.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.bottom, AgentsLayout.bottomPadding)
             } else {
@@ -152,6 +152,8 @@ private struct AgentRow: View {
                     Image(systemName: thread.tool.symbol)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
+                        // One column for every tool's mark, so the titles line up.
+                        .frame(width: 18, alignment: .leading)
                     Text(thread.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
@@ -294,11 +296,11 @@ private struct AnswerButtons: View {
             }
             AnswerButton(title: String(localized: "Deny"), label: String(localized: "Deny"),
                          help: String(localized: "Say no to this request")) {
-                module.center.deny(thread.id)
+                module.center.deny(thread)
             }
             AnswerButton(title: String(localized: "Allow"), label: String(localized: "Allow once"),
                          help: String(localized: "Say yes to this request, this once"), prominent: true) {
-                module.center.allow(thread.id)
+                module.center.allow(thread)
             }
         }
     }

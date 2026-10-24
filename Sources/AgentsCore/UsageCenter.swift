@@ -42,8 +42,9 @@ public final class UsageCenter {
         }
     }
 
+    /// The account shown, or nil for all of them. With only one account, "all" is that one.
     public var selectedAccount: AgentAccount? {
-        guard case .account(let id) = selection else { return nil }
+        guard case .account(let id) = selection else { return accounts.count == 1 ? accounts.first : nil }
         return accounts.first { $0.id == id }
     }
 
@@ -69,24 +70,33 @@ public final class UsageCenter {
         return AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/")).moneyLabel
     }
 
-    /// The account closest to running out, while one is under 10% left (the near-limit ear).
-    public var nearLimit: NearLimit? {
+    /// What the closed notch's ear shows, as picked in Settings: the followed limit of the followed
+    /// account (of all of them, the one with the least left), always or only while under 10% left.
+    public var earReading: NearLimit? {
         _ = limitsRevision
-        guard settings.warnsNearLimit else { return nil }
+        guard settings.earMode != .never else { return nil }
         let now = Date()
-        return accounts.compactMap { account -> NearLimit? in
-            guard let limit = limits[account.id]?.tightest(now: now), limit.leftPercent(now: now) < Self.nearLimitPercent else { return nil }
+        return followedAccounts.compactMap { account -> NearLimit? in
+            guard let limit = limits[account.id]?.followed(settings.earLimit, now: now),
+                  settings.earMode == .always || limit.leftPercent(now: now) < Self.nearLimitPercent else { return nil }
             return NearLimit(account: account, limit: limit)
         }
         .min { $0.limit.leftPercent(now: now) < $1.limit.leftPercent(now: now) }
     }
 
-    /// Told once when an account drops under 10% left on a limit (peek); again only after it resets.
+    /// The account picked in Settings for the closed notch, or every account (also when it's gone).
+    private var followedAccounts: [AgentAccount] {
+        if case .account(let id) = settings.earAccount, let account = accounts.first(where: { $0.id == id }) { return [account] }
+        return accounts
+    }
+
+    /// Told once when a followed account drops under 10% left on the followed limit (peek); again only
+    /// after it resets.
     @ObservationIgnored public var onNearLimit: (@MainActor (NearLimit) -> Void)?
     /// A user action in the practice notch, for the lessons.
     @ObservationIgnored public var onPracticeEvent: (@MainActor (UsagePracticeEvent) -> Void)?
 
-    static let nearLimitPercent: Double = 10
+    public nonisolated static let nearLimitPercent: Double = 10
 
     @ObservationIgnored private var live: LiveUsageSources?
     @ObservationIgnored private var warned: Set<String> = []
@@ -239,8 +249,8 @@ public final class UsageCenter {
     }
 
     private func checkNearLimit(_ accountID: String) {
-        guard let account = accounts.first(where: { $0.id == accountID }),
-              let limit = limits[accountID]?.tightest() else { return }
+        guard let account = followedAccounts.first(where: { $0.id == accountID }),
+              let limit = limits[accountID]?.followed(settings.earLimit) else { return }
         if limit.leftPercent() >= Self.nearLimitPercent {
             warned.remove(accountID)
         } else if settings.warnsNearLimit, warned.insert(accountID).inserted {

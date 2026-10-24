@@ -192,6 +192,7 @@ private struct SidebarRow: View {
     var isSelected = false
     let action: () -> Void
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let iconWidth: CGFloat = 18
     static let iconSpacing: CGFloat = 11
@@ -224,6 +225,7 @@ private struct SidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: [isSelected, isHovered])
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

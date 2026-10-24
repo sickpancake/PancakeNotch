@@ -128,7 +128,7 @@ public final class AgentConnector {
                 try HookFile.update(target.url, kind: target.kind, connect: connect)
             } catch {
                 allDone = false
-                logger.error("Hooks \(connect ? "connect" : "disconnect", privacy: .public) failed for \(target.kind.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error("Hooks \(connect ? "connect" : "disconnect", privacy: .public) failed for \(target.kind.rawValue, privacy: .public): \(error.localizedDescription, privacy: .private)")
                 problem = (error as? HookFile.Problem)?.message ?? String(localized: "PancakeNotch couldn't change \(target.url.lastPathComponent). Check that it isn't locked, then try again.")
             }
         }
@@ -167,8 +167,10 @@ enum HookFile {
         try? String(contentsOf: url, encoding: .utf8)
     }
 
-    static func update(_ url: URL, kind: Kind, connect: Bool) throws {
+    static func update(_ link: URL, kind: Kind, connect: Bool) throws {
         let fm = FileManager.default
+        // A settings file kept as a link (in a dotfiles folder) is changed where it really is.
+        let url = link.resolvingSymlinksInPath()
         var root: [String: Any] = [:]
         if let data = try? Data(contentsOf: url), !data.isEmpty {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -177,7 +179,10 @@ enum HookFile {
             root = object
             // One copy of the file as it was before PancakeNotch first touched it.
             let backup = url.appendingPathExtension("before-pancakenotch")
-            if connect, !fm.fileExists(atPath: backup.path) { try? data.write(to: backup) }
+            // Only the user may read it: settings can hold keys.
+            if connect, !fm.fileExists(atPath: backup.path) {
+                _ = fm.createFile(atPath: backup.path, contents: data, attributes: [.posixPermissions: 0o600])
+            }
         } else if !connect {
             return
         }
@@ -207,7 +212,9 @@ enum HookFile {
     }
 
     private static func entry(kind: Kind, event: String, waits: Bool) -> [String: Any] {
-        let command = "'\(HookHelper.installedURL.path)' \(kind.rawValue) \(event)"
+        // Single-quoted for the shell; a quote in the path is closed, escaped and reopened.
+        let path = HookHelper.installedURL.path.replacingOccurrences(of: "'", with: #"'\''"#)
+        let command = "'\(path)' \(kind.rawValue) \(event)"
         switch kind {
         case .cursor:
             return ["command": command]

@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 import os
 
-/// One event from the hook helper, with the few fields PancakeNotch uses (never prompts or file
-/// contents).
+/// One event from the hook helper, with the few fields PancakeNotch uses (never file contents; of a
+/// prompt, only its first line, to name the thread).
 struct HookEvent: Sendable {
     let tool: AgentTool
     /// The tool's event name ("PermissionRequest", "Stop", "beforeSubmitPrompt"…).
@@ -20,8 +20,14 @@ struct HookEvent: Sendable {
     var cwd: String?
     var transcriptPath: String?
     var title: String?
+    /// The first line of the prompt just sent (UserPromptSubmit, beforeSubmitPrompt).
+    var prompt: String?
+    /// The whole prompt (up to 64 KB), to tell a host app's helper by its task. Never shown or kept.
+    var fullPrompt: String?
     /// "Wants to run: npm test" (permission requests) or "Running npm test" (Cursor's steps).
     var summary: String?
+    /// `summary` shows all of what Allow would approve (`AgentSteps.isFullyShown`).
+    var isFullyShown = false
     var notificationType: String?
     /// A notification's text, or an error's.
     var message: String?
@@ -40,6 +46,8 @@ struct HookEvent: Sendable {
         cwd = payload["cwd"] as? String ?? (payload["workspace_roots"] as? [String])?.first
         transcriptPath = payload["transcript_path"] as? String
         title = payload["session_title"] as? String
+        prompt = AgentNames.oneLine(payload["prompt"] as? String)
+        fullPrompt = (payload["prompt"] as? String).map { String($0.prefix(64 * 1024)) }
         notificationType = payload["notification_type"] as? String
         message = payload["message"] as? String ?? payload["error"] as? String
         status = payload["status"] as? String
@@ -47,6 +55,7 @@ struct HookEvent: Sendable {
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
             summary = AgentSteps.request(tool: toolName, input: input)
+            isFullyShown = AgentSteps.isFullyShown(tool: toolName, input: input, cwd: cwd)
         } else if name == "afterShellExecution" {
             summary = AgentSteps.step(tool: "Shell", input: payload)
         } else if name == "afterFileEdit" {
@@ -67,6 +76,8 @@ final class HookServer: @unchecked Sendable {
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "agents")
 
     private var listener: DispatchSourceRead?
+    /// Our socket file's inode: another copy of the app may have replaced it since.
+    private var socketInode: ino_t?
     private var clients: [Int32: Client] = [:]
     private var waiting: [Int: Int32] = [:]
     private var nextRequest = 1
@@ -103,7 +114,9 @@ final class HookServer: @unchecked Sendable {
             for client in clients.values { client.source?.cancel() }
             clients = [:]
             waiting = [:]
-            unlink(path)
+            var info = stat()
+            if let socketInode, stat(path, &info) == 0, info.st_ino == socketInode { unlink(path) }
+            socketInode = nil
         }
     }
 
@@ -131,7 +144,8 @@ final class HookServer: @unchecked Sendable {
             logger.error("Agents socket path too long")
             return false
         }
-        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             buffer.copyBytes(from: bytes)
             buffer[bytes.count] = 0
@@ -147,6 +161,8 @@ final class HookServer: @unchecked Sendable {
             Darwin.close(fd)
             return false
         }
+        var info = stat()
+        socketInode = stat(path, &info) == 0 ? info.st_ino : nil
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptAll(fd) }

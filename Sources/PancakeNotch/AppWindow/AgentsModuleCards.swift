@@ -180,6 +180,50 @@ struct AgentsSettingsRows: View {
                     .settingsRowPadding()
             }
             SettingsRow(
+                title: String(localized: "Name agents by"),
+                subtitle: nameSubtitle
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Name agents by"),
+                    options: AgentNameStyle.allCases.map { ($0, $0.label) },
+                    selection: $settings.nameStyle
+                )
+            }
+            SettingsRow(
+                title: String(localized: "Show agents from"),
+                subtitle: String(localized: "Agents from the others are left out of the list, the closed notch and pop-ups.")
+            ) {
+                MonochromeChips(
+                    title: String(localized: "Show agents from"),
+                    options: AgentTool.allCases.map { ($0, $0.shortName) },
+                    selection: shownTools
+                )
+            }
+            SettingsRow(
+                title: String(localized: "Keep finished agents"),
+                subtitle: String(localized: "How long a finished agent stays in the list after you've seen it.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Keep finished agents"),
+                    options: KeepFinished.allCases.map { ($0, $0.label) },
+                    selection: $settings.keepFinished
+                )
+            }
+            SettingsRow(
+                title: String(localized: "Show what each agent is doing"),
+                subtitle: String(localized: "A line like \"Editing NotchView.swift\" under a working agent.")
+            ) {
+                Toggle(String(localized: "Show what each agent is doing"), isOn: $settings.showsSteps)
+                    .labelsHidden()
+            }
+            SettingsRow(
+                title: String(localized: "Show subagents"),
+                subtitle: String(localized: "The helpers an agent starts, behind a small button under it.")
+            ) {
+                Toggle(String(localized: "Show subagents"), isOn: $settings.showsSubagents)
+                    .labelsHidden()
+            }
+            SettingsRow(
                 title: String(localized: "Pop up when an agent needs you"),
                 subtitle: String(localized: "A short note slides out under the notch when a request is waiting.")
             ) {
@@ -195,6 +239,24 @@ struct AgentsSettingsRows: View {
             }
         }
         .onAppear { connector.refresh() }
+    }
+
+    /// The tools shown, as the opposite of the hidden ones. At least one always stays on.
+    private var shownTools: Binding<Set<AgentTool>> {
+        Binding {
+            Set(AgentTool.allCases).subtracting(settings.hiddenTools)
+        } set: { shown in
+            guard !shown.isEmpty else { return }
+            settings.hiddenTools = Set(AgentTool.allCases).subtracting(shown)
+        }
+    }
+
+    private var nameSubtitle: String {
+        switch settings.nameStyle {
+        case .title: String(localized: "The conversation's title from Claude Code or Codex. Its folder until it has one.")
+        case .lastMessage: String(localized: "The last message you sent it. Its title until you send one.")
+        case .branch: String(localized: "The git branch it works on. Its title outside a git project.")
+        }
     }
 }
 
@@ -253,7 +315,8 @@ private struct ConnectedBadge: View {
 
 // MARK: AI Usage settings
 
-/// AI Usage's settings: the accounts it found, adding a folder, and the near-limit warning.
+/// AI Usage's settings: the accounts it found, adding a folder, what the closed notch shows, and the
+/// near-limit warning.
 struct AIUsageSettingsRows: View {
     @Bindable var settings: AgentsSettings
     let usage: UsageCenter
@@ -280,10 +343,48 @@ struct AIUsageSettingsRows: View {
                 Button(String(localized: "Add Account Folder…"), action: addFolder)
             }
             SettingsRow(
-                title: String(localized: "Warn when an account is close to its limit"),
-                subtitle: String(localized: "A small gauge, and one pop-up under 10% left")
+                title: String(localized: "Beside the closed notch"),
+                subtitle: earModeSubtitle
             ) {
-                Toggle(String(localized: "Warn when an account is close to its limit"), isOn: $settings.warnsNearLimit)
+                MonochromeSegmented(
+                    title: String(localized: "Beside the closed notch"),
+                    options: UsageEarMode.allCases.map { ($0, $0.label) },
+                    selection: $settings.earMode
+                )
+            }
+            SettingsRow(
+                title: String(localized: "Account"),
+                subtitle: String(localized: "Which account the closed notch and the pop-up follow.")
+            ) {
+                Menu {
+                    Button(String(localized: "Closest to its limit")) { settings.earAccount = .all }
+                    ForEach(usage.accounts) { account in
+                        Button(accountLabel(account)) { settings.earAccount = .account(account.id) }
+                    }
+                } label: {
+                    Text(earAccountLabel)
+                }
+                .menuStyle(.button)
+                .buttonStyle(PillButtonStyle())
+                .accessibilityLabel(Text("Account: \(earAccountLabel)"))
+            }
+            .disabled(settings.earMode == .never && !settings.warnsNearLimit)
+            SettingsRow(
+                title: String(localized: "Limit"),
+                subtitle: String(localized: "Session is the 5-hour limit. Closest is whichever has less left.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Limit"),
+                    options: UsageEarLimit.allCases.map { ($0, $0.label) },
+                    selection: $settings.earLimit
+                )
+            }
+            .disabled(settings.earMode == .never && !settings.warnsNearLimit)
+            SettingsRow(
+                title: String(localized: "Pop up when an account is close to its limit"),
+                subtitle: String(localized: "Once, under 10% left, for the account and limit above.")
+            ) {
+                Toggle(String(localized: "Pop up when an account is close to its limit"), isOn: $settings.warnsNearLimit)
                     .labelsHidden()
             }
             Label(String(localized: "Everything stays on this Mac. PancakeNotch saves token counts and model names, never what you or the agent wrote."), systemImage: "lock")
@@ -293,6 +394,26 @@ struct AIUsageSettingsRows: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .settingsRowPadding()
         }
+    }
+
+    private var earModeSubtitle: String {
+        switch settings.earMode {
+        case .never: String(localized: "AI Usage shows only when you open the notch.")
+        case .nearLimit: String(localized: "A small gauge while the account below has under 10% left.")
+        case .always: String(localized: "A small gauge with what's left of the account below, all the time.")
+        }
+    }
+
+    /// "Claude · Work", with emails half hidden.
+    private func accountLabel(_ account: AgentAccount) -> String {
+        "\(account.tool.shortName) · \(EmailPrivacy.masked(account.name))"
+    }
+
+    private var earAccountLabel: String {
+        if case .account(let id) = settings.earAccount, let account = usage.accounts.first(where: { $0.id == id }) {
+            return accountLabel(account)
+        }
+        return String(localized: "Closest to its limit")
     }
 
     private func rename(_ account: AgentAccount, to name: String) {

@@ -94,9 +94,37 @@ struct AgentsCenterTests {
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
                                  payload: ["session_id": "real", "model": "gpt-6.1-sol"]))
         #expect(center.threads.map(\.id) == ["codex:real"])
+        // The reviewer's hooks carry its parent's session ID: the parent stays.
+        let review = try temporaryFolder().appending(path: "review.jsonl")
+        try Data(#"{"type":"session_meta","payload":{"id":"guardian","session_id":"real","source":{"subagent":{"other":"guardian"}}}}"#.utf8).write(to: review)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "real", "transcript_path": review.path]))
+        sources.handle(HookEvent(tool: .codex, name: "SessionEnd", parentPID: 0,
+                                 payload: ["session_id": "real", "transcript_path": review.path]))
+        #expect(center.threads.map(\.id) == ["codex:real"])
+        #expect(center.threads.first?.status == .working)
         sources.stop()
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0, payload: ["session_id": "late"]))
         #expect(center.threads.map(\.id) == ["codex:real"])
+    }
+
+    @Test func aHostAppsHelperIsMatchedFromItsFirstPromptHook() async throws {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let task = "Review the notch views for alignment. Read only."
+        let main = try temporaryFolder().appending(path: "main.jsonl")
+        try Data((#"{"type":"user","message":{"role":"user","content":"Polish the app"}}"# + "\n"
+            + #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__t3-code__delegate_task","input":{"title":"Notch review","task":"\#(task)"}}]}}"# + "\n").utf8).write(to: main)
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "main", "transcript_path": main.path, "prompt": "Polish the app"]))
+        // The helper's own transcript isn't written yet: its hook carries the task.
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "helper", "transcript_path": "/nonexistent/helper.jsonl",
+                                           "prompt": "Act as the review sub-agent for this task.\n\n\(task)"]))
+        for _ in 0..<200 where center.threads.count != 1 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(center.threads.map(\.id) == ["claude:main"])
+        #expect(center.threads.first?.subagents.map(\.title) == ["Notch review"])
     }
 
     @Test func twoVisibleListsKeepFinishedThreadsSeenUntilBothClose() {
@@ -116,7 +144,7 @@ struct AgentsCenterTests {
         var events: [AgentsPracticeEvent] = []
         center.onPracticeEvent = { events.append($0) }
         let asking = try #require(center.threads.first { $0.status.needsYou })
-        center.allow(asking.id)
+        center.allow(asking)
         #expect(events == [.allowed])
         #expect(center.thread(asking.id)?.status == .working)
         center.reset()

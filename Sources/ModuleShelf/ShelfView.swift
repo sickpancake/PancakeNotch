@@ -140,6 +140,7 @@ struct ShelfPillButton: View {
     var prominent = false
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -149,10 +150,12 @@ struct ShelfPillButton: View {
                 .foregroundStyle(prominent ? .black : .white)
                 .padding(.horizontal, 10)
                 .frame(height: 22)
-                .background(prominent ? .white : .white.opacity(0.14), in: Capsule())
+                .background(.white.opacity(prominent ? (isHovered && isEnabled ? 0.88 : 1) : (isHovered && isEnabled ? 0.2 : 0.14)), in: Capsule())
                 .opacity(isEnabled ? 1 : 0.4)
+                .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -209,6 +212,7 @@ struct ShelfTile: View {
         VStack(spacing: 5) {
             preview
                 .frame(width: 56, height: 56)
+                .animation(.easeOut(duration: 0.2), value: thumbnail != nil)
                 .overlay(alignment: .topTrailing) {
                     if isChoosing {
                         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -226,8 +230,10 @@ struct ShelfTile: View {
                             .padding(.horizontal, 7)
                             .frame(height: 18)
                             .background(.white, in: Capsule())
+                            .transition(.opacity)
                     }
                 }
+                .animation(.easeOut(duration: 0.15), value: isCopied)
             Text(item.displayName)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.white.opacity(isSelected ? 1 : 0.8))
@@ -387,6 +393,7 @@ struct ShelfDropZones: View {
                 }
                 .foregroundStyle(.white.opacity(isTargeted ? 1 : 0.6))
             }
+            .animation(.easeOut(duration: 0.15), value: isTargeted)
             .accessibilityElement(children: .combine)
     }
 }

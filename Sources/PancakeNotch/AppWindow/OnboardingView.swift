@@ -219,6 +219,7 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity)
             .glassPanel()
             .padding(.top, 28)
+            .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.25), value: realNotchOpened)
             .accessibilityElement(children: .combine)
         }
         .onAppear { if opensAtStart == nil { opensAtStart = stats.opensTotal } }
@@ -258,6 +259,7 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity)
             .glassPanel()
             .padding(.top, 28)
+            .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.25), value: songFound)
             .accessibilityElement(children: .contain)
         }
         .onChange(of: songFound) { _, found in

@@ -213,7 +213,7 @@ extension AppWindowController {
         agentsSettings.usageEnabled = true
         let modulesWithSettings = ModulesView(context: context, openLesson: { _ in }, openSettings: ["agents", "aiUsage"])
             .background(AppPalette.background)
-        try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 3500))
+        try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 4000))
         try render("learn-agents", section: .learn, lesson: .agents)
         try render("learn-aiusage", section: .learn, lesson: .aiUsage)
         try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
@@ -226,7 +226,7 @@ extension AppWindowController {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(AppPalette.background)
-        try render("agents-settings-codex", rootView: agentRows.appWindowStyle(), size: CGSize(width: 820, height: 640))
+        try render("agents-settings-codex", rootView: agentRows.appWindowStyle(), size: CGSize(width: 820, height: 1000))
         connector.disconnect(.codex)
         agentsSettings.agentsEnabled = false
         agentsSettings.usageEnabled = false
