@@ -68,6 +68,9 @@ struct AgentNamesTests {
 
         try "0123456789abcdef0123456789abcdef01234567\n".write(to: repo.appending(path: ".git/HEAD"), atomically: true, encoding: .utf8)
         #expect(GitBranch.name(cwd: repo.path) == nil)
+        // No repository up to the top of the disk: the climb ends there (it didn't on macOS 15).
+        #expect(GitBranch.name(cwd: "/") == nil)
+        #expect(GitBranch.name(cwd: "/no-such-folder/deeper") == nil)
     }
 
     @Test func claudeTranscriptGivesTheLastPrompt() throws {

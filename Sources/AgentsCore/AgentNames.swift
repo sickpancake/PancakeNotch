@@ -34,18 +34,20 @@ enum AgentNames {
 /// own HEAD). Nil outside a repository or on a detached HEAD.
 enum GitBranch {
     static func name(cwd: String) -> String? {
-        guard !cwd.isEmpty else { return nil }
-        var folder = URL(fileURLWithPath: cwd, isDirectory: true).standardizedFileURL
-        while true {
-            let git = folder.appending(path: ".git")
+        guard cwd.hasPrefix("/") else { return nil }
+        // Plain paths: on macOS 15 the parent of the URL "/" is "/..", which never ends the climb.
+        var folder = (cwd as NSString).standardizingPath
+        // A folder can't be nested deeper than this; the cap is a safety net.
+        for _ in 0..<256 {
+            let git = (folder as NSString).appendingPathComponent(".git")
             var isFolder: ObjCBool = false
-            if FileManager.default.fileExists(atPath: git.path, isDirectory: &isFolder) {
-                return branch(git: git, isFolder: isFolder.boolValue)
+            if FileManager.default.fileExists(atPath: git, isDirectory: &isFolder) {
+                return branch(git: URL(fileURLWithPath: git), isFolder: isFolder.boolValue)
             }
-            let parent = folder.deletingLastPathComponent()
-            if parent.path == folder.path { return nil }
-            folder = parent
+            if folder == "/" { return nil }
+            folder = (folder as NSString).deletingLastPathComponent
         }
+        return nil
     }
 
     private static func branch(git: URL, isFolder: Bool) -> String? {
