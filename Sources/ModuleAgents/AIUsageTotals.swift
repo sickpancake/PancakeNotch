@@ -4,6 +4,7 @@ import SwiftUI
 /// The right column: the range switch, then the tokens, what they're worth and the top models.
 struct AIUsageTotals: View {
     let center: UsageCenter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -12,6 +13,7 @@ struct AIUsageTotals: View {
             if let progress = center.firstReadProgress {
                 Text("Reading your history… \(Int(progress * 100))%")
                     .font(.system(size: 12))
+                    .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.top, 6)
             } else {
@@ -25,6 +27,8 @@ struct AIUsageTotals: View {
         Text("\(AIUsageText.tokens(totals.tokens)) tokens")
             .font(.system(size: 22, weight: .semibold))
             .lineLimit(1)
+            .contentTransition(.numericText())
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: totals.tokens)
         Text(AIUsageText.money(totals.cost, label: center.moneyLabel, paysPerToken: center.paysPerToken))
             .font(.system(size: 12))
             .foregroundStyle(.white.opacity(0.7))

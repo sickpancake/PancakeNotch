@@ -152,6 +152,8 @@ private struct AgentRow: View {
                     Image(systemName: thread.tool.symbol)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
+                        // One column for every tool's mark, so the titles line up.
+                        .frame(width: 18, alignment: .leading)
                     Text(thread.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)

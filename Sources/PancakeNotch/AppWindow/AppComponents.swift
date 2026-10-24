@@ -372,6 +372,7 @@ private struct PillButton: View {
     let isProminent: Bool
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         configuration.label
@@ -387,6 +388,7 @@ private struct PillButton: View {
             }
             .contentShape(.capsule)
             .opacity(isEnabled ? 1 : 0.4)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isHovered)
             .onHover { isHovered = $0 }
     }
 
@@ -469,6 +471,7 @@ struct MonochromeSegmented<Value: Hashable>: View {
     let options: [(value: Value, label: String)]
     @Binding var selection: Value
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 2) {
@@ -490,6 +493,7 @@ struct MonochromeSegmented<Value: Hashable>: View {
         .background(AppPalette.hover, in: Capsule())
         .overlay(PillOutline(color: AppPalette.hairline))
         .opacity(isEnabled ? 1 : 0.4)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: selection)
         .accessibilityRepresentation {
             Picker(title, selection: $selection) {
                 ForEach(options, id: \.value) { Text($0.label).tag($0.value) }

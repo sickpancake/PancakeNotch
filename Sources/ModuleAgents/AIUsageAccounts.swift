@@ -111,7 +111,7 @@ private struct AccountMenu: View {
                 Text(tool.name)
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.45))
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 5)
                     .padding(.top, 4)
                     .padding(.bottom, 1)
                     .accessibilityAddTraits(.isHeader)

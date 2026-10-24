@@ -341,6 +341,7 @@ private struct StatTile: View {
     let symbol: String
     let value: String
     let caption: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -364,6 +365,7 @@ private struct StatTile: View {
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .glassPanel()
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: value)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(label): \(value) \(caption)"))
     }

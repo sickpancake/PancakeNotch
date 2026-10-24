@@ -8,6 +8,7 @@ struct NotchModuleBar: View {
     let model: NotchViewModel
     @Namespace private var highlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isMenuHovered = false
 
     /// From the notch body's left edge to the first button.
     static let leadingInset: CGFloat = 16
@@ -114,11 +115,12 @@ struct NotchModuleBar: View {
             }
             .padding(.horizontal, 8)
             .frame(height: Self.buttonSize.height)
-            .background(.white.opacity(model.showsMenu ? 0.16 : 0.08), in: Capsule())
+            .background(.white.opacity(model.showsMenu ? 0.16 : isMenuHovered ? 0.13 : 0.08), in: Capsule())
             .foregroundStyle(.white)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .onHover { isMenuHovered = $0 }
         .accessibilityLabel(Text(model.showsMenu ? String(localized: "Close the Module Menu") : String(localized: "\(Self.menuTitle(for: model)), Module Menu")))
         .accessibilityHint(Text("Shows every module, your favorites and a way to the settings."))
     }
@@ -358,7 +360,9 @@ private struct ModuleRow: View {
                 ? String(localized: "Remove \(module.title) from favorites")
                 : String(localized: "Add \(module.title) to favorites")))
         }
-        .padding(.horizontal, 7)
+        // The star's 24 pt target has room around the glyph: the right side needs less.
+        .padding(.leading, 7)
+        .padding(.trailing, 2)
         .frame(height: 36)
         .background(.white.opacity(isHovered ? 0.07 : 0), in: .rect(cornerRadius: 9, style: .continuous))
         .onHover { isHovered = $0 }

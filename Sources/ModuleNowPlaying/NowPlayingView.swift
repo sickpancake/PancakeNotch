@@ -773,6 +773,7 @@ struct NotchPill: View {
             .frame(height: 24)
             .background(prominent ? .white.opacity(isHovered ? 0.88 : 1) : .white.opacity(isHovered ? 0.2 : 0.13), in: Capsule())
             .contentShape(Capsule())
+            .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(PressableStyle())
         .onHover { isHovered = $0 }
