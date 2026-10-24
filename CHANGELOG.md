@@ -3,13 +3,16 @@
 What's new in each release. The release pipeline copies a version's notes into the update window,
 so write them for people using the app: short, plain, no code talk.
 
-## Unreleased
+## 0.2.0
 
-- **Codex approvals.** Automatic-review requests no longer appear as needing your permission. If the current reviewer cannot be confirmed, Codex handles the request in its own app.
-
-- **Agents.** Follow your Claude Code and Codex threads from the notch, with working, needs-you, done, and stopped states. Rows use conversation titles when available, with active native subagents tucked under their parent. Colored marks distinguish statuses. Optional Connect adds instant alerts and Allow once / Deny; Cursor supports status after Connect.
-- **AI Usage.** Pick an account or view all accounts, check remaining plan limits, and see tokens and estimated API value for today, 7 days, or 30 days. Colored gauges show remaining usage, emails stay partly hidden until clicked, and Codex refreshes its limits when opened. Token history stays on your Mac.
-- **Try both safely.** New practice notches, lessons, settings, Help, and an AI usage chart. The website includes an interactive Agents and AI Usage demo.
+- **Agents.** Follow your Claude Code, Codex and Cursor conversations from the notch: working, needs you, done or stopped, with Allow once / Deny right in the notch when the whole request fits. Helpers sit in a dropdown under the conversation that started them, including helpers started from T3 Code.
+- **AI Usage.** See how much of each plan's limits is left, plus tokens and their estimated API value for today, 7 days or 30 days. A small gauge beside the closed notch can show the account and limit you choose. Your history stays on your Mac.
+- **Your agents, your way.** Name agents by their conversation title, your last message or the Git branch. Choose which tools show, how long finished agents stay, and whether to show helpers and what each agent is doing.
+- **Try them safely.** New hands-on lessons with practice agents and accounts, plus Help for both.
+- **Smoother everywhere.** Gentle fades on buttons and switches, numbers that roll instead of jumping, and many small alignment fixes.
+- **Full screen.** The notch hides only while a video really fills the screen, and the top edge of the screen no longer makes it flicker.
+- **Fixes.** Dragging from Finder opens the notch again, the notch closes properly when you leave while it opens, the Shelf keeps long names readable, and the app window is easier to find your way around.
+- **Safer.** PancakeNotch reads other apps' files more carefully and keeps its own data private to your Mac account.
 
 ## 0.1.0 — first beta
 
