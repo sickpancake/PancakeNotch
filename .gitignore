@@ -51,3 +51,4 @@ update-public-key.txt
 # Website (web/): installed packages and build output
 web/node_modules/
 web/dist/
+web/dist-ssr/
