@@ -3,7 +3,7 @@
 # Usage: scripts/build-app.sh [debug|release]   (default: release)
 #
 # Optional environment (the release workflow sets these):
-#   PANCAKENOTCH_VERSION   version shown to people, e.g. 0.1.0 (CFBundleShortVersionString)
+#   PANCAKENOTCH_VERSION   version shown to people, e.g. 0.1.0 (CFBundleShortVersionString; default: newest CHANGELOG.md version)
 #   PANCAKENOTCH_BUILD     a number that grows with every release (CFBundleVersion; Sparkle compares it)
 #   SPARKLE_PUBLIC_ED_KEY  the update-signing public key; without it the app can't update itself
 #   CODESIGN_IDENTITY      the signing certificate's name; without it the app is signed ad hoc
@@ -28,6 +28,8 @@ cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 PLIST="$APP/Contents/Info.plist"
+# Local builds show the newest CHANGELOG version, so the About line isn't stuck on Info.plist's 0.0.1.
+PANCAKENOTCH_VERSION="${PANCAKENOTCH_VERSION:-$(sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "$ROOT/CHANGELOG.md" | head -1)}"
 if [[ -n "${PANCAKENOTCH_VERSION:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $PANCAKENOTCH_VERSION" "$PLIST"
 fi
