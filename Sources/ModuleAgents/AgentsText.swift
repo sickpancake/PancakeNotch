@@ -24,13 +24,14 @@ enum AgentsText {
     }
 
     /// Under the title: "project · step" while working, "project · request" while it needs you, else "project".
+    /// "project" is the folder, or what Settings put in its place (`AgentThread.byline`).
     static func subtitle(_ thread: AgentThread) -> String {
         let detail: String? = switch thread.status {
         case .working: thread.step
         case .needsYou: thread.request
         case .done, .stopped, .failed: nil
         }
-        return [thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return [thread.byline ?? thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     /// "2 working · 1 needs you", with "1 done" for finished threads when asked. `nil` when there's nothing.

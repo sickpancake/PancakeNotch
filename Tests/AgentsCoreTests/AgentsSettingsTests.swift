@@ -12,6 +12,7 @@ struct AgentsSettingsTests {
         let defaults = UserDefaults(suiteName: "AgentsSettingsTests.\(UUID().uuidString)")!
         let first = AgentsSettings(defaults: defaults)
         first.nameStyle = .branch
+        first.detailStyle = .lastMessage
         first.keepFinished = .untilCleared
         first.hiddenTools = [.cursor]
         first.showsSteps = false
@@ -20,6 +21,8 @@ struct AgentsSettingsTests {
         first.earLimit = .weekly
         let again = AgentsSettings(defaults: defaults)
         #expect(again.nameStyle == .branch)
+        #expect(again.detailStyle == .lastMessage)
+        #expect(settings().detailStyle == .folder)
         #expect(again.keepFinished == .untilCleared)
         #expect(again.hiddenTools == [.cursor])
         #expect(!again.showsSteps)

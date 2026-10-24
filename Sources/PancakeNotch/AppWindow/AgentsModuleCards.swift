@@ -190,6 +190,16 @@ struct AgentsSettingsRows: View {
                 )
             }
             SettingsRow(
+                title: String(localized: "Under the name"),
+                subtitle: detailSubtitle
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Under the name"),
+                    options: AgentDetailStyle.allCases.map { ($0, $0.label) },
+                    selection: $settings.detailStyle
+                )
+            }
+            SettingsRow(
                 title: String(localized: "Show agents from"),
                 subtitle: String(localized: "Agents from the others are left out of the list, the closed notch and pop-ups.")
             ) {
@@ -256,6 +266,14 @@ struct AgentsSettingsRows: View {
         case .title: String(localized: "The conversation's title from Claude Code or Codex. Its folder until it has one.")
         case .lastMessage: String(localized: "The last message you sent it. Its title until you send one.")
         case .branch: String(localized: "The git branch it works on. Its title outside a git project.")
+        }
+    }
+
+    private var detailSubtitle: String {
+        switch settings.detailStyle {
+        case .folder: String(localized: "Its project folder. Its last message when it's named after the folder.")
+        case .lastMessage: String(localized: "The last message you sent it. Its folder until you send one.")
+        case .branch: String(localized: "The git branch it works on. Its folder outside a git project.")
         }
     }
 }
