@@ -90,6 +90,8 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public var isSeen: Bool
     /// The helpers it started that are still working, oldest first. Shown under it, never as threads.
     public var subagents: [AgentSubagent]
+    /// What shows under its name, as picked in Settings (`byline(_:name:)`). Nil: its project folder.
+    public var byline: String?
 
     public init(id: String, tool: AgentTool, accountID: String? = nil, title: String, project: String,
                 status: AgentStatus, statusSince: Date, workStarted: Date? = nil, step: String? = nil,
@@ -120,6 +122,18 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
         case .lastMessage: lastMessage ?? title
         case .branch: branch ?? title
         }
+    }
+
+    /// What goes under `name`: the chosen kind, else the folder, the last message or the branch, never
+    /// the name again ("Volunaro" twice). Empty when each of them is missing or the same as the name.
+    public func byline(_ style: AgentDetailStyle, name: String) -> String {
+        let chosen: String? = switch style {
+        case .folder: project
+        case .lastMessage: lastMessage
+        case .branch: branch
+        }
+        return [chosen, project, lastMessage, branch].lazy.compactMap { $0 }
+            .first { !$0.isEmpty && $0.caseInsensitiveCompare(name) != .orderedSame } ?? ""
     }
 }
 

@@ -16,6 +16,8 @@ public final class AgentsSettings {
     public var peeksOnFinish: Bool { didSet { defaults.set(peeksOnFinish, forKey: Keys.peeksOnFinish) } }
     /// What names each thread in the Agents list.
     public var nameStyle: AgentNameStyle { didSet { defaults.set(nameStyle.rawValue, forKey: Keys.nameStyle) } }
+    /// What shows under each thread's name.
+    public var detailStyle: AgentDetailStyle { didSet { defaults.set(detailStyle.rawValue, forKey: Keys.detailStyle) } }
     /// How long a finished thread stays after it was seen.
     public var keepFinished: KeepFinished { didSet { defaults.set(keepFinished.rawValue, forKey: Keys.keepFinished) } }
     /// Tools whose threads Agents leaves out.
@@ -73,6 +75,7 @@ public final class AgentsSettings {
         peeksOnNeedsYou = defaults.object(forKey: Keys.peeksOnNeedsYou) as? Bool ?? true
         peeksOnFinish = defaults.object(forKey: Keys.peeksOnFinish) as? Bool ?? true
         nameStyle = defaults.string(forKey: Keys.nameStyle).flatMap(AgentNameStyle.init(rawValue:)) ?? .title
+        detailStyle = defaults.string(forKey: Keys.detailStyle).flatMap(AgentDetailStyle.init(rawValue:)) ?? .folder
         keepFinished = defaults.string(forKey: Keys.keepFinished).flatMap(KeepFinished.init(rawValue:)) ?? .halfHour
         hiddenTools = Set((defaults.stringArray(forKey: Keys.hiddenTools) ?? []).compactMap(AgentTool.init(rawValue:)))
         showsSubagents = defaults.object(forKey: Keys.showsSubagents) as? Bool ?? true
@@ -105,6 +108,7 @@ public final class AgentsSettings {
         static let peeksOnNeedsYou = "agents.peeksOnNeedsYou"
         static let peeksOnFinish = "agents.peeksOnFinish"
         static let nameStyle = "agents.nameStyle"
+        static let detailStyle = "agents.detailStyle"
         static let keepFinished = "agents.keepFinished"
         static let hiddenTools = "agents.hiddenTools"
         static let showsSubagents = "agents.showsSubagents"

@@ -34,6 +34,31 @@ struct AgentNamesTests {
         #expect(center.threads.first?.title == "Fix the login redirect")
     }
 
+    @Test func underTheNameShowsTheChosenDetailButNeverTheNameAgain() throws {
+        let center = center()
+        let repo = try temporaryFolder().appending(path: "Volunaro")
+        try FileManager.default.createDirectory(at: repo.appending(path: ".git"), withIntermediateDirectories: true)
+        try "ref: refs/heads/map-ui\n".write(to: repo.appending(path: ".git/HEAD"), atomically: true, encoding: .utf8)
+        let now = Date()
+        // Untitled: named after its folder, so the folder doesn't show twice.
+        center.apply(.init(id: "codex:a", tool: .codex, at: now, cwd: repo.path, status: .working))
+        #expect(center.threads.first?.title == "Volunaro")
+        #expect(center.threads.first?.byline == "map-ui")
+        center.apply(.init(id: "codex:a", tool: .codex, at: now, lastMessage: "Connect my Vercel MCP"))
+        #expect(center.threads.first?.byline == "Connect my Vercel MCP")
+        center.apply(.init(id: "codex:b", tool: .codex, at: now, title: "Find volunteer places", cwd: repo.path, status: .working))
+        #expect(center.threads.first { $0.id == "codex:b" }?.byline == "Volunaro")
+
+        center.settings.detailStyle = .branch
+        #expect(center.threads.first { $0.id == "codex:a" }?.byline == "map-ui")
+        center.settings.detailStyle = .lastMessage
+        #expect(center.threads.first { $0.id == "codex:b" }?.byline == "Volunaro")
+        // The same kind as the name: the next one instead.
+        center.settings.nameStyle = .lastMessage
+        #expect(center.threads.first { $0.id == "codex:a" }?.title == "Connect my Vercel MCP")
+        #expect(center.threads.first { $0.id == "codex:a" }?.byline == "Volunaro")
+    }
+
     @Test func aThreadWithoutATitleGoesByItsFolderUntilItGetsOne() {
         let center = center()
         let now = Date()

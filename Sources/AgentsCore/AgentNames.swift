@@ -18,6 +18,24 @@ public enum AgentNameStyle: String, CaseIterable, Sendable {
     }
 }
 
+/// What shows under a thread's name in the Agents list (Settings → Agents).
+public enum AgentDetailStyle: String, CaseIterable, Sendable {
+    /// Its project folder.
+    case folder
+    /// The last message the user sent it.
+    case lastMessage
+    /// The git branch of its project folder.
+    case branch
+
+    public var label: String {
+        switch self {
+        case .folder: String(localized: "Folder", comment: "Agent detail setting: the project folder")
+        case .lastMessage: String(localized: "Last message", comment: "Agent detail setting: the last message sent")
+        case .branch: String(localized: "Branch", comment: "Agent detail setting: the git branch")
+        }
+    }
+}
+
 enum AgentNames {
     /// The first line, at most `limit` characters. Nil for text the tool added itself, which starts with
     /// a tag or a heading ("<environment_context>", "# AGENTS.md instructions…").

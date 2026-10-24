@@ -179,6 +179,12 @@ final class LiveAgentSources {
             return
         }
         let id = "\(event.tool.rawValue):\(session)"
+        // A Codex conversation shows only once Codex saves its history (a rollout). Runs that never save
+        // one (background helpers) stay out of the list and can't touch a conversation sharing their ID.
+        if event.tool == .codex, !Self.hasHistory(event, isKnown: center.thread(id) != nil) {
+            if let requestID = event.requestID { server?.answer(requestID, with: nil) }
+            return
+        }
         let now = Date()
         lastHookEvent[id] = now
         lastActivity[id] = now
@@ -256,6 +262,13 @@ final class LiveAgentSources {
             if hookPrompts[id] == nil { hookPrompts[id] = prompt }
             resolveDelegations()
         }
+    }
+
+    /// The hook names a rollout. A conversation not in the list yet also needs it on disk: until Codex
+    /// writes it, the rollout watcher adds the conversation instead.
+    nonisolated static func hasHistory(_ event: HookEvent, isKnown: Bool) -> Bool {
+        guard let path = event.transcriptPath, !path.isEmpty else { return false }
+        return isKnown || FileManager.default.fileExists(atPath: path)
     }
 
     /// From the hook's rollout (its first line, read once per rollout), else the session's model or a

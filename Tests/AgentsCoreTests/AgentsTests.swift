@@ -91,9 +91,20 @@ struct AgentsCenterTests {
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
                                  payload: ["session_id": "helper", "transcript_path": file.path]))
         #expect(center.threads.isEmpty)
+        // A run that saves no history (a background helper, no rollout) never shows.
         sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
                                  payload: ["session_id": "real", "model": "gpt-6.1-sol"]))
+        sources.handle(HookEvent(tool: .codex, name: "Interrupt", parentPID: 0,
+                                 payload: ["session_id": "ephemeral", "transcript_path": "/nonexistent/rollout.jsonl"]))
+        #expect(center.threads.isEmpty)
+        let rollout = try temporaryFolder().appending(path: "real.jsonl")
+        try Data(#"{"type":"session_meta","payload":{"id":"real"}}"#.utf8).write(to: rollout)
+        sources.handle(HookEvent(tool: .codex, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "real", "model": "gpt-6.1-sol", "transcript_path": rollout.path]))
         #expect(center.threads.map(\.id) == ["codex:real"])
+        // Nor can it change the conversation it shares an ID with.
+        sources.handle(HookEvent(tool: .codex, name: "Interrupt", parentPID: 0, payload: ["session_id": "real"]))
+        #expect(center.threads.first?.status == .working)
         // The reviewer's hooks carry its parent's session ID: the parent stays.
         let review = try temporaryFolder().appending(path: "review.jsonl")
         try Data(#"{"type":"session_meta","payload":{"id":"guardian","session_id":"real","source":{"subagent":{"other":"guardian"}}}}"#.utf8).write(to: review)

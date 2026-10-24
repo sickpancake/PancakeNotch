@@ -330,6 +330,7 @@ public final class AgentsCenter {
     private func presented(_ thread: AgentThread) -> AgentThread {
         var shown = thread
         shown.title = thread.name(settings.nameStyle)
+        shown.byline = thread.byline(settings.detailStyle, name: shown.title)
         if !settings.showsSteps { shown.step = nil }
         if settings.showsSubagents {
             let helpers = storage.values.filter { $0.parentID == thread.id && !$0.status.isFinished }.map { helper in

@@ -31,6 +31,14 @@ struct AgentsTextTests {
         #expect(AgentsText.subtitle(thread(.working, project: "", step: "Running tests")) == "Running tests")
     }
 
+    @Test func theSubtitleUsesWhatSettingsPutUnderTheName() {
+        var shown = thread(.working, step: "Running tests")
+        shown.byline = "Can you finish this up?"
+        #expect(AgentsText.subtitle(shown) == "Can you finish this up? · Running tests")
+        shown.byline = ""
+        #expect(AgentsText.subtitle(shown) == "Running tests")
+    }
+
     @Test func theSummaryCountsWhatIsGoingOn() {
         let threads = [thread(.working), thread(.working), thread(.needsYou(.input)), thread(.done)]
         #expect(AgentsText.summary(threads, includesFinished: false) == "2 working · 1 needs you")

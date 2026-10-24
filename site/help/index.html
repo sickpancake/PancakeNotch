@@ -227,11 +227,12 @@
           <li><span>Open the notch and choose the Agents tab, or pick <strong>Agents</strong> in the Module Menu.</span></li>
         </ol>
         <h3>What a row shows</h3>
-        <p>Each thread has its own row: the tool's icon, the thread's name, its project folder, its status with the time, and what it's doing right now, like "Editing NotchView.swift" or "Running tests". Click a row to bring that tool's app forward: Terminal, Ghostty, VS Code, T3 Code, the Codex app and so on.</p>
+        <p>Each thread has its own row: the tool's icon, the thread's name, its project folder (or what you pick in Settings), its status with the time, and what it's doing right now, like "Editing NotchView.swift" or "Running tests". Click a row to bring that tool's app forward: Terminal, Ghostty, VS Code, T3 Code, the Codex app and so on.</p>
         <h3>Agents settings</h3>
         <p>In <strong>Modules</strong>, open Agents' <strong>Settings</strong> to choose:</p>
         <ul>
           <li><strong>Name agents by</strong>: the conversation's <strong>Title</strong> as Claude Code or Codex keeps it (its project folder until it has one), the <strong>Last message</strong> you sent it, or the git <strong>Branch</strong> it works on.</li>
+          <li><strong>Under the name</strong>: the project <strong>Folder</strong>, the <strong>Last message</strong> you sent it, or the git <strong>Branch</strong>. A row never shows the same words twice: when a thread is already named after its folder, its last message shows underneath instead.</li>
           <li><strong>Show agents from</strong>: leave out Claude Code, Codex or Cursor.</li>
           <li><strong>Keep finished agents</strong>: 5 minutes, 30 minutes, or until you click <strong>Clear finished</strong>.</li>
           <li>Whether to show what each agent is doing, and its subagents.</li>
@@ -280,6 +281,7 @@
         <h3>If something's missing</h3>
         <ul class="checks">
           <li><strong>The list is empty</strong>The tool has to be running. Start a thread in Claude Code, Codex or Cursor, and give it a moment to show up.</li>
+          <li><strong>Several rows look the same</strong>Each row is its own conversation. Ones without a title are named after their folder, so in Settings choose <strong>Last message</strong> under <strong>Under the name</strong> or <strong>Name agents by</strong> to tell them apart.</li>
           <li><strong>Codex never says "Needs you"</strong>Approval requests from Codex show up only after you've connected it. Check that you typed <span class="path">/hooks</span> in Codex and trusted the PancakeNotch hook.</li>
           <li><strong>Cursor shows nothing</strong>Cursor shows up only after you've connected it, and only for the agent in the Cursor app (the IDE).</li>
           <li><strong>No Allow and Deny buttons</strong>They appear for Claude Code and Codex after you've connected them. Cursor can't have them.</li>
