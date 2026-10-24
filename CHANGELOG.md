@@ -3,7 +3,9 @@
 What's new in each release. The release pipeline copies a version's notes into the update window,
 so write them for people using the app: short, plain, no code talk.
 
-## 0.2.0
+## 0.2.0 — beta
+
+**This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.
 
 - **Agents.** Follow your Claude Code, Codex and Cursor conversations from the notch: working, needs you, done or stopped, with Allow once / Deny right in the notch when the whole request fits. Helpers sit in a dropdown under the conversation that started them, including helpers started from T3 Code.
 - **AI Usage.** See how much of each plan's limits is left, plus tokens and their estimated API value for today, 7 days or 30 days. A small gauge beside the closed notch can show the account and limit you choose. Your history stays on your Mac.

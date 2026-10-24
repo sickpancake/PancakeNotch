@@ -106,7 +106,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "$GITHUB_REF_NAME" build/release/PancakeNotch.zip build/release/appcast.xml \
-            --title "PancakeNotch $VERSION" --notes-file build/release/notes.md --verify-tag
+            --title "PancakeNotch $VERSION Beta" --notes-file build/release/notes.md --verify-tag
 
       - name: Website with the new update feed
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
