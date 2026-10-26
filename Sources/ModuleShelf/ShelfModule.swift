@@ -239,6 +239,8 @@ public final class ShelfModule: NotchModule {
         ShelfDropReader.canRead(pasteboard)
     }
 
+    public var keepsDragsBelowMenuBar: Bool { settings.dragToTop == .openShelf }
+
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
         showDropZones(for: info.draggingPasteboard, at: point) ? .copy : []
     }
@@ -777,6 +779,7 @@ public final class ShelfModule: NotchModule {
             store.remove(ids, keepingFiles: true)
         }
         setDraggingOut(false)
+        notch?.dragOutEnded()
         onEvent?(.dragOutEnded(accepted: !operation.isEmpty))
     }
 }

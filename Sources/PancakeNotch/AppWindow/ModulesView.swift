@@ -1009,6 +1009,21 @@ private struct ShelfSettingsRows: View {
             // The question is about the items it names: ask again if they change.
             .onChange(of: store.items.count) { confirmingClear = false }
         }
+        if MissionControlDragGuard.isNeeded {
+            SettingsRow(
+                title: String(localized: "Dragging a file to the top"),
+                subtitle: String(localized: "Open the Shelf stops the pointer just below the menu bar near the notch, so Mission Control doesn't start.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Dragging a file to the top"),
+                    options: [
+                        (.openShelf, String(localized: "Open the Shelf")),
+                        (.allowMissionControl, String(localized: "Allow Mission Control")),
+                    ],
+                    selection: $settings.dragToTop
+                )
+            }
+        }
         SettingsRow(
             title: String(localized: "Dragging files out"),
             subtitle: String(localized: "Copy leaves the original where it is. Move works like Finder: same disk moves, another disk copies.")

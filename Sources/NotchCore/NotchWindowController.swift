@@ -17,6 +17,12 @@ public final class NotchWindowController {
     public init(initialState: NotchState? = nil, arrangement: ModuleArrangement = ModuleArrangement()) {
         self.initialState = initialState
         self.arrangement = arrangement
+        // Drops on any notch (this one or a preview) and drags out of a module end unseen by the watcher.
+        dragSettledObserver = NotificationCenter.default.addObserver(
+            forName: NotchViewModel.dragSettled, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dragWatcher.dragSettled() }
+        }
     }
 
     private static func same(_ lhs: [any NotchModule], _ rhs: [any NotchModule]) -> Bool {
@@ -94,6 +100,7 @@ public final class NotchWindowController {
     private var appToRestore: NSRunningApplication?
     private var scrollMonitor: Any?
     private let dragWatcher = NotchDragWatcher()
+    private var dragSettledObserver: Any?
     /// Hands drags over the notch to the module.
     private let dropRouter = NotchDropRouter()
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "notch")
@@ -172,6 +179,15 @@ public final class NotchWindowController {
         dragWatcher.accepts = { [weak model] pasteboard in
             model?.module(accepting: pasteboard) != nil
         }
+        dragWatcher.floor = { [weak model] pasteboard in
+            guard MissionControlDragGuard.isNeeded, let model,
+                  model.module(accepting: pasteboard)?.keepsDragsBelowMenuBar == true else { return nil }
+            let geometry = model.layout.geometry
+            // The menu bar reaches the bottom of the notch; with the menu bar hidden, the notch's own height.
+            let stripHeight = max(geometry.compactHeight, geometry.notchRect.height)
+            return MissionControlDragGuard.floorY(screenFrame: geometry.screenFrame, stripHeight: stripHeight)
+        }
+        dragWatcher.isOpen = { [weak model] in model?.state == .expanded }
         dragWatcher.onApproach = { [weak self, weak model] pasteboard in
             self?.logger.info("File drag approaching the notch: opening early")
             model?.dragApproached(pasteboard)

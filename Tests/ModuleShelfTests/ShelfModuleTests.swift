@@ -19,6 +19,22 @@ struct ShelfModuleTests {
         return (module, notch)
     }
 
+    /// Drags the Shelf takes stop below the menu bar unless the user lets Mission Control have the top.
+    @Test func keepsDragsBelowTheMenuBarByDefault() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        #expect(module.settings.dragToTop == .openShelf)
+        #expect(module.keepsDragsBelowMenuBar)
+        module.settings.dragToTop = .allowMissionControl
+        #expect(!module.keepsDragsBelowMenuBar)
+    }
+
+    @Test func dragToTopIsRemembered() {
+        let defaults = UserDefaults(suiteName: "ShelfModuleTests-\(UUID().uuidString)")!
+        ShelfSettings(defaults: defaults).dragToTop = .allowMissionControl
+        #expect(ShelfSettings(defaults: defaults).dragToTop == .allowMissionControl)
+    }
+
     /// From 15 items the notch rests with the Shelf in its ear, unless that's switched off.
     @Test func restsInCompactFromFifteenItems() async throws {
         let fixture = try ShelfFixture()
