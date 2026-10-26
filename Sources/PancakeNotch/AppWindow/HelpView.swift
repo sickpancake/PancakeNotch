@@ -1,5 +1,6 @@
 import AgentsCore
 import ModuleShelf
+import NotchCore
 import NowPlayingCore
 import SwiftUI
 
@@ -140,11 +141,27 @@ struct HelpView: View {
                     Button(String(localized: "Turn It On")) { settings.isEnabled = true }
                 }
             } else {
-                SettingsRow(
-                    title: String(localized: "A drop doesn't land"),
-                    subtitle: String(localized: "Dragging to the very top of the screen can open Mission Control instead. Drop a little lower, on the open notch, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
-                ) {
-                    Button(String(localized: "Open Desktop & Dock")) { HelpLinks.openDesktopAndDockSettings() }
+                if !MissionControlDragGuard.isNeeded {
+                    SettingsRow(
+                        title: String(localized: "A drop doesn't land"),
+                        subtitle: String(localized: "Dragging to the very top of the screen can open Mission Control instead. Drop a little lower, on the open notch, or turn off \"Drag windows to top of screen to enter Mission Control\" in Desktop & Dock.")
+                    ) {
+                        Button(String(localized: "Open Desktop & Dock")) { HelpLinks.openDesktopAndDockSettings() }
+                    }
+                } else if settings.dragToTop == .allowMissionControl {
+                    SettingsRow(
+                        title: String(localized: "Mission Control opens instead"),
+                        subtitle: String(localized: "Dragging into the menu bar opens Mission Control, because Shelf settings let it. Drop a little lower, on the open notch, or let the Shelf keep the pointer below the menu bar.")
+                    ) {
+                        Button(String(localized: "Keep Mission Control Away")) { settings.dragToTop = .openShelf }
+                    }
+                } else {
+                    SettingsRow(
+                        title: String(localized: "A drop doesn't land"),
+                        subtitle: String(localized: "While you drag something to the notch, the pointer stops just below the menu bar so Mission Control doesn't start. Let go over the open notch.")
+                    ) {
+                        EmptyView()
+                    }
                 }
                 SettingsRow(
                     title: String(localized: "An item disappeared"),

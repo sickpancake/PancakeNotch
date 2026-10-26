@@ -207,6 +207,11 @@ extension AppWindowController {
         nowPlayingSettings.soundBars = .gentle
         nowPlayingSettings.soundBarsAccess = .unknown
 
+        // The Shelf's settings open (the drag-to-top choice shows on macOS 27 and later).
+        let shelfSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["shelf"])
+            .background(AppPalette.background)
+        try render("modules-shelf-settings", rootView: shelfSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 2600))
+
         // Agents and AI Usage switched on: both modules with their settings open, the lessons, the
         // Statistics section and Help. Their practice centers show pretend threads and accounts.
         agentsSettings.agentsEnabled = true

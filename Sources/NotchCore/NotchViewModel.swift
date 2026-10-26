@@ -62,6 +62,9 @@ public final class NotchViewModel {
     @ObservationIgnored public var requestKeyFocus: (() -> Void)?
     /// Hands keyboard focus back to the previous app. Called when the notch leaves the expanded state.
     @ObservationIgnored public var releaseKeyFocus: (() -> Void)?
+    /// Posted when a drag this app took part in ended (a drop on a notch, a drag out of a module), by
+    /// the real notch or a preview: the drag watcher doesn't see those releases.
+    static let dragSettled = Notification.Name("NotchViewModel.dragSettled")
 
     /// Asks the window to fit a state. Called with the larger state before an animation starts,
     /// and with the final state once it settles.
@@ -364,8 +367,14 @@ public final class NotchViewModel {
     /// A drag over the notch finished (dropped or cancelled). The pointer may have left during it,
     /// and AppKit sends no hover events while dragging, so check where it is now.
     public func dragConcluded() {
+        NotificationCenter.default.post(name: Self.dragSettled, object: self)
         modules.forEach { $0.dragEnded() }
         closeIfPointerOutside()
+    }
+
+    /// A drag out of a module ended (dropped or cancelled).
+    public func dragOutEnded() {
+        NotificationCenter.default.post(name: Self.dragSettled, object: self)
     }
 
     /// The module stopped holding the notch open (menu dismissed, drag-out ended, prompt answered).

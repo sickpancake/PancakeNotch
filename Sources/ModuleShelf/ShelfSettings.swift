@@ -32,12 +32,21 @@ public final class ShelfSettings {
         }
     }
 
+    /// What a file drag to the top of the screen does on macOS 27, where it can start Mission Control.
+    public enum DragToTop: String, CaseIterable, Sendable {
+        /// The pointer stops just below the menu bar over the open notch, so the drop lands on the Shelf.
+        case openShelf
+        /// The top of the screen is left to macOS.
+        case allowMissionControl
+    }
+
     public var isEnabled: Bool { didSet { defaults.set(isEnabled, forKey: Keys.enabled) } }
     public var dragOutMode: DragOutMode { didSet { defaults.set(dragOutMode.rawValue, forKey: Keys.dragOutMode) } }
     public var removeAfterDragOut: Bool { didSet { defaults.set(removeAfterDragOut, forKey: Keys.removeAfterDragOut) } }
     public var duplicatePolicy: DuplicatePolicy { didSet { defaults.set(duplicatePolicy.rawValue, forKey: Keys.duplicatePolicy) } }
     public var autoClear: AutoClear { didSet { defaults.set(autoClear.rawValue, forKey: Keys.autoClear) } }
     public var showsAirDropZone: Bool { didSet { defaults.set(showsAirDropZone, forKey: Keys.airDropZone) } }
+    public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
     public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
 
@@ -52,6 +61,7 @@ public final class ShelfSettings {
         autoClear = defaults.string(forKey: Keys.autoClear).flatMap(AutoClear.init(rawValue:)) ?? .never
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
         showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
+        dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
     }
 
     private enum Keys {
@@ -62,5 +72,6 @@ public final class ShelfSettings {
         static let autoClear = "shelf.autoClear"
         static let airDropZone = "shelf.airDropZone"
         static let showsInEars = "shelf.showsInEars"
+        static let dragToTop = "shelf.dragToTop"
     }
 }

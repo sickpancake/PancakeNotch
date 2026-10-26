@@ -151,6 +151,19 @@ struct NotchTallTests {
         #expect(model.state == .closed)
     }
 
+    /// The drag watcher doesn't see the release of a drop on the notch or a drag out of a module.
+    @Test func dropsAndDragsOutSettleTheDragWatcher() {
+        let model = NotchViewModel(layout: layout, pointerLocation: { CGPoint(x: 100, y: 100) })
+        var settled = 0
+        let observer = NotificationCenter.default.addObserver(forName: NotchViewModel.dragSettled, object: model, queue: nil) { _ in
+            settled += 1
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        model.dragConcluded()
+        model.dragOutEnded()
+        #expect(settled == 2)
+    }
+
     @Test func approachingDragOpensAndClosesAgainWhenReleasedElsewhere() async throws {
         let model = NotchViewModel(
             layout: layout,
