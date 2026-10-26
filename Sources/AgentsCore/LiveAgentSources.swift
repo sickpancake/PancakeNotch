@@ -40,14 +40,19 @@ final class LiveAgentSources {
     private let delegated = DelegatedHelpers()
     /// Threads matched to their main conversation, or known not to be a helper.
     private var delegationChecked: Set<String> = []
-    /// Look-ups so far per unmatched thread (its first message may not be written yet).
-    private var delegationTries: [String: Int] = [:]
+    /// When each thread still unmatched was first looked up. Claude Code saves a reply only once it ends,
+    /// so a helper started early in a long one (several tasks delegated at once) finds its task only then.
+    private var delegationSince: [String: Date] = [:]
+    /// The folders of the conversations' files, watched while a thread waits for its task.
+    private var delegationWatch: (folders: Set<String>, watcher: FolderWatcher)?
+    /// The conversations' file names: a change to one of them is worth another look.
+    private var delegationFiles: Set<String> = []
     private var resolvingDelegations = false
     /// Asked again while a look-up ran: look again when it ends, so no new thread is missed.
     private var resolvesAgain = false
-    /// First prompts the hooks delivered, for threads not matched yet (a helper's task, before its
-    /// transcript may hold it).
-    private var hookPrompts: [String: String] = [:]
+    /// First prompts (from the hooks, or read from the transcripts), for threads not matched yet: a
+    /// helper's task, before its transcript may hold it.
+    private var firstPrompts: [String: String] = [:]
     /// Transcripts the hooks named, for conversations missing from the tools' session lists.
     private var hookTranscripts: [String: String] = [:]
     private var detailed = false
@@ -55,6 +60,8 @@ final class LiveAgentSources {
 
     /// A thread with no sign of life for this long counts as stopped when the list is shown.
     static let quietLimit: TimeInterval = 60 * 60
+    /// The longest an unmatched thread waits for the reply that may have delegated it to be saved.
+    static let delegationWait: TimeInterval = 10 * 60
 
     init(center: AgentsCenter) {
         self.center = center
@@ -81,6 +88,7 @@ final class LiveAgentSources {
         server = nil
         stopWatching(&watchers)
         stopWatching(&transcriptWatchers)
+        watchForDelegations(in: [], files: [])
         if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
         activationObserver = nil
         claudeSessions = [:]
@@ -91,8 +99,8 @@ final class LiveAgentSources {
         codexSpawned = []
         codexSubagents = [:]
         delegationChecked = []
-        delegationTries = [:]
-        hookPrompts = [:]
+        delegationSince = [:]
+        firstPrompts = [:]
         hookTranscripts = [:]
     }
 
@@ -249,7 +257,7 @@ final class LiveAgentSources {
             center.ended(id, at: now)
             lastHookEvent[id] = nil
             lastActivity[id] = nil
-            hookPrompts[id] = nil
+            firstPrompts[id] = nil
             hookTranscripts[id] = nil
             codexHelpers[event.transcriptPath ?? session] = nil
             return
@@ -259,7 +267,11 @@ final class LiveAgentSources {
         center.apply(update)
         // A host app's helper gets its task as its first prompt: match it now, while it starts.
         if event.tool != .cursor, !delegationChecked.contains(id), let prompt = event.fullPrompt, !prompt.isEmpty {
-            if hookPrompts[id] == nil { hookPrompts[id] = prompt }
+            if firstPrompts[id] == nil { firstPrompts[id] = prompt }
+            resolveDelegations()
+        } else if update.status?.isFinished == true, !delegationSince.isEmpty {
+            // Its turn is saved: a helper it started finds its task, or a thread waiting only while it
+            // worked stops waiting.
             resolveDelegations()
         }
     }
@@ -379,7 +391,10 @@ final class LiveAgentSources {
     // MARK: Host apps' helpers
 
     /// Matches new Claude Code and Codex threads to the conversation that delegated them through a host
-    /// app (T3 Code), so they show under it. Each thread is looked up a few times at most, as it changes.
+    /// app (T3 Code), so they show under it. Claude Code saves a reply only once it ends, so a helper
+    /// delegated early in a long reply finds its task only then: an unmatched thread is looked up again as
+    /// the conversations' files change, while another conversation works (one that could have delegated
+    /// it), for `delegationWait` at most.
     private func resolveDelegations() {
         guard !stopped else { return }
         guard !resolvingDelegations else {
@@ -388,39 +403,52 @@ final class LiveAgentSources {
         }
         let threads = center.allThreads.filter { $0.tool != .cursor }
         let children = threads.filter { !delegationChecked.contains($0.id) }.compactMap { thread -> (id: String, prompt: String?, locate: (@Sendable () -> URL?)?)? in
-            let prompt = hookPrompts[thread.id], locate = transcriptLocator(thread.id)
+            let prompt = firstPrompts[thread.id], locate = transcriptLocator(thread.id)
             return prompt == nil && locate == nil ? nil : (thread.id, prompt, locate)
         }
-        guard !children.isEmpty else { return }
+        guard !children.isEmpty else {
+            delegationSince = [:]
+            watchForDelegations(in: [], files: [])
+            return
+        }
         let parents = threads.compactMap { thread in transcriptLocator(thread.id).map { (id: thread.id, locate: $0) } }
         let delegated = delegated
         resolvingDelegations = true
         queue.async { [weak self] in
+            delegated.keep(only: Set(parents.map(\.id)))
             let parentFiles = parents.compactMap { parent in parent.locate().map { (id: parent.id, url: $0) } }
-            let results = children.map { child -> (id: String, match: DelegatedHelpers.Delegation?, hasPrompt: Bool) in
-                guard let prompt = child.prompt ?? child.locate?().flatMap(DelegatedHelpers.firstPrompt) else { return (child.id, nil, false) }
-                return (child.id, delegated.parent(of: prompt, among: parentFiles.filter { $0.id != child.id }), true)
+            let results = children.map { child -> (id: String, match: DelegatedHelpers.Delegation?, prompt: String?) in
+                guard let prompt = child.prompt ?? child.locate?().flatMap(DelegatedHelpers.firstPrompt) else { return (child.id, nil, nil) }
+                return (child.id, delegated.parent(of: prompt, among: parentFiles.filter { $0.id != child.id }), prompt)
             }
+            let folders = Set(parentFiles.map { $0.url.deletingLastPathComponent().path })
+            let files = Set(parentFiles.map { $0.url.lastPathComponent })
             Task { @MainActor in
                 guard let self else { return }
                 self.resolvingDelegations = false
                 guard !self.stopped else { return }
+                let now = Date()
+                let working = self.center.allThreads.filter { $0.tool != .cursor && !$0.status.isFinished }.map(\.id)
+                var waiting: [String: Date] = [:]
                 for result in results {
                     if let match = result.match {
                         self.center.setParent(of: result.id, to: match.parentID, title: match.title)
                         self.delegationChecked.insert(result.id)
-                        self.hookPrompts[result.id] = nil
+                        self.firstPrompts[result.id] = nil
                         continue
                     }
-                    let tries = (self.delegationTries[result.id] ?? 0) + 1
-                    self.delegationTries[result.id] = tries
-                    // A first message not written yet gets more chances than one that matched nothing.
-                    if tries >= (result.hasPrompt ? 3 : 10) {
+                    // Its task can still be on its way only while a conversation that could have delegated it works.
+                    let since = self.delegationSince[result.id] ?? now
+                    if now.timeIntervalSince(since) < Self.delegationWait, working.contains(where: { $0 != result.id }) {
+                        waiting[result.id] = since
+                        if let prompt = result.prompt { self.firstPrompts[result.id] = prompt }
+                    } else {
                         self.delegationChecked.insert(result.id)
-                        self.delegationTries[result.id] = nil
-                        self.hookPrompts[result.id] = nil
+                        self.firstPrompts[result.id] = nil
                     }
                 }
+                self.delegationSince = waiting
+                self.watchForDelegations(in: waiting.isEmpty ? [] : folders, files: files)
                 if self.resolvesAgain {
                     self.resolvesAgain = false
                     self.resolveDelegations()
@@ -428,6 +456,30 @@ final class LiveAgentSources {
             }
         }
     }
+
+    /// While a thread waits for its task, the folders of the conversations' files are watched: a saved
+    /// reply is looked at within a second. The watch stops once nothing waits.
+    private func watchForDelegations(in folders: Set<String>, files: Set<String>) {
+        delegationFiles = files
+        guard folders != delegationWatch?.folders else { return }
+        var previous = delegationWatch.map { [$0.watcher] } ?? []
+        delegationWatch = nil
+        if !folders.isEmpty, let watcher = FolderWatcher(paths: Array(folders), latency: 0.5, queue: queue, onChange: { [weak self] paths in
+            let names = paths.filter { $0.hasSuffix(".jsonl") }.map { ($0 as NSString).lastPathComponent }
+            guard !names.isEmpty else { return }
+            Task { @MainActor in
+                guard let self, names.contains(where: self.delegationFiles.contains) else { return }
+                self.resolveDelegations()
+            }
+        }) {
+            delegationWatch = (folders, watcher)
+        }
+        // The new watch starts before the old one stops, so no change falls between them.
+        stopWatching(&previous)
+    }
+
+    /// Whether the conversations' files are watched for a waiting thread's task (tests).
+    var waitsForDelegations: Bool { delegationWatch != nil }
 
     /// Finds a thread's transcript (Claude Code) or rollout (Codex), on `queue`.
     private func transcriptLocator(_ id: String) -> (@Sendable () -> URL?)? {

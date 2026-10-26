@@ -21,6 +21,7 @@ final class DelegatedHelpers: @unchecked Sendable {
     /// A transcript or rollout is first read from this far before its end; then from where it stopped.
     static let firstLook: UInt64 = 4 * 1024 * 1024
 
+    /// By conversation ID.
     private var offsets: [String: UInt64] = [:]
     private var tasks: [String: [Task]] = [:]
 
@@ -36,16 +37,18 @@ final class DelegatedHelpers: @unchecked Sendable {
         return nil
     }
 
-    func forget(_ id: String) {
-        tasks[id] = nil
+    /// Drops what was read from the conversations no longer followed.
+    func keep(only ids: Set<String>) {
+        offsets = offsets.filter { ids.contains($0.key) }
+        tasks = tasks.filter { ids.contains($0.key) }
     }
 
     /// Picks up the delegate calls added to a conversation's file since the last look.
     private func scan(_ id: String, url: URL) {
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64) ?? 0
-        var offset = offsets[url.path] ?? (size > Self.firstLook ? size - Self.firstLook : 0)
+        var offset = offsets[id] ?? (size > Self.firstLook ? size - Self.firstLook : 0)
         if offset > size { offset = 0 }
-        offsets[url.path] = JSONLines.read(url, from: offset) { line in
+        offsets[id] = JSONLines.read(url, from: offset) { line in
             guard let task = Self.delegatedTask(line) else { return }
             tasks[id, default: []].append(task)
         }
