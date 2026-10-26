@@ -138,6 +138,63 @@ struct AgentsCenterTests {
         #expect(center.threads.first?.subagents.map(\.title) == ["Notch review"])
     }
 
+    @Test func aHelperStartedBeforeItsTaskIsSavedIsMatchedOnceItIs() async throws {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let task = "List the file formats Apple's own frameworks can convert. Read only."
+        let main = try temporaryFolder().appending(path: "main.jsonl")
+        try Data((#"{"type":"user","message":{"role":"user","content":"Plan the converter"}}"# + "\n").utf8).write(to: main)
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "main", "transcript_path": main.path, "prompt": "Plan the converter"]))
+        // Claude Code saves a reply only once it ends: a helper delegated early in it starts before its task
+        // is on disk, and the helpers delegated after it bring more look-ups in the meantime.
+        sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                 payload: ["session_id": "helper", "transcript_path": "/nonexistent/helper.jsonl",
+                                           "prompt": "Act as the research sub-agent for this task.\n\n\(task)"]))
+        for index in 0..<4 {
+            try await Task.sleep(for: .milliseconds(50))
+            sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                     payload: ["session_id": "other\(index)", "transcript_path": "/nonexistent/other\(index).jsonl",
+                                               "prompt": "Act as the research sub-agent for this task.\n\nTask \(index)"]))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(center.thread("claude:helper")?.parentID == nil)
+        let file = try FileHandle(forWritingTo: main)
+        try file.seekToEnd()
+        try file.write(contentsOf: Data((#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__t3-code__delegate_task","input":{"title":"Apple formats","task":"\#(task)"}}]}}"# + "\n").utf8))
+        try file.close()
+        for _ in 0..<500 where center.thread("claude:helper")?.parentID == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(center.threads.first { $0.id == "claude:main" }?.subagents.map(\.title) == ["Apple formats"])
+    }
+
+    @Test func onlyAConversationThatMayBeAHelperIsWaitedFor() async throws {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let folder = try temporaryFolder()
+        func start(_ session: String) throws {
+            let transcript = folder.appending(path: "\(session).jsonl")
+            try Data((#"{"type":"user","message":{"role":"user","content":"Fix the build"}}"# + "\n").utf8).write(to: transcript)
+            sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
+                                     payload: ["session_id": session, "transcript_path": transcript.path, "prompt": "Fix the build"]))
+        }
+        // Alone, nothing could have delegated it: it isn't waited for.
+        try start("alone")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!sources.waitsForDelegations)
+        // With another conversation at work, either may be the other's helper: the transcripts are watched…
+        try start("second")
+        for _ in 0..<200 where !sources.waitsForDelegations { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(sources.waitsForDelegations)
+        // …until neither works any more.
+        for session in ["alone", "second"] {
+            sources.handle(HookEvent(tool: .claude, name: "Stop", parentPID: 0, payload: ["session_id": session]))
+        }
+        for _ in 0..<200 where sources.waitsForDelegations { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!sources.waitsForDelegations)
+    }
+
     @Test func twoVisibleListsKeepFinishedThreadsSeenUntilBothClose() {
         let center = center()
         center.listShown()
