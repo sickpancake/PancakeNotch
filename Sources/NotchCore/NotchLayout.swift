@@ -11,11 +11,21 @@ public struct NotchRadii: Equatable, Sendable {
     }
 }
 
+/// How tall the open panel is: the usual size, a bit taller (the Shelf's Convert row), or tall (the
+/// Shelf's editor and preview). See `NotchViewModel.setPanelHeight`.
+public enum PanelHeight: Int, Comparable, Sendable {
+    case regular, medium, tall
+
+    public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
 /// Sizes for each notch state and the frame of the window that hosts them, derived from the
 /// runtime notch geometry (never hard-coded per Mac model).
 public struct NotchLayout: Equatable, Sendable {
     /// Largest size of the expanded panel body (excluding the top ears).
     public static let maxExpandedBodySize = CGSize(width: 600, height: 180)
+    /// Height of the in-between panel (the Shelf's Convert row).
+    public static let mediumExpandedBodyHeight: CGFloat = 228
     /// Height of the taller expanded panel a module can ask for (the Shelf's editor and preview).
     public static let tallExpandedBodyHeight: CGFloat = 360
     /// Transparent margin around the expanded panel so its shadow isn't clipped.
@@ -24,15 +34,25 @@ public struct NotchLayout: Equatable, Sendable {
     public static let peekStripHeight: CGFloat = 24
 
     public let geometry: NotchGeometry
-    /// The expanded panel is the taller version (see `NotchViewModel.setTall`).
-    public var isTall: Bool
+    /// How tall the expanded panel is (see `NotchViewModel.setPanelHeight`).
+    public var panelHeight: PanelHeight
     /// The compact notch shows a module's peek strip under it (see `NotchViewModel.peek`).
     public var isPeeking: Bool
 
-    public init(geometry: NotchGeometry, isTall: Bool = false, isPeeking: Bool = false) {
+    /// The expanded panel is the tall version (see `NotchViewModel.setTall`).
+    public var isTall: Bool {
+        get { panelHeight == .tall }
+        set { panelHeight = newValue ? .tall : .regular }
+    }
+
+    public init(geometry: NotchGeometry, panelHeight: PanelHeight = .regular, isPeeking: Bool = false) {
         self.geometry = geometry
-        self.isTall = isTall
+        self.panelHeight = panelHeight
         self.isPeeking = isPeeking
+    }
+
+    public init(geometry: NotchGeometry, isTall: Bool, isPeeking: Bool = false) {
+        self.init(geometry: geometry, panelHeight: isTall ? .tall : .regular, isPeeking: isPeeking)
     }
 
     public func radii(for state: NotchState) -> NotchRadii {
@@ -59,9 +79,13 @@ public struct NotchLayout: Equatable, Sendable {
         case .expanded:
             let available = geometry.screenFrame.width - 2 * (Self.shadowPadding + radii(for: .expanded).top)
             let width = max(notch.width, min(Self.maxExpandedBodySize.width, available))
-            // The tall panel keeps a third of the screen free below it.
-            let tall = min(Self.tallExpandedBodyHeight, geometry.screenFrame.height * 2 / 3)
-            let height = isTall ? max(tall, Self.maxExpandedBodySize.height) : Self.maxExpandedBodySize.height
+            // A taller panel keeps a third of the screen free below it.
+            let taller: CGFloat = switch panelHeight {
+            case .regular: Self.maxExpandedBodySize.height
+            case .medium: Self.mediumExpandedBodyHeight
+            case .tall: Self.tallExpandedBodyHeight
+            }
+            let height = max(min(taller, geometry.screenFrame.height * 2 / 3), Self.maxExpandedBodySize.height)
             return CGSize(width: width, height: max(notch.height, height))
         }
     }
@@ -74,7 +98,7 @@ public struct NotchLayout: Equatable, Sendable {
 
     /// The biggest window any state needs, tall panel included; the notch view is laid out at this size once.
     public var largestWindowSize: CGSize {
-        let tall = NotchLayout(geometry: geometry, isTall: true)
+        let tall = NotchLayout(geometry: geometry, panelHeight: .tall)
         return NotchState.allCases.map { tall.windowFrame(for: $0).size }.reduce(.zero) {
             CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height))
         }

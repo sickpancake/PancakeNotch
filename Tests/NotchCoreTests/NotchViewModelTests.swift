@@ -151,6 +151,23 @@ struct NotchTallTests {
         #expect(model.state == .closed)
     }
 
+    @Test func mediumGrowsAtOnceAndShrinksBack() {
+        let model = NotchViewModel(layout: layout)
+        var fitted: [NotchState] = []
+        model.fitWindow = { fitted.append($0) }
+        model.open()
+        fitted = []
+        model.setPanelHeight(.medium)
+        #expect(model.layout.panelHeight == .medium)
+        #expect(fitted.first == .expanded)
+        model.setPanelHeight(.tall)
+        #expect(model.layout.isTall)
+        model.setPanelHeight(.medium)
+        #expect(model.layout.panelHeight == .medium)
+        model.close()
+        #expect(model.layout.panelHeight == .regular)
+    }
+
     /// The drag watcher doesn't see the release of a drop on the notch or a drag out of a module.
     @Test func dropsAndDragsOutSettleTheDragWatcher() {
         let model = NotchViewModel(layout: layout, pointerLocation: { CGPoint(x: 100, y: 100) })

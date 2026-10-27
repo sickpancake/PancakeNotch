@@ -161,6 +161,9 @@ enum ShelfMenu {
             add(String(localized: "Quick Look"), "eye") { module.quickLook(files) }
             add(String(localized: "Show in Finder"), "folder") { module.reveal(files) }
             add(String(localized: "Copy Path"), "link") { module.copyPaths(files) }
+            if module.canConvert(items) {
+                add(String(localized: "Convert…", comment: "Context menu; converts files to another format"), "arrow.triangle.2.circlepath") { module.convert(items) }
+            }
         }
         if let single, case .link = single.kind {
             add(String(localized: "Open Link"), "safari") { module.open([single]) }

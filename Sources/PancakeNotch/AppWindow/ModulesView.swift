@@ -1,4 +1,5 @@
 import AgentsCore
+import ConvertKit
 import Learn
 import ModuleNowPlaying
 import ModuleShelf
@@ -876,6 +877,7 @@ private struct ShelfModuleCard: View {
         String(localized: "Drop files, images, text and links on the notch"),
         String(localized: "Click an item for a big preview, or to edit a note or link"),
         String(localized: "Right-click to copy, share or AirDrop"),
+        String(localized: "Drop files on Convert to turn them into another format"),
         String(localized: "A small tray in the notch shows the count when it's nearly full"),
     ]
 
@@ -1084,5 +1086,93 @@ private struct ShelfSettingsRows: View {
             Toggle(String(localized: "Show the Shelf's count beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
         }
+        ShelfConvertSettingsRows(settings: settings)
+    }
+}
+
+/// Convert's settings (ADR-0038): the switch, then where files go, quality and Word → PDF while it's on.
+private struct ShelfConvertSettingsRows: View {
+    @Bindable var settings: ShelfSettings
+
+    var body: some View {
+        SettingsRow(
+            title: String(localized: "Convert files"),
+            subtitle: String(localized: "While you drag files to the notch, drop them on Convert to make a PDF, a JPEG, an MP4 and more. Or right-click an item on the Shelf.")
+        ) {
+            Toggle(String(localized: "Convert files"), isOn: $settings.convertEnabled)
+                .labelsHidden()
+        }
+        if settings.convertEnabled {
+            SettingsRow(
+                title: String(localized: "Save converted files"),
+                subtitle: destinationSubtitle
+            ) {
+                HStack(spacing: 8) {
+                    if settings.convertDestination == .folder {
+                        Button(String(localized: "Choose…", comment: "Picks the folder converted files go to")) { _ = chooseFolder() }
+                    }
+                    MonochromeSegmented(
+                        title: String(localized: "Save converted files"),
+                        options: [
+                            (.nextToOriginal, String(localized: "Next to the original")),
+                            (.folder, String(localized: "In a folder")),
+                        ],
+                        selection: destination
+                    )
+                }
+            }
+            SettingsRow(
+                title: String(localized: "Quality"),
+                subtitle: String(localized: "Smaller file shrinks big pictures to 2000 pixels and compresses more, so large photos can convert too.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Quality"),
+                    options: ConvertQuality.allCases.map { ($0, $0.title) },
+                    selection: $settings.convertQuality
+                )
+            }
+            SettingsRow(
+                title: String(localized: "Word to PDF (experimental)"),
+                subtitle: String(localized: "Word documents can become PDFs too. The text and its styles are kept; pictures are left out.")
+            ) {
+                Toggle(String(localized: "Word to PDF (experimental)"), isOn: $settings.convertWordToPDF)
+                    .labelsHidden()
+            }
+        }
+    }
+
+    private var destinationSubtitle: String {
+        if settings.convertDestination == .folder, let folder = settings.convertFolder {
+            return String(localized: "In \((folder.path as NSString).abbreviatingWithTildeInPath). They're added to the Shelf too.", comment: "Convert settings; a folder's path")
+        }
+        return String(localized: "They're added to the Shelf too. If the folder can't be written to, the Shelf keeps them.")
+    }
+
+    /// Choosing "In a folder" asks for the folder; cancelling keeps "Next to the original".
+    private var destination: Binding<ShelfSettings.ConvertDestination> {
+        Binding {
+            settings.convertDestination
+        } set: { value in
+            guard value == .folder, settings.convertFolder == nil else {
+                settings.convertDestination = value
+                return
+            }
+            if chooseFolder() { settings.convertDestination = .folder }
+        }
+    }
+
+    /// The folder picker; true when a folder was chosen.
+    private func chooseFolder() -> Bool {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = settings.convertFolder ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.prompt = String(localized: "Choose")
+        panel.message = String(localized: "Choose where converted files go.")
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        settings.convertFolder = url
+        settings.convertDestination = .folder
+        return true
     }
 }

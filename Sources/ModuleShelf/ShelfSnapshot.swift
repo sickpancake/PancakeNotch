@@ -1,4 +1,5 @@
 import AppKit
+import ConvertKit
 import NotchCore
 import UniformTypeIdentifiers
 
@@ -91,6 +92,49 @@ public enum ShelfSnapshot {
         row(files: ["Quarterly Report.pdf"]) { module in
             module.detailID = module.store.items.first?.id
             module.largePreview.preload(NSWorkspace.shared.icon(for: .pdf))
+        }
+
+        // Convert (ADR-0038): the drop zone (and dimmed for files with no other format), then the row of
+        // formats in the medium panel, converting, done, failed, and the strip when it ends out of sight.
+        for zone in [ShelfModule.ConvertZone.ready, .cantConvert] {
+            row { module in
+                module.dropZone = zone == .ready ? .convert : .shelf
+                module.convertZone = zone
+                module.dragCanAirDrop = true
+            }
+        }
+        func convert(_ module: ShelfModule, _ names: [String], _ options: [ConvertOption], _ phase: ShelfConversion.Phase, progress: Double = 0) {
+            let session = ShelfConversion(sources: names.map { root.appending(path: "Docs/\($0)") }, phase: phase)
+            session.options = options
+            session.focus = options.first(where: \.isAvailable)?.format
+            session.progress = progress
+            module.conversion = session
+            module.notch?.setPanelHeight(.medium)
+        }
+        let photo: [ConvertOption] = [
+            ConvertOption(format: .jpeg), ConvertOption(format: .png, note: .tooBig), ConvertOption(format: .tiff, note: .tooBig),
+            ConvertOption(format: .pdf),
+        ]
+        row(files: files) { module in
+            convert(module, ["Holiday.heic"], photo, .choosing)
+        }
+        row(files: files) { module in
+            convert(module, ["Holiday.heic", "Receipt.jpg", "Ticket.pdf"], [ConvertOption(format: .combinedPDF)], .choosing)
+        }
+        row(files: files) { module in
+            let clip: [ConvertOption] = [ConvertOption(format: .mp4), ConvertOption(format: .audioOnly), ConvertOption(format: .gif, note: .tooLong)]
+            convert(module, ["Birthday.mov"], clip, .converting(.mp4), progress: 0.42)
+        }
+        row(files: ["Holiday.jpg"]) { module in
+            let made = module.store.items.compactMap(\.fileURL)
+            convert(module, ["Holiday.heic"], photo, .done(ShelfConversion.Done(format: .jpeg, files: made, failed: 0, keptInShelf: false)))
+        }
+        row { module in
+            convert(module, ["Holiday.heic"], photo, .failed(ConvertFailure.failed.message))
+        }
+        row(.compact, files: Array(full.prefix(3))) { module in
+            module.convertPeekText = ShelfModule.doneText(files: [URL(fileURLWithPath: "/Report.pdf")])
+            module.notch?.peekForSnapshot(module)
         }
 
         // The app window's preview: example items, open and shrunk.

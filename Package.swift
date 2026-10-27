@@ -8,6 +8,8 @@ let package = Package(
         .executable(name: "PancakeNotch", targets: ["PancakeNotch"]),
         // The tiny hook helper the AI tools run after Connect (ADR-0037).
         .executable(name: "pancakenotch-hook", targets: ["AgentHook"]),
+        // The Shelf's conversion helper (ADR-0038): started per job, so the app never loads the media frameworks.
+        .executable(name: "pancakenotch-convert", targets: ["ConvertHelper"]),
     ],
     dependencies: [
         // Automatic updates (ADR-0003, ADR-0005).
@@ -18,7 +20,7 @@ let package = Package(
             name: "PancakeNotch",
             dependencies: [
                 "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
-                "AgentsCore", "ModuleAgents",
+                "AgentsCore", "ModuleAgents", "ConvertKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ]
         ),
@@ -47,7 +49,18 @@ let package = Package(
         .executableTarget(name: "AgentHook"),
         .target(
             name: "ModuleShelf",
-            dependencies: ["NotchCore"]
+            dependencies: ["NotchCore", "ConvertKit"]
+        ),
+        // Convert (ADR-0038): formats, limits and the helper's messages. Foundation only, for the app.
+        .target(name: "ConvertKit"),
+        // The conversions themselves (ImageIO, PDFKit, AVFoundation, AppKit's text system). Helper only.
+        .target(
+            name: "ConvertEngine",
+            dependencies: ["ConvertKit"]
+        ),
+        .executableTarget(
+            name: "ConvertHelper",
+            dependencies: ["ConvertKit", "ConvertEngine"]
         ),
         .target(
             name: "ModuleNowPlaying",
@@ -63,7 +76,11 @@ let package = Package(
         ),
         .testTarget(
             name: "ModuleShelfTests",
-            dependencies: ["ModuleShelf"]
+            dependencies: ["ModuleShelf", "ConvertKit"]
+        ),
+        .testTarget(
+            name: "ConvertTests",
+            dependencies: ["ConvertKit", "ConvertEngine"]
         ),
         .testTarget(
             name: "LearnTests",

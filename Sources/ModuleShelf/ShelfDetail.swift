@@ -70,6 +70,8 @@ extension ShelfModule {
     /// One click, Space or Return: show the item in the tall notch.
     func openDetail(_ id: UUID) {
         guard !isChoosing, prompt == nil, store.items.contains(where: { $0.id == id }) else { return }
+        // A new file dragged or clicked from Convert's result: the item takes over.
+        endConversion()
         selection = [id]
         detailID = id
     }
