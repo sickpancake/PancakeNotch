@@ -88,6 +88,26 @@ struct ConvertCatalogTests {
         #expect(ConvertCatalog.combineNote(for: [long, long], quality: .balanced) == .tooBig)
     }
 
+    @Test func heicEstimatesCoverOlderMacOSDecoders() throws {
+        // Peaks from the macOS 15 CI runner. A 6 MP image needs a larger decode buffer than a
+        // 12 MP image when shrinking to 2000 px, so source pixel count alone is insufficient.
+        for (width, height, bestPeak, smallerPeak) in [
+            (2828, 2121, 21.1, 31.5), (4032, 3024, 32.2, 15.7), (5657, 4243, 59.6, 33.9),
+        ] {
+            let image = photo(width, height, type: "public.heic")
+            for format in [ConvertFormat.jpeg, .pdf] {
+                let best = try #require(ConvertLimits.estimatedPeak(of: format, from: image, quality: .best, passesThrough: true))
+                let smaller = try #require(ConvertLimits.estimatedPeak(of: format, from: image, quality: .smaller, passesThrough: true))
+                #expect(best >= bestPeak + 3)
+                #expect(smaller >= smallerPeak + 3)
+            }
+        }
+        // The old estimate offered the 6 MP PNG conversion that exceeded the helper budget on CI.
+        #expect(ConvertCatalog.note(for: .png, info: photo(2828, 2121, type: "public.heic"), quality: .smaller) == .tooBig)
+        #expect(ConvertCatalog.note(for: .png, info: photo(4032, 3024, type: "public.heic"), quality: .smaller) == nil)
+        #expect(ConvertCatalog.note(for: .png, info: photo(5657, 4243, type: "public.heic"), quality: .smaller) == .tooBig)
+    }
+
     @Test func pdfNotes() {
         let locked = ConvertFileInfo(kind: .pdf, pageCount: 3, isLocked: true)
         #expect(ConvertCatalog.note(for: .pagePNG, info: locked, quality: .balanced) == .locked)

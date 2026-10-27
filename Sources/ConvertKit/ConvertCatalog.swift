@@ -214,27 +214,30 @@ public enum ConvertLimits {
         let shrinkSide = quality.maxPixelSize.map(Double.init).flatMap { longSide > $0 ? $0 : nil }
         let shrinks = shrinkSide != nil
         let output = shrinkSide.map { source * ($0 / longSide) * ($0 / longSide) } ?? source
-        // A JPEG decodes at a half, quarter or eighth of its size for free, so shrinking one decodes it at
-        // the smallest of those still bigger than the result.
-        var jpegScale = 1.0
+        // JPEG's reduced decode uses a half, quarter or eighth of its size. HEIF's estimate uses
+        // this intermediate size too, to cover higher measured peaks on older macOS.
+        var decodeScale = 1.0
         if let shrinkSide {
-            while longSide * jpegScale / 2 >= shrinkSide, jpegScale > 1.0 / 8 { jpegScale /= 2 }
+            while longSide * decodeScale / 2 >= shrinkSide, decodeScale > 1.0 / 8 { decodeScale /= 2 }
         }
-        let jpegDecoded = source * jpegScale * jpegScale
+        let reducedDecoded = source * decodeScale * decodeScale
         let family = info.family
         let flattens = info.hasAlpha == true || info.isCMYK == true
 
         // MiB, fitted to the helper's peak on each path (with room above it):
         // ImageIO re-encoding straight from the file…
         let streamed: Double = switch family {
-        case .jpeg: shrinks ? 24 + 2 * jpegDecoded : 16 + 0.45 * source
-        case .heif: shrinks ? 21 + 0.4 * source : 12 + 1.3 * source
+        case .jpeg: shrinks ? 24 + 2 * reducedDecoded : 16 + 0.45 * source
+        case .heif: shrinks ? max(21 + 0.4 * source, 20 + 3 * reducedDecoded + 0.15 * source) : 18 + 1.9 * source
         case .other: shrinks ? 10 + 8 * source : 5 + 6.5 * source
         }
         // …decoding it whole for an encoder that needs every pixel (PNG, TIFF)…
         let decoded: Double = switch family {
-        case .jpeg: shrinks ? 17 + 9.5 * jpegDecoded + 0.6 * source : 5 + 9.6 * source
-        case .heif: shrinks ? max(48 + 0.5 * source, 36 + source) : 20 + 11.5 * output
+        case .jpeg: shrinks ? 17 + 9.5 * reducedDecoded + 0.6 * source : 5 + 9.6 * source
+        case .heif:
+            // macOS 15 needs more space than newer systems when the source cannot decode straight
+            // to the requested size. Include that retained buffer before offering PNG or TIFF.
+            shrinks ? max(max(48 + 0.5 * source, 36 + source), 20 + 8 * reducedDecoded + 0.2 * source) : 20 + 11.5 * output
         case .other: 5 + 10 * output + (shrinks ? 7 * source : 0)
         }
         // …and drawing it onto white first.
