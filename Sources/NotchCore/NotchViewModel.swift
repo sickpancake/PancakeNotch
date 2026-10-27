@@ -343,11 +343,18 @@ public final class NotchViewModel {
     /// Grows the open panel to the taller version a module asked for (the Shelf's editor and preview),
     /// or back. The panel goes back to normal on its own when the notch closes.
     public func setTall(_ tall: Bool) {
-        guard layout.isTall != tall, !tall || state == .expanded else { return }
+        setPanelHeight(tall ? .tall : .regular)
+    }
+
+    /// Grows or shrinks the open panel to `height` (the Shelf's Convert row is `.medium`). The panel
+    /// goes back to normal on its own when the notch closes.
+    public func setPanelHeight(_ height: PanelHeight) {
+        guard layout.panelHeight != height, height == .regular || state == .expanded else { return }
+        let grows = height > layout.panelHeight
         transitionID += 1
         let id = transitionID
         var target = layout
-        target.isTall = tall
+        target.panelHeight = height
         withAnimation(Self.tallAnimation) {
             layout = target
         } completion: { [weak self] in
@@ -355,7 +362,7 @@ public final class NotchViewModel {
             self.fitWindow?(self.state)
         }
         // Grow the window now, shrink it once the animation settles.
-        if tall { fitWindow?(state) }
+        if grows { fitWindow?(state) }
     }
 
     /// The drag left the notch without dropping: close like a hover exit.
@@ -595,8 +602,8 @@ public final class NotchViewModel {
         earsAsleep = false
         withAnimation(Self.animation(opening: opening)) {
             state = newState
-            // The tall panel shrinks along with the close.
-            if closing { layout.isTall = false }
+            // A taller panel shrinks along with the close.
+            if closing { layout.panelHeight = .regular }
         } completion: { [weak self] in
             // Shrink only after the latest animation, so an earlier one can't clip a newer one.
             guard let self, self.transitionID == id else { return }
@@ -640,13 +647,13 @@ public final class NotchViewModel {
         let wasExpanded = state == .expanded
         state = restingState
         earsAsleep = state == .closed
-        layout.isTall = false
+        layout.panelHeight = .regular
         layout.isPeeking = false
         fitWindow?(state)
         if wasExpanded { leftExpanded() }
     }
 
-    /// Growing to the tall panel and back: quicker than opening, it follows a click.
+    /// Growing to a taller panel and back: quicker than opening, it follows a click.
     static var tallAnimation: Animation {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             ? .easeInOut(duration: 0.15)

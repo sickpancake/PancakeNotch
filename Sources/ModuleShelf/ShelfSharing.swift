@@ -21,7 +21,7 @@ final class ShelfSharing: NSObject, NSSharingServiceDelegate, @preconcurrency NS
         return types.contains { [.fileURL, .URL, .png, .tiff, .string].contains($0) || promises.contains($0.rawValue) }
     }
 
-    private static var temporaryRoot: URL {
+    static var temporaryRoot: URL {
         FileManager.default.temporaryDirectory.appending(path: "PancakeNotch", directoryHint: .isDirectory)
     }
 

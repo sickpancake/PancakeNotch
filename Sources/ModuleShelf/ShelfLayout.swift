@@ -7,6 +7,8 @@ struct ShelfLayout: Equatable {
     static let sidePadding: CGFloat = 18
     static let bottomPadding: CGFloat = 12
     static let airDropWidth: CGFloat = 128
+    static let convertWidth: CGFloat = 128
+    static let zoneSpacing: CGFloat = 8
     static let tileSize = CGSize(width: 74, height: 90)
     static let tileSpacing: CGFloat = 6
 
@@ -39,5 +41,11 @@ struct ShelfLayout: Equatable {
     /// The AirDrop drop zone at the trailing end of the content area.
     var airDropZone: CGRect {
         CGRect(x: content.maxX - Self.airDropWidth, y: content.minY, width: Self.airDropWidth, height: content.height)
+    }
+
+    /// The Convert drop zone: before AirDrop when that shows, otherwise at the trailing end.
+    func convertZone(withAirDrop: Bool) -> CGRect {
+        let end = withAirDrop ? airDropZone.minX - Self.zoneSpacing : content.maxX
+        return CGRect(x: end - Self.convertWidth, y: content.minY, width: Self.convertWidth, height: content.height)
     }
 }

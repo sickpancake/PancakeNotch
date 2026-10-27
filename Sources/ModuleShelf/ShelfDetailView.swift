@@ -266,6 +266,11 @@ private struct ShelfFilePreview: View {
                     HStack(spacing: 6) {
                         ShelfPillButton(title: String(localized: "Show in Finder")) { module.reveal([item]) }
                         ShelfPillButton(title: String(localized: "Quick Look")) { module.quickLook([item]) }
+                        if module.canConvert([item]) {
+                            ShelfPillButton(title: String(localized: "Convert…", comment: "Shelf item preview; converts the file to another format")) {
+                                module.convert([item])
+                            }
+                        }
                     }
                 }
             }

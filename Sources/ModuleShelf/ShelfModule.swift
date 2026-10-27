@@ -1,4 +1,5 @@
 import AppKit
+import ConvertKit
 import NotchCore
 import Observation
 import os
@@ -38,7 +39,7 @@ public final class ShelfModule: NotchModule {
 
     @ObservationIgnored private(set) weak var notch: NotchViewModel?
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
-    @ObservationIgnored private let promiseQueue: OperationQueue = {
+    @ObservationIgnored let promiseQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.qualityOfService = .userInitiated
         queue.name = "Shelf file promises"
@@ -47,7 +48,11 @@ public final class ShelfModule: NotchModule {
 
     // MARK: UI state
 
-    enum DropZone: Equatable { case shelf, airDrop }
+    enum DropZone: Equatable { case shelf, convert, airDrop }
+
+    /// The Convert zone during a drag: ready, or dimmed with "Can't convert" when the files' kinds are
+    /// known and nothing fits. Nil hides it (text and links aren't converted).
+    enum ConvertZone: Equatable { case ready, cantConvert }
 
     enum Prompt: Equatable {
         /// Some dropped content is already on the shelf.
@@ -67,6 +72,20 @@ public final class ShelfModule: NotchModule {
     var dropZone: DropZone?
     /// The drag over the notch can be AirDropped (shows the AirDrop zone).
     var dragCanAirDrop = false
+    /// The Convert zone for the drag over the notch.
+    var convertZone: ConvertZone?
+    /// `convertZone` came from the files' names (or there are none to wait for).
+    @ObservationIgnored var convertZoneIsFinal = false
+    /// The Convert session (ADR-0038): the format row, progress, then the result. Holds the notch open
+    /// while it shows.
+    var conversion: ShelfConversion?
+    /// Runs conversions: the helper in the app, a fake in tests. Nil hides Convert.
+    @ObservationIgnored var convertRunner: (any ShelfConvertRunning)? = ShelfConvertHelper.bundled
+    /// What the strip under the notch says when a conversion finished out of sight.
+    var convertPeekText: String?
+    var convertPeekFailed = false
+    @ObservationIgnored var convertClickMonitor: Any?
+    @ObservationIgnored var convertAppObserver: (any NSObjectProtocol)?
     var prompt: Prompt? {
         didSet {
             // A card (e.g. a late promised file made the Shelf full) shows on the tiles: leave the item view.
@@ -119,6 +138,8 @@ public final class ShelfModule: NotchModule {
     /// "drag all" handle, so a drop target can refuse the Shelf's own items.
     /// Items may be dragged to places inside the app (the practice Shelf, for the lesson's box).
     @ObservationIgnored var dragsOutWithinApp = false
+    /// Converted files stay in the Shelf's own storage instead of beside the original (the practice Shelf).
+    @ObservationIgnored var keepsConvertedFiles = false
 
     public nonisolated static func isOwnDragSource(_ source: Any?) -> Bool {
         source is ShelfTileNSView
@@ -151,10 +172,12 @@ public final class ShelfModule: NotchModule {
     /// The Shelf wants an ear while it's nearly full (and the setting is on).
     public var isActive: Bool { showsNearlyFull }
 
-    /// A long tile row scrolls sideways, so a swipe over it mustn't switch modules.
+    /// A long tile row (or Convert's format row) scrolls sideways, so a swipe over it mustn't switch modules.
     public func scrollsHorizontally(at point: CGPoint) -> Bool {
-        guard let layout = notch?.layout, detailID == nil, prompt == nil, dropZone == nil else { return false }
+        guard let layout = notch?.layout, detailID == nil, dropZone == nil else { return false }
         let shelf = ShelfLayout(layout)
+        if visibleConversion != nil { return shelf.content.contains(point) }
+        guard prompt == nil else { return false }
         let rowWidth = CGFloat(store.items.count) * (ShelfLayout.tileSize.width + ShelfLayout.tileSpacing)
         return rowWidth > shelf.content.width && shelf.content.contains(point)
     }
@@ -165,6 +188,7 @@ public final class ShelfModule: NotchModule {
             if prompt != nil { dismissPrompt() }
             menu?.close()
             detailID = nil
+            endConversion()
             self.notch?.setTall(false)
             self.notch?.releaseKeyFocus?()
             store.stopObserving(by: self)
@@ -201,7 +225,7 @@ public final class ShelfModule: NotchModule {
         CompactEars(main: AnyView(ShelfEar(module: self)))
     }
 
-    public var holdsOpen: Bool { prompt != nil || detailID != nil || otherHolds }
+    public var holdsOpen: Bool { prompt != nil || detailID != nil || visibleConversion != nil || otherHolds }
 
     public var accessibilityStatus: String? {
         showsNearlyFull ? Self.earLabel(count: store.items.count) : nil
@@ -219,6 +243,7 @@ public final class ShelfModule: NotchModule {
     }
 
     public func notchDidOpen() {
+        returnToConversion()
         thumbnails.load(store.items.prefix(ShelfThumbnails.firstVisible), scale: 2)
         Task {
             await store.prune(maxAge: settings.autoClear.maxAge)
@@ -228,10 +253,12 @@ public final class ShelfModule: NotchModule {
     public func notchDidClose() {
         menu?.close()
         detailID = nil
+        leaveConversion()
         thumbnails.clear()
         selection = []
         confirmingClear = false
         dropZone = nil
+        convertZone = nil
         if prompt != nil { dismissPrompt() }
     }
 
@@ -240,6 +267,12 @@ public final class ShelfModule: NotchModule {
     }
 
     public var keepsDragsBelowMenuBar: Bool { settings.dragToTop == .openShelf }
+
+    /// "✓ Converted Report.pdf" under the notch when a conversion finished while it was closed.
+    public func peekView(layout: NotchLayout) -> AnyView? {
+        guard let convertPeekText else { return nil }
+        return AnyView(ShelfConvertPeek(text: convertPeekText, failed: convertPeekFailed))
+    }
 
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
         showDropZones(for: info.draggingPasteboard, at: point) ? .copy : []
@@ -250,8 +283,8 @@ public final class ShelfModule: NotchModule {
         showDropZones(for: pasteboard, at: point)
     }
 
-    /// Shows the Shelf and AirDrop drop zones, highlighting the one under `point`. Returns whether
-    /// the drag carries anything the Shelf takes.
+    /// Shows the Shelf, Convert and AirDrop drop zones, highlighting the one under `point`. Returns
+    /// whether the zone under `point` takes the drag.
     @discardableResult
     private func showDropZones(for pasteboard: NSPasteboard, at point: CGPoint) -> Bool {
         guard ShelfDropReader.canRead(pasteboard), let layout = notch?.layout else {
@@ -261,16 +294,65 @@ public final class ShelfModule: NotchModule {
         if dropZone == nil {
             dragCanAirDrop = settings.showsAirDropZone && ShelfSharing.canAirDrop(pasteboard)
         }
-        let zone: DropZone = dragCanAirDrop && ShelfLayout(layout).airDropZone.contains(point) ? .airDrop : .shelf
+        // The early opening may only know "files" (the Dock's drags): look again once their names show.
+        if dropZone == nil || !convertZoneIsFinal {
+            let reading = convertZoneReading(pasteboard)
+            if convertZone != reading.zone { convertZone = reading.zone }
+            convertZoneIsFinal = reading.isFinal
+        }
+        let shelf = ShelfLayout(layout)
+        let zone: DropZone = if dragCanAirDrop, shelf.airDropZone.contains(point) {
+            .airDrop
+        } else if convertZone != nil, shelf.convertZone(withAirDrop: dragCanAirDrop).contains(point) {
+            .convert
+        } else {
+            .shelf
+        }
         if dropZone != zone { dropZone = zone }
-        return true
+        return zone != .convert || convertZone == .ready
+    }
+
+    /// Whether the drag's files can be converted, from their names (no disk access mid-drag). Promised
+    /// files and picture data aren't known until they arrive: the zone takes them and says after.
+    func convertZone(for pasteboard: NSPasteboard) -> ConvertZone? {
+        convertZoneReading(pasteboard).zone
+    }
+
+    /// The Convert zone for a drag, and whether that's final. Not final: the pasteboard says "files" but
+    /// their names can't be read yet (the Dock's drags until they reach the notch's window, where AppKit
+    /// hands over the real pasteboard). The zone shows meanwhile; dimming waits for the names.
+    private func convertZoneReading(_ pasteboard: NSPasteboard) -> (zone: ConvertZone?, isFinal: Bool) {
+        guard canConvert else { return (nil, true) }
+        let files = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        if !files.isEmpty { return (convertFormats(for: files).isEmpty ? .cantConvert : .ready, true) }
+        let types = pasteboard.types ?? []
+        if types.contains(.fileURL) { return (.ready, false) }
+        let promises = Set(NSFilePromiseReceiver.readableDraggedTypes)
+        let comesLater = types.contains { promises.contains($0.rawValue) || $0 == .png || $0 == .tiff }
+        return (comesLater ? .ready : nil, true)
     }
 
     public func performDrop(_ info: any NSDraggingInfo, at point: CGPoint) -> Bool {
         let zone = dropZone ?? .shelf
+        let convertible = convertZone == .ready
         dropZone = nil
+        convertZone = nil
         let pasteboard = info.draggingPasteboard
         logger.info("Drop types: \(pasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
+
+        if zone == .convert {
+            guard convertible else { return false }
+            // Picture data and long text are written to a temporary folder, gone when Convert ends.
+            let drop = ShelfDropReader.read(pasteboard) { try ShelfSharing.makeTemporaryFolder() }
+            let files = drop.inputs.compactMap { input -> URL? in
+                if case .file(let url, _) = input { return url }
+                return nil
+            }
+            guard !files.isEmpty || !drop.promises.isEmpty else { return false }
+            closeDetail()
+            startConversion(files, promises: drop.promises, temporaryFolders: drop.inputs.compactMap(\.temporaryFolder))
+            return true
+        }
 
         if zone == .airDrop {
             let drop = ShelfDropReader.read(pasteboard) { try ShelfSharing.makeTemporaryFolder() }
@@ -296,12 +378,15 @@ public final class ShelfModule: NotchModule {
 
     public func dragEnded() {
         dropZone = nil
+        convertZone = nil
     }
 
     /// A click elsewhere in the app window closes an open item in a practice Shelf, the way a click in
     /// another app closes one in the real notch.
     public func clickedOutsidePreview() {
         closeDetail()
+        // The format row goes too; a conversion that's running keeps its progress on screen.
+        if conversion?.isConverting == false { endConversion() }
     }
 
     public func handleKey(_ event: NSEvent) -> Bool {
@@ -310,6 +395,7 @@ public final class ShelfModule: NotchModule {
             // ⌘ shortcuts (⌘Q…) still go through.
             return menu.handleKey(event) || !event.modifierFlags.contains(.command)
         }
+        if visibleConversion != nil { return handleConvertKey(event) }
         // The tall view: Esc goes back to the tiles (Space too, for a file); other keys belong to the editor.
         if let item = detailItem {
             // The app usually isn't active, so the Edit menu may not see ⌘Z/⌘C/…: pass them to the editor.

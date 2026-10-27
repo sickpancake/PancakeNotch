@@ -60,6 +60,17 @@ struct NotchLayoutTests {
         #expect(tall.windowFrame(for: .expanded).height < geometry.screenFrame.height)
     }
 
+    @Test func mediumPanelSitsBetween() {
+        let heights = [PanelHeight.regular, .medium, .tall].map {
+            NotchLayout(geometry: geometry, panelHeight: $0).bodySize(for: .expanded).height
+        }
+        #expect(heights[0] < heights[1] && heights[1] < heights[2])
+        #expect(NotchLayout(geometry: geometry, panelHeight: .medium).largestWindowSize == NotchLayout(geometry: geometry).largestWindowSize)
+        // On a short screen the taller panels give way to keep a third of it free.
+        let short = NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: 1024, height: 330))
+        #expect(NotchLayout(geometry: short, panelHeight: .medium).bodySize(for: .expanded).height == 220)
+    }
+
     @Test func expandedPanelFitsNarrowScreens() {
         let narrow = NotchGeometry.simulated(in: CGRect(x: 0, y: 0, width: 500, height: 400))
         let layout = NotchLayout(geometry: narrow)

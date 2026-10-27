@@ -143,7 +143,7 @@ public final class NotchWindowController {
         var layout = NotchLayout(geometry: geometry)
 
         if let panel, let model {
-            layout.isTall = model.layout.isTall
+            layout.panelHeight = model.layout.panelHeight
             layout.isPeeking = model.layout.isPeeking
             model.layout = layout
             container?.contentSize = layout.largestWindowSize

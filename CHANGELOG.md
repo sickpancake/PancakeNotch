@@ -3,6 +3,10 @@
 What's new in each release. The release pipeline copies a version's notes into the update window,
 so write them for people using the app: short, plain, no code talk.
 
+## Unreleased
+
+- **Convert files.** Drop files on the new Convert area while you drag them to the notch, and turn them into another format in one click: pictures to JPEG, PNG, HEIC, TIFF or PDF, PDFs to pictures or text, sound to M4A, WAV and more, videos to MP4, MOV, their sound or a short GIF, and text to PDF. Several pictures and PDFs can become one PDF. It stays light: anything too big for the memory limit says so instead.
+
 ## 0.2.0 — beta
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.

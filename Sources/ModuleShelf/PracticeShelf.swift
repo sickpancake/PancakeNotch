@@ -44,6 +44,8 @@ public final class PracticeShelf {
         let store = ShelfStore(directory: folder.appending(path: "Shelf", directoryHint: .isDirectory))
         module = ShelfModule(store: store, settings: settings)
         module.dragsOutWithinApp = true
+        // Converting here leaves nothing behind: what it makes goes in the practice folder.
+        module.keepsConvertedFiles = true
         if seeded { seed(store) }
     }
 
@@ -105,6 +107,8 @@ public final class PracticeShelf {
         module.quickLook.closeIfShowing()
         // An open note saves when its view closes: do that first, so the save can't bring the folder back.
         module.clickedOutsidePreview()
+        // Stops a conversion still running, so its helper doesn't write into the folder being removed.
+        module.endConversion()
         Self.openFolders.remove(folder.lastPathComponent)
         try? FileManager.default.removeItem(at: folder)
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)

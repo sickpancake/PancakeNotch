@@ -1,3 +1,4 @@
+import ConvertKit
 import Foundation
 import Observation
 
@@ -40,6 +41,14 @@ public final class ShelfSettings {
         case allowMissionControl
     }
 
+    /// Where Convert puts what it makes (ADR-0038).
+    public enum ConvertDestination: String, CaseIterable, Sendable {
+        /// In the original's folder (the Shelf's own storage when that can't be written to).
+        case nextToOriginal
+        /// In `convertFolder`.
+        case folder
+    }
+
     public var isEnabled: Bool { didSet { defaults.set(isEnabled, forKey: Keys.enabled) } }
     public var dragOutMode: DragOutMode { didSet { defaults.set(dragOutMode.rawValue, forKey: Keys.dragOutMode) } }
     public var removeAfterDragOut: Bool { didSet { defaults.set(removeAfterDragOut, forKey: Keys.removeAfterDragOut) } }
@@ -49,6 +58,16 @@ public final class ShelfSettings {
     public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
     public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
+    /// The Convert drop zone and "Convert…" on items.
+    public var convertEnabled: Bool { didSet { defaults.set(convertEnabled, forKey: Keys.convertEnabled) } }
+    public var convertDestination: ConvertDestination {
+        didSet { defaults.set(convertDestination.rawValue, forKey: Keys.convertDestination) }
+    }
+    /// The folder chosen for `.folder`.
+    public var convertFolder: URL? { didSet { defaults.set(convertFolder?.path, forKey: Keys.convertFolder) } }
+    public var convertQuality: ConvertQuality { didSet { defaults.set(convertQuality.rawValue, forKey: Keys.convertQuality) } }
+    /// Experimental: Word and OpenDocument files to PDF (layout and pictures aren't kept).
+    public var convertWordToPDF: Bool { didSet { defaults.set(convertWordToPDF, forKey: Keys.convertWordToPDF) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -62,6 +81,11 @@ public final class ShelfSettings {
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
         showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
         dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
+        convertEnabled = defaults.object(forKey: Keys.convertEnabled) as? Bool ?? true
+        convertDestination = defaults.string(forKey: Keys.convertDestination).flatMap(ConvertDestination.init(rawValue:)) ?? .nextToOriginal
+        convertFolder = defaults.string(forKey: Keys.convertFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
+        convertQuality = defaults.string(forKey: Keys.convertQuality).flatMap(ConvertQuality.init(rawValue:)) ?? .balanced
+        convertWordToPDF = defaults.bool(forKey: Keys.convertWordToPDF)
     }
 
     private enum Keys {
@@ -73,5 +97,10 @@ public final class ShelfSettings {
         static let airDropZone = "shelf.airDropZone"
         static let showsInEars = "shelf.showsInEars"
         static let dragToTop = "shelf.dragToTop"
+        static let convertEnabled = "shelf.convert.enabled"
+        static let convertDestination = "shelf.convert.destination"
+        static let convertFolder = "shelf.convert.folder"
+        static let convertQuality = "shelf.convert.quality"
+        static let convertWordToPDF = "shelf.convert.wordToPDF"
     }
 }

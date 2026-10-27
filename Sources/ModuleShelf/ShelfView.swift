@@ -12,6 +12,8 @@ struct ShelfView: View {
     var body: some View {
         if let item = module.detailItem, module.dropZone == nil {
             ShelfDetailView(module: module, item: item, layout: layout)
+        } else if let session = module.visibleConversion, module.dropZone == nil {
+            ShelfConvertView(module: module, session: session, layout: layout)
         } else {
             tiles
         }
@@ -38,7 +40,7 @@ struct ShelfView: View {
     @ViewBuilder
     private var content: some View {
         if let zone = module.dropZone {
-            ShelfDropZones(zone: zone, showsAirDrop: module.dragCanAirDrop, layout: layout)
+            ShelfDropZones(zone: zone, convert: module.convertZone, showsAirDrop: module.dragCanAirDrop, layout: layout)
         } else if let prompt = module.prompt, !module.isChoosing {
             ShelfPromptCard(module: module, prompt: prompt)
         } else if module.store.items.isEmpty {
@@ -270,6 +272,9 @@ struct ShelfTile: View {
             Button(String(localized: "Quick Look")) { module.quickLook([item]) }
             Button(String(localized: "Show in Finder")) { module.reveal([item]) }
             Button(String(localized: "Copy Path")) { module.copyPaths([item]) }
+            if module.canConvert([item]) {
+                Button(String(localized: "Convert…")) { module.convert([item]) }
+            }
         }
         if case .link = item.kind {
             Button(String(localized: "Open Link")) { module.open([item]) }
@@ -350,20 +355,32 @@ private struct ShelfEmptyView: View {
 
 // MARK: Dropping
 
-/// Shown while a drag is over the open notch: the Shelf, and AirDrop when the content can be sent.
+/// Shown while a drag is over the open notch: the Shelf, Convert when files are dragged (ADR-0038),
+/// and AirDrop when the content can be sent.
 struct ShelfDropZones: View {
     let zone: ShelfModule.DropZone
+    var convert: ShelfModule.ConvertZone?
     let showsAirDrop: Bool
     let layout: ShelfLayout
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ShelfLayout.zoneSpacing) {
             target(
                 symbol: "tray.and.arrow.down.fill",
                 title: String(localized: "Drop to add to Shelf"),
                 isTargeted: zone == .shelf
             )
+            if let convert {
+                target(
+                    symbol: "arrow.triangle.2.circlepath",
+                    title: String(localized: "Convert", comment: "Drop zone that converts files to another format"),
+                    caption: convert == .cantConvert ? String(localized: "Can't convert", comment: "Under the Convert drop zone: these files have no other format") : nil,
+                    isTargeted: zone == .convert && convert == .ready
+                )
+                .opacity(convert == .cantConvert ? 0.45 : 1)
+                .frame(width: ShelfLayout.convertWidth)
+            }
             if showsAirDrop {
                 target(
                     symbol: "dot.radiowaves.left.and.right",
@@ -375,7 +392,7 @@ struct ShelfDropZones: View {
         }
     }
 
-    private func target(symbol: String, title: String, isTargeted: Bool) -> some View {
+    private func target(symbol: String, title: String, caption: String? = nil, isTargeted: Bool) -> some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(.white.opacity(isTargeted ? 0.14 : 0.04))
             .strokeBorder(
@@ -390,6 +407,11 @@ struct ShelfDropZones: View {
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))
                         .multilineTextAlignment(.center)
+                    if let caption {
+                        Text(caption)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .padding(.top, -3)
+                    }
                 }
                 .foregroundStyle(.white.opacity(isTargeted ? 1 : 0.6))
             }

@@ -1,4 +1,5 @@
 import AgentsCore
+import ConvertKit
 import ModuleShelf
 import NotchCore
 import NowPlayingCore
@@ -161,6 +162,15 @@ struct HelpView: View {
                         subtitle: String(localized: "While you drag something to the notch, the pointer stops just below the menu bar so Mission Control doesn't start. Let go over the open notch.")
                     ) {
                         EmptyView()
+                    }
+                }
+                if settings.convertEnabled {
+                    SettingsRow(
+                        title: String(localized: "Convert says \"Too big\""),
+                        subtitle: String(localized: "Converting runs in a small helper so PancakeNotch stays light. Set Quality to Smaller file in Shelf settings and big photos shrink enough to fit.")
+                    ) {
+                        Button(String(localized: "Use Smaller File")) { settings.convertQuality = .smaller }
+                            .disabled(settings.convertQuality == .smaller)
                     }
                 }
                 SettingsRow(

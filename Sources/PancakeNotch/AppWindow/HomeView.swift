@@ -39,7 +39,8 @@ struct HomeView: View {
                 preferences: context.preferences,
                 shortcuts: context.shortcuts,
                 showsNowPlayingTips: context.nowPlayingSettings.isEnabled,
-                showsShelfTips: context.shelfSettings.isEnabled
+                showsShelfTips: context.shelfSettings.isEnabled,
+                showsConvertTip: context.shelfSettings.isEnabled && context.shelfSettings.convertEnabled
             ) { section = .keyboard }
                 .padding(.top, 14)
         }
@@ -393,6 +394,7 @@ private struct TipsCard: View {
     let shortcuts: ShortcutController
     let showsNowPlayingTips: Bool
     let showsShelfTips: Bool
+    var showsConvertTip = false
     let openKeyboardSettings: () -> Void
 
     var body: some View {
@@ -452,7 +454,10 @@ private struct TipsCard: View {
         let shelf: [(symbol: String, title: String, detail: String)] = showsShelfTips ? [
             ("tray.and.arrow.down", String(localized: "Drop things on the notch"),
              String(localized: "Drag files, images, text or links to the notch to keep them on the Shelf.")),
-        ] + (showsNowPlayingTips ? [] : [
+        ] + (showsConvertTip ? [
+            ("arrow.triangle.2.circlepath", String(localized: "Convert a file"),
+             String(localized: "Drop files on Convert while you drag them to the notch to make a PDF, JPEG, MP4 and more.")),
+        ] : []) + (showsNowPlayingTips ? [] : [
             ("hand.point.up.left", String(localized: "Click an item to open it"),
              String(localized: "See a big preview or edit a note or link. Right-click for Copy, AirDrop and more.")),
         ]) : []

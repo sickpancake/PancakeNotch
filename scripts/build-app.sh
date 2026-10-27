@@ -24,6 +24,9 @@ cp "$BIN_DIR/PancakeNotch" "$APP/Contents/MacOS/PancakeNotch"
 # Agents' hook helper (ADR-0037): a small C program the AI tools run after Connect, which copies it
 # to Application Support so the tools' settings don't depend on where the app is.
 cp "$BIN_DIR/pancakenotch-hook" "$APP/Contents/MacOS/pancakenotch-hook"
+# The Shelf's conversion helper (ADR-0038): started for one conversion at a time, so the media
+# frameworks never load into the app.
+cp "$BIN_DIR/pancakenotch-convert" "$APP/Contents/MacOS/pancakenotch-convert"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
@@ -65,9 +68,12 @@ rm -rf "$SPARKLE_DIR/Versions/B/Headers" "$SPARKLE_DIR/Versions/B/PrivateHeaders
 if [[ "$CONFIG" == "release" ]]; then
   strip -S -x "$APP/Contents/MacOS/PancakeNotch" 2>/dev/null
   strip -S -x "$APP/Contents/MacOS/pancakenotch-hook" 2>/dev/null
+  strip -S -x "$APP/Contents/MacOS/pancakenotch-convert" 2>/dev/null
   # Toolchain paths baked in at link time (they don't exist on people's Macs; Swift lives in /usr/lib/swift).
-  otool -l "$APP/Contents/MacOS/PancakeNotch" | awk '/LC_RPATH/ { getline; getline; print $2 }' | while read -r RPATH; do
-    case "$RPATH" in /usr/lib/*|@*) ;; *) install_name_tool -delete_rpath "$RPATH" "$APP/Contents/MacOS/PancakeNotch" ;; esac
+  for BINARY in "$APP/Contents/MacOS/PancakeNotch" "$APP/Contents/MacOS/pancakenotch-convert"; do
+    otool -l "$BINARY" | awk '/LC_RPATH/ { getline; getline; print $2 }' | while read -r RPATH; do
+      case "$RPATH" in /usr/lib/*|@*) ;; *) install_name_tool -delete_rpath "$RPATH" "$BINARY" ;; esac
+    done
   done
 fi
 SPARKLE_LICENSE="$(find "$ROOT/.build/checkouts/Sparkle" "$ROOT/.build/artifacts" -maxdepth 3 -name LICENSE -path '*parkle*' 2>/dev/null | head -1)"
@@ -84,6 +90,7 @@ sign "$SPARKLE/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
 sign "$APP/Contents/MacOS/pancakenotch-hook"
+sign "$APP/Contents/MacOS/pancakenotch-convert"
 sign "$APP"
 
 echo "Built $APP"
