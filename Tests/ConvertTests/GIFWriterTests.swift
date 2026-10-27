@@ -128,6 +128,49 @@ struct GIFWriterTests {
         #expect(worst < 60)
     }
 
+    @Test func aBigFlatAreaLeavesColoursForTheRest() throws {
+        let fixture = try ConvertFixture()
+        let url = fixture.url("c.gif")
+        let width = 200, height = 120
+        let writer = try GIFWriter(url: url, width: width, height: height)
+        // Like a video game: a clear sky over a field of many greens, with brown and grey patches and specks
+        // of every other colour (hearts, text).
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        var seed: UInt32 = 1
+        func noise(_ spread: Int) -> Int {
+            seed = seed &* 1_664_525 &+ 1_013_904_223
+            return Int(seed >> 24) % (spread * 2 + 1) - spread
+        }
+        func patch(_ x: Int, _ y: Int) -> (r: Int, g: Int, b: Int)? {
+            if (10..<30).contains(x), (60..<80).contains(y) { return (130, 85, 45) }
+            if (50..<65).contains(x), (90..<110).contains(y) { return (125, 125, 125) }
+            return nil
+        }
+        for y in 0..<height {
+            for x in 0..<width {
+                var colour = (r: 70 + x / 4 + noise(12), g: 110 + y / 2 + noise(12), b: 40 + (x + y) / 10 + noise(12))
+                if y < 45 { colour = (200, 222, 250) }
+                if let patch = patch(x, y) { colour = (patch.r + noise(12), patch.g + noise(12), patch.b + noise(12)) }
+                if (x * 7 + y * 13) % 41 == 0 { colour = (128 + noise(127), 128 + noise(127), 128 + noise(127)) }
+                let bgra = [colour.b, colour.g, colour.r].map { UInt8(min(255, max(0, $0))) }
+                pixels.replaceSubrange((y * width + x) * 4..<((y * width + x) * 4 + 3), with: bgra)
+            }
+        }
+        try pixels.withUnsafeBytes { try writer.add(bgra: $0.baseAddress!, bytesPerRow: width * 4, time: 0) }
+        try writer.finish(end: 1)
+        let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+        let rgba = Self.rgba(try #require(CGImageSourceCreateImageAtIndex(source, 0, nil)))
+        // The sky takes one entry; the field and patches share the rest instead of a few muddy averages.
+        var total = 0
+        for index in 0..<(width * height) {
+            total += abs(Int(rgba[index * 4]) - Int(pixels[index * 4 + 2]))
+                + abs(Int(rgba[index * 4 + 1]) - Int(pixels[index * 4 + 1]))
+                + abs(Int(rgba[index * 4 + 2]) - Int(pixels[index * 4]))
+        }
+        let average = Double(total) / Double(width * height)
+        #expect(average < 10, "average error \(average)")
+    }
+
     @Test func turnsFollowTheVideo() {
         #expect(VideoConversion.quarterTurns(.identity) == 0)
         #expect(VideoConversion.quarterTurns(CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 1080, ty: 0)) == 1)

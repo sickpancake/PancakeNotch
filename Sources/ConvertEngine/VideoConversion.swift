@@ -46,10 +46,17 @@ enum VideoConversion {
         let height = max(1, Int((natural.height * scale).rounded()))
         let reader: AVAssetReader
         do { reader = try AVAssetReader(asset: asset) } catch { throw ConvertFailure.unreadable }
+        // A GIF has no colour profile, so it's shown as sRGB: the decoder converts to it, or the GIF comes
+        // out darker than the video plays.
         let frames = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: width,
             kCVPixelBufferHeightKey as String: height,
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_IEC_sRGB,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
+            ],
         ])
         frames.alwaysCopiesSampleData = false
         guard reader.canAdd(frames) else { throw ConvertFailure.unreadable }
