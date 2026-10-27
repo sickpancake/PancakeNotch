@@ -81,6 +81,11 @@ struct ConvertCatalogTests {
         let colour = ConvertFileInfo(kind: .pdf, pageCount: 1, isLocked: false, largestPictureBytes: 2480 * 3508 * 4, largestPageArea: 595 * 842)
         #expect(ConvertCatalog.combineNote(for: [grey, page], quality: .balanced) == nil)
         #expect(ConvertCatalog.combineNote(for: [colour, page], quality: .balanced) == .tooBig)
+        // Copying PDF pages preserves annotations and retains their objects until the result is saved.
+        var long = page
+        long.pageCount = 1000
+        #expect(ConvertCatalog.combineNote(for: [long], quality: .balanced) == nil)
+        #expect(ConvertCatalog.combineNote(for: [long, long], quality: .balanced) == .tooBig)
     }
 
     @Test func pdfNotes() {

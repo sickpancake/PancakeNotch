@@ -183,7 +183,7 @@ public enum ConvertLimits {
                 let area = (info.largestPageArea ?? .infinity) * quality.pageScale * quality.pageScale
                 return 12 + 10 * min(maxPagePixels, area) / 1_000_000 + pictures
             case .combinedPDF:
-                return 11 + pictures
+                return 15 + pictures
             default:
                 return nil
             }
@@ -202,7 +202,10 @@ public enum ConvertLimits {
             let peak = estimatedPeak(of: .combinedPDF, from: info, quality: quality, passesThrough: passesThrough) ?? 0
             heaviest[kind] = max(heaviest[kind] ?? 0, peak)
         }
-        return heaviest.values.reduce(0, +) - 5 * Double(max(0, heaviest.count - 1))
+        // PDFKit retains the copied page objects until it writes the result. Count all PDF pages,
+        // rather than just the largest input, including their annotation and bookmark objects.
+        let pages = infos.filter { $0.kind == .pdf }.reduce(0) { $0 + ($1.pageCount ?? 1) }
+        return heaviest.values.reduce(0, +) - 5 * Double(max(0, heaviest.count - 1)) + 0.03 * Double(pages)
     }
 
     private static func picturePeak(of format: ConvertFormat, from info: ConvertFileInfo, quality: ConvertQuality, passesThrough: Bool) -> Double? {

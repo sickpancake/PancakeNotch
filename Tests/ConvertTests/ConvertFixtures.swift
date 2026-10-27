@@ -100,11 +100,11 @@ final class ConvertFixture {
 
     /// `seconds` of a tone as uncompressed audio.
     @discardableResult
-    func saveTone(_ name: String, seconds: Double, rate: Double, channels: AVAudioChannelCount, bigEndian: Bool) throws -> URL {
+    func saveTone(_ name: String, seconds: Double, rate: Double, channels: AVAudioChannelCount, bigEndian: Bool, bits: Int = 16) throws -> URL {
         let url = url(name)
         let file = try AVAudioFile(forWriting: url, settings: [
             AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: rate, AVNumberOfChannelsKey: channels,
-            AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: bigEndian,
+            AVLinearPCMBitDepthKey: bits, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: bigEndian,
         ])
         let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: channels)!
         let frames = AVAudioFrameCount(rate * seconds)
@@ -122,6 +122,7 @@ final class ConvertFixture {
     /// A one-second H.264 clip, 160×90 at 24 fps, with the black square top-left; `turned` stores it
     /// on its side with a note to show it upright (as a phone filming upright does).
     @discardableResult
+    @MainActor
     func saveClip(_ name: String, seconds: Double = 1, turned: Bool = false) async throws -> URL {
         let url = url(name)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)

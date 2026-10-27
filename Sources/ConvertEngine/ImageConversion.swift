@@ -34,7 +34,7 @@ enum ImageConversion {
         if format == .jpeg, properties[kCGImagePropertyHasAlpha] as? Bool == true {
             // JPEG has no transparency: what was see-through becomes white, not black.
             guard let image = decode(source, maxPixelSize: shrinksTo) else { throw ConvertFailure.unreadable }
-            CGImageDestinationAddImage(destination, try flattened(image), options as CFDictionary)
+            CGImageDestinationAddImageAndMetadata(destination, try flattened(image), uprightMetadata(source), options as CFDictionary)
         } else {
             if let shrinksTo { options[kCGImageDestinationImageMaxPixelSize] = shrinksTo }
             CGImageDestinationAddImageFromSource(destination, source, 0, options as CFDictionary)
@@ -57,6 +57,14 @@ enum ImageConversion {
             )
         }
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// The picture's metadata (date, place, camera) for pixels that were turned upright: orientation "up".
+    static func uprightMetadata(_ source: CGImageSource) -> CGImageMetadata? {
+        guard let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil),
+              let upright = CGImageMetadataCreateMutableCopy(metadata) else { return nil }
+        _ = CGImageMetadataSetValueMatchingImageProperty(upright, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, 1 as CFNumber)
+        return upright
     }
 
     /// The picture drawn on white, without an alpha channel.

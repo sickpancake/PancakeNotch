@@ -8,6 +8,7 @@ import CoreGraphics
 import CoreText
 import Foundation
 import ImageIO
+import PDFKit
 import UniformTypeIdentifiers
 
 guard CommandLine.arguments.count == 2 else {
@@ -98,6 +99,18 @@ pdf("text200.pdf", pages: 200, size: CGSize(width: 612, height: 792)) { context,
     CTFrameDraw(frame, context)
 }
 let photo6 = CGImageSourceCreateWithURL(folder.appending(path: "photo6.jpg") as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }!
+// Exercise PDFKit's annotation rendering and page-copy path on a long document too.
+autoreleasepool {
+    let document = PDFDocument(url: folder.appending(path: "text200.pdf"))!
+    for index in 0..<document.pageCount {
+        let page = document.page(at: index)!
+        let mark = PDFAnnotation(bounds: CGRect(x: 72, y: 650, width: 200, height: 20), forType: .highlight, withProperties: nil)
+        mark.color = .yellow
+        page.addAnnotation(mark)
+        if index % 2 == 1 { page.rotation = 90 }
+    }
+    precondition(document.write(to: folder.appending(path: "annotated200.pdf")))
+}
 pdf("photo6.pdf", pages: 1, size: CGSize(width: 612, height: 792)) { context, _ in
     context.draw(photo6, in: CGRect(x: 36, y: 126, width: 540, height: 405))
 }

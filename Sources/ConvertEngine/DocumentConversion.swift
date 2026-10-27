@@ -11,7 +11,7 @@ enum DocumentConversion {
         let (text, attributes) = try read(url, kind: kind)
         switch format {
         case .text:
-            try write(Data(text.string.utf8), to: output)
+            try write(Data(plainText(text).utf8), to: output)
         case .rtf:
             let range = NSRange(location: 0, length: text.length)
             guard let data = try? text.data(from: range, documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
@@ -31,10 +31,7 @@ enum DocumentConversion {
 
     static func read(_ url: URL, kind: ConvertKind) throws -> (NSAttributedString, [NSAttributedString.DocumentAttributeKey: Any]) {
         if kind == .plainText {
-            var encoding = String.Encoding.utf8
-            guard let string = (try? String(contentsOf: url, usedEncoding: &encoding)) ?? (try? String(contentsOf: url, encoding: .isoLatin1)) else {
-                throw ConvertFailure.unreadable
-            }
+            guard let string = readText(url) else { throw ConvertFailure.unreadable }
             let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.black]
             return (NSAttributedString(string: string, attributes: attributes), [:])
         }
@@ -56,6 +53,71 @@ enum DocumentConversion {
             if let key = key as? String { keyed[NSAttributedString.DocumentAttributeKey(rawValue: key)] = value }
         }
         return (text, keyed)
+    }
+
+    /// A plain text file in UTF-8 or UTF-16, else in the older encoding its bytes fit (Windows, Mac, Japanese,
+    /// Chinese…), else Latin-1, which reads anything.
+    static func readText(_ url: URL) -> String? {
+        var encoding = String.Encoding.utf8
+        if let string = try? String(contentsOf: url, usedEncoding: &encoding) { return string }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        func cf(_ encoding: CFStringEncodings) -> String.Encoding {
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(encoding.rawValue)))
+        }
+        let suggested: [String.Encoding] = [.windowsCP1252, .shiftJIS, cf(.GB_18030_2000), cf(.big5), .japaneseEUC, cf(.EUC_KR), .macOSRoman]
+        var converted: NSString?
+        var lossy = ObjCBool(false)
+        let found = NSString.stringEncoding(
+            for: data,
+            encodingOptions: [.suggestedEncodingsKey: suggested.map(\.rawValue), .useOnlySuggestedEncodingsKey: true, .allowLossyKey: false],
+            convertedString: &converted, usedLossyConversion: &lossy
+        )
+        if found != 0, !lossy.boolValue, let converted { return converted as String }
+        return String(data: data, encoding: .macOSRoman) ?? String(data: data, encoding: .isoLatin1)
+    }
+
+    /// The text as a .txt file shows it: table rows on one line with tabs between the cells, a link's
+    /// address after its words, and no stand-ins for pictures or Word's line breaks.
+    static func plainText(_ text: NSAttributedString) -> String {
+        let withAddresses = NSMutableAttributedString(attributedString: text)
+        var links: [(NSRange, String)] = []
+        text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            let address = (value as? URL)?.absoluteString ?? value as? String
+            guard let address, !address.isEmpty else { return }
+            let words = (text.string as NSString).substring(with: range)
+            // A link that already reads as its address, or one within the document, adds nothing.
+            var shown = address.replacingOccurrences(of: "mailto:", with: "")
+            for prefix in ["https://", "http://"] where shown.hasPrefix(prefix) { shown.removeFirst(prefix.count) }
+            if shown.hasSuffix("/") { shown.removeLast() }
+            guard !address.hasPrefix("#"), !shown.isEmpty, !words.contains(shown) else { return }
+            links.append((range, address.hasPrefix("mailto:") ? shown : address))
+        }
+        for (range, address) in links.reversed() {
+            withAddresses.insert(NSAttributedString(string: " (\(address))"), at: NSMaxRange(range))
+        }
+
+        let string = withAddresses.string as NSString
+        var result = ""
+        var lastCell: NSTextTableBlock?
+        var hasParagraph = false
+        string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: .byParagraphs) { paragraph, range, _, _ in
+            let paragraph = paragraph ?? ""
+            let style = withAddresses.length > 0
+                ? withAddresses.attribute(.paragraphStyle, at: min(range.location, withAddresses.length - 1), effectiveRange: nil) as? NSParagraphStyle
+                : nil
+            let cell = style?.textBlocks.last as? NSTextTableBlock
+            if let cell, let last = lastCell, cell.table === last.table {
+                // Another paragraph of the same cell, the next cell of the row, or the next row.
+                result += cell === last ? " " : cell.startingRow == last.startingRow ? "\t" : "\n"
+            } else if hasParagraph {
+                result += "\n"
+            }
+            result += paragraph
+            lastCell = cell
+            hasParagraph = true
+        }
+        if withAddresses.string.last?.isNewline == true { result += "\n" }
+        return result.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
     }
 
     /// Paper size and margins: the document's own, else A4 (metric regions) or Letter, with 1-inch margins.
@@ -88,6 +150,11 @@ enum DocumentConversion {
             let range = layout.glyphRange(for: container)
             if range.length == 0, containers.count > 1 { break }
         } while NSMaxRange(layout.glyphRange(for: containers[containers.count - 1])) < layout.numberOfGlyphs && containers.count < 5000
+
+        // Longer than that: refused, rather than leaving out the end.
+        if containers.count >= 5000, NSMaxRange(layout.glyphRange(for: containers[containers.count - 1])) < layout.numberOfGlyphs {
+            throw ConvertFailure.tooBig
+        }
 
         var media = CGRect(origin: .zero, size: size)
         guard let context = CGContext(output as CFURL, mediaBox: &media, nil) else { throw ConvertFailure.cantWrite }

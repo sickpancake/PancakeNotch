@@ -70,11 +70,12 @@ for q in best balanced smaller; do
     check combinedPDF "$q" "$IN/photo12.heic" "$IN/photo3.png"
     check combinedPDF "$q" "$IN/text200.pdf" "$IN/photo6.pdf" "$IN/photo3.jpg"
     check combinedPDF "$q" "$IN/scan.pdf" "$IN/text200.pdf"
+    check combinedPDF "$q" "$IN/annotated200.pdf" "$IN/text200.pdf"
 done
 
 echo "PDF pages and text"
 for q in best balanced smaller; do
-    for f in text200.pdf photo6.pdf scan.pdf; do
+    for f in text200.pdf annotated200.pdf photo6.pdf scan.pdf; do
         check pagePNG "$q" "$IN/$f"
         check pageJPEG "$q" "$IN/$f"
     done
