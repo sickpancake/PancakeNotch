@@ -1,5 +1,7 @@
 import AppKit
-import AVFoundation
+// macOS 15's SDK predates AVAssetTrack's Sendable annotations. These tests keep their media
+// objects on the main actor; accept the older framework declarations when compiling on CI.
+@preconcurrency import AVFoundation
 import ConvertKit
 import ImageIO
 import PDFKit
