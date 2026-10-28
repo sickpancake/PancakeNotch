@@ -168,7 +168,7 @@ struct AgentsCenterTests {
         #expect(center.threads.first { $0.id == "claude:main" }?.subagents.map(\.title) == ["Apple formats"])
     }
 
-    @Test func onlyAConversationThatMayBeAHelperIsWaitedFor() async throws {
+    @Test func ordinaryRowsStayVisibleAndCompletionKeepsEvidenceWatched() async throws {
         let center = center()
         let sources = LiveAgentSources(center: center)
         defer { sources.stop() }
@@ -179,19 +179,22 @@ struct AgentsCenterTests {
             sources.handle(HookEvent(tool: .claude, name: "UserPromptSubmit", parentPID: 0,
                                      payload: ["session_id": session, "transcript_path": transcript.path, "prompt": "Fix the build"]))
         }
-        // Alone, nothing could have delegated it: it isn't waited for.
+        // An ordinary unresolved row stays visible; its evidence can still arrive later.
         try start("alone")
         try await Task.sleep(for: .milliseconds(300))
-        #expect(!sources.waitsForDelegations)
+        #expect(sources.waitsForDelegations)
         // With another conversation at work, either may be the other's helper: the transcripts are watched…
         try start("second")
         for _ in 0..<200 where !sources.waitsForDelegations { try await Task.sleep(for: .milliseconds(10)) }
         #expect(sources.waitsForDelegations)
-        // …until neither works any more.
+        // Completion does not end the watch: saved delegation evidence may still arrive.
         for session in ["alone", "second"] {
             sources.handle(HookEvent(tool: .claude, name: "Stop", parentPID: 0, payload: ["session_id": session]))
         }
-        for _ in 0..<200 where sources.waitsForDelegations { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(sources.waitsForDelegations)
+        #expect(center.threads.count == 2)
+        sources.stop()
         #expect(!sources.waitsForDelegations)
     }
 

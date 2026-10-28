@@ -213,7 +213,7 @@ struct DelegatedHelpersTests {
         #expect(center.attention == nil)
         center.apply(.init(id: "codex:helper", tool: .codex, at: now.addingTimeInterval(60), status: .done))
         #expect(alerts.isEmpty)
-        #expect(center.threads.first?.subagents.isEmpty == true)
+        #expect(center.threads.first?.subagents.first?.status == .done)
         // Its conversation gone, a helper shows on its own again.
         center.forget("claude:main")
         #expect(center.threads.map(\.id) == ["codex:helper"])

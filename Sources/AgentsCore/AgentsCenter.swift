@@ -43,7 +43,7 @@ public final class AgentsCenter {
     /// The threads of the tools not hidden in Settings, without the helpers that show under another.
     private var shown: [AgentThread] {
         let hidden = settings.hiddenTools
-        return storage.values.filter { !hidden.contains($0.tool) && !isUnderParent($0) }
+        return storage.values.filter { !hidden.contains($0.tool) && ($0.status.needsYou || !isUnderParent($0)) }
     }
 
     /// A host app's helper whose main conversation is in the list.
@@ -57,6 +57,26 @@ public final class AgentsCenter {
     @ObservationIgnored public var onPracticeEvent: (@MainActor (AgentsPracticeEvent) -> Void)?
 
     private var storage: [String: AgentThread] = [:]
+    @ObservationIgnored private var pendingFinishAlerts: [String: AgentThread] = [:]
+
+    /// File sources finish relationship discovery before deciding whether a completion is a root peek.
+    func finishDiscovery() {
+        let pending = pendingFinishAlerts
+        pendingFinishAlerts = [:]
+        for (id, previous) in pending {
+            if let thread = storage[id] { alertIfWorthIt(thread, previous: previous) }
+        }
+    }
+
+    /// Positive host helper boilerplate suppresses finish peeks while its parent record is pending.
+    /// It never hides an unresolved conversation or a permission request.
+    @ObservationIgnored private var helperEvidence: Set<String> = []
+
+    func noteHelperPrompt(_ prompt: String, for id: String) {
+        let header = String(prompt.prefix(100)).components(separatedBy: "\n").first ?? ""
+        if header.hasPrefix("Act as the "), header.hasSuffix("sub-agent for this task.") { helperEvidence.insert(id) }
+    }
+
     @ObservationIgnored private var seenAt: [String: Date] = [:]
     /// The process each thread runs in, for "bring its app forward" and "is the user looking at it".
     @ObservationIgnored private var processIDs: [String: pid_t] = [:]
@@ -120,6 +140,8 @@ public final class AgentsCenter {
         live?.stop()
         live = nil
         storage = [:]
+        helperEvidence = []
+        pendingFinishAlerts = [:]
         seenAt = [:]
         processIDs = [:]
         hostBundleIDs = [:]
@@ -154,9 +176,10 @@ public final class AgentsCenter {
         if !listVisible { live?.setDetailed(false) }
     }
 
-    /// "Clear finished": every finished thread goes now.
+    /// "Clear finished": remove completed rows, preserving the ancestors of work still in progress.
     public func clearFinished() {
-        for (id, thread) in storage where thread.status.isFinished { forget(id) }
+        let protected = Set(storage.values.filter { !$0.status.isFinished }.flatMap { ancestors(of: $0.id) })
+        for (id, thread) in storage where thread.status.isFinished && !protected.contains(id) { forget(id) }
         if isPractice { onPracticeEvent?(.cleared) }
     }
 
@@ -229,7 +252,7 @@ public final class AgentsCenter {
         var quietly = false
     }
 
-    func apply(_ update: Update) {
+    func apply(_ update: Update, deferFinishAlert: Bool = false) {
         let previous = storage[update.id]
         var thread = previous ?? AgentThread(
             id: update.id, tool: update.tool, title: "", project: "", status: update.status ?? .working,
@@ -283,7 +306,10 @@ public final class AgentsCenter {
         }
         if !isPractice { thread.canOpen = hostApp(for: update.id) != nil }
         storage[update.id] = thread
-        if !update.quietly { alertIfWorthIt(thread, previous: previous) }
+        if !update.quietly {
+            if deferFinishAlert, thread.status.isFinished, let previous, previous.status != thread.status { pendingFinishAlerts[thread.id] = previous }
+            else { alertIfWorthIt(thread, previous: previous) }
+        }
         prune(now: update.at)
     }
 
@@ -313,6 +339,8 @@ public final class AgentsCenter {
     /// Drops a thread without a trace (an idle session that never worked, a practice reset).
     func forget(_ id: String) {
         storage[id] = nil
+        helperEvidence.remove(id)
+        pendingFinishAlerts[id] = nil
         seenAt[id] = nil
         processIDs[id] = nil
         hostBundleIDs[id] = nil
@@ -325,7 +353,7 @@ public final class AgentsCenter {
     /// Every thread, helpers and hidden tools included.
     var allThreads: [AgentThread] { Array(storage.values) }
 
-    /// The thread as Settings say to show it, with the working helpers a host app started for it among
+    /// The thread as Settings say to show it, with retained host descendants among
     /// its subagents (even once its own turn is over: the helpers carry on).
     private func presented(_ thread: AgentThread) -> AgentThread {
         var shown = thread
@@ -333,7 +361,7 @@ public final class AgentsCenter {
         shown.byline = thread.byline(settings.detailStyle, name: shown.title)
         if !settings.showsSteps { shown.step = nil }
         if settings.showsSubagents {
-            let helpers = storage.values.filter { $0.parentID == thread.id && !$0.status.isFinished }.map { helper in
+            let helpers = storage.values.filter { ancestors(of: $0.id).contains(thread.id) && !$0.status.needsYou }.map { helper in
                 AgentSubagent(id: helper.id, title: helper.helperTitle ?? helper.name(settings.nameStyle),
                               status: helper.status, statusSince: helper.statusSince)
             }
@@ -350,20 +378,36 @@ public final class AgentsCenter {
 
     /// `childID` is a helper a host app started for `parentID`.
     func setParent(of childID: String, to parentID: String, title: String?) {
-        guard childID != parentID, var thread = storage[childID], thread.parentID != parentID else { return }
+        guard childID != parentID, !ancestors(of: parentID).contains(childID), var thread = storage[childID], thread.parentID != parentID else { return }
         thread.parentID = parentID
         thread.helperTitle = title
         storage[childID] = thread
     }
 
+    func clearParent(of id: String) {
+        storage[id]?.parentID = nil
+        storage[id]?.helperTitle = nil
+    }
+
+    /// Ancestor traversal handles descendants consistently and refuses cycles.
+    private func ancestors(of id: String) -> [String] {
+        var result: [String] = [], seen: Set<String> = [id]
+        var next = storage[id]?.parentID
+        while let parent = next, seen.insert(parent).inserted {
+            result.append(parent)
+            next = storage[parent]?.parentID
+        }
+        return result
+    }
+
     private func alertIfWorthIt(_ thread: AgentThread, previous: AgentThread?) {
-        guard thread.status != previous?.status, !settings.hiddenTools.contains(thread.tool), !isUnderParent(thread),
+        guard thread.status != previous?.status, !settings.hiddenTools.contains(thread.tool), (!isUnderParent(thread) || thread.status.needsYou),
               !isFrontmost(thread.id) else { return }
         switch thread.status {
         case .needsYou where settings.peeksOnNeedsYou:
             onAlert?(AgentAlert(kind: .needsYou, thread: presented(thread)))
         case .done, .failed:
-            guard settings.peeksOnFinish, let previous, !previous.status.isFinished,
+            guard !helperEvidence.contains(thread.id), settings.peeksOnFinish, let previous, !previous.status.isFinished,
                   let started = previous.workStarted ?? thread.workStarted,
                   Date().timeIntervalSince(started) >= Self.worthAPeek else { return }
             onAlert?(AgentAlert(kind: thread.status == .failed ? .failed : .finished, thread: presented(thread)))
@@ -375,9 +419,9 @@ public final class AgentsCenter {
     private func prune(now: Date) {
         guard let keep = settings.keepFinished.interval else { return }
         for (id, seen) in seenAt where now.timeIntervalSince(seen) > keep {
-            // A conversation stays while helpers it started still work.
-            let hasWorkingHelpers = storage.values.contains { $0.parentID == id && !$0.status.isFinished }
-            if storage[id]?.status.isFinished ?? true, !hasWorkingHelpers { forget(id) }
+            // Keep every ancestor until its retained descendants have gone, including grandchildren.
+            let hasRetainedDescendants = storage.values.contains { $0.id != id && ancestors(of: $0.id).contains(id) }
+            if storage[id]?.status.isFinished ?? true, !hasRetainedDescendants { forget(id) }
         }
     }
 }

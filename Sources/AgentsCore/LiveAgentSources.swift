@@ -38,15 +38,8 @@ final class LiveAgentSources {
     private var codexSubagents: [String: (parentID: String, agent: AgentSubagent)] = [:]
     /// Host apps' helpers (T3 Code's delegated tasks), matched to the conversation that started them.
     private let delegated = DelegatedHelpers()
-    /// Threads matched to their main conversation, or known not to be a helper.
-    private var delegationChecked: Set<String> = []
-    /// When each thread still unmatched was first looked up. Claude Code saves a reply only once it ends,
-    /// so a helper started early in a long one (several tasks delegated at once) finds its task only then.
-    private var delegationSince: [String: Date] = [:]
     /// The folders of the conversations' files, watched while a thread waits for its task.
     private var delegationWatch: (folders: Set<String>, watcher: FolderWatcher)?
-    /// The conversations' file names: a change to one of them is worth another look.
-    private var delegationFiles: Set<String> = []
     private var resolvingDelegations = false
     /// Asked again while a look-up ran: look again when it ends, so no new thread is missed.
     private var resolvesAgain = false
@@ -60,11 +53,10 @@ final class LiveAgentSources {
 
     /// A thread with no sign of life for this long counts as stopped when the list is shown.
     static let quietLimit: TimeInterval = 60 * 60
-    /// The longest an unmatched thread waits for the reply that may have delegated it to be saved.
-    static let delegationWait: TimeInterval = 10 * 60
 
-    init(center: AgentsCenter) {
+    init(center: AgentsCenter, accounts: [AccountFinder.Found] = []) {
         self.center = center
+        self.accounts = accounts
     }
 
     func start() {
@@ -88,7 +80,7 @@ final class LiveAgentSources {
         server = nil
         stopWatching(&watchers)
         stopWatching(&transcriptWatchers)
-        watchForDelegations(in: [], files: [])
+        watchForDelegations(in: [])
         if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
         activationObserver = nil
         claudeSessions = [:]
@@ -98,10 +90,10 @@ final class LiveAgentSources {
         codexHelpers = [:]
         codexSpawned = []
         codexSubagents = [:]
-        delegationChecked = []
-        delegationSince = [:]
         firstPrompts = [:]
         hookTranscripts = [:]
+        let delegated = delegated
+        queue.async { delegated.keep(only: []) }
     }
 
     private func stopWatching(_ list: inout [FolderWatcher]) {
@@ -209,7 +201,7 @@ final class LiveAgentSources {
             update.request = .some(event.summary)
             if let requestID = event.requestID {
                 requestSettled(id)
-                center.apply(update)
+                center.apply(update, deferFinishAlert: true)
                 // Already looking at its app, or more to it than the notch can show: ask there right away.
                 if center.isFrontmost(id) || !event.isFullyShown {
                     server?.answer(requestID, with: nil)
@@ -257,21 +249,19 @@ final class LiveAgentSources {
             center.ended(id, at: now)
             lastHookEvent[id] = nil
             lastActivity[id] = nil
-            firstPrompts[id] = nil
-            hookTranscripts[id] = nil
             codexHelpers[event.transcriptPath ?? session] = nil
             return
         default:
             return
         }
-        center.apply(update)
+        if let prompt = event.fullPrompt { center.noteHelperPrompt(prompt, for: id) }
+        center.apply(update, deferFinishAlert: true)
         // A host app's helper gets its task as its first prompt: match it now, while it starts.
-        if event.tool != .cursor, !delegationChecked.contains(id), let prompt = event.fullPrompt, !prompt.isEmpty {
+        if event.tool != .cursor, let prompt = event.fullPrompt, !prompt.isEmpty {
             if firstPrompts[id] == nil { firstPrompts[id] = prompt }
             resolveDelegations()
-        } else if update.status?.isFinished == true, !delegationSince.isEmpty {
-            // Its turn is saved: a helper it started finds its task, or a thread waiting only while it
-            // worked stops waiting.
+        } else if update.status != nil {
+            // Completion can precede the transcript flush; neither outcome finalizes a miss.
             resolveDelegations()
         }
     }
@@ -356,7 +346,7 @@ final class LiveAgentSources {
                 if pending[id] != nil {
                     // A request waits for the notch; the list's "busy" is the request itself.
                     if previous?.status != session.status, session.status != "waiting", previous != nil { requestSettled(id) }
-                    else { center.apply(update); continue }
+                    else { center.apply(update, deferFinishAlert: true); continue }
                 }
                 if !stale {
                     update.status = status
@@ -373,7 +363,7 @@ final class LiveAgentSources {
                 }
             }
             if existing == nil, update.status == nil { continue }
-            center.apply(update)
+            center.apply(update, deferFinishAlert: true)
             // A new session or a new turn gets its title and last message right away; steps and subagents
             // only while the list shows.
             let turnStarted = update.status == .working && existing?.status != .working
@@ -390,77 +380,76 @@ final class LiveAgentSources {
 
     // MARK: Host apps' helpers
 
-    /// Matches new Claude Code and Codex threads to the conversation that delegated them through a host
-    /// app (T3 Code), so they show under it. Claude Code saves a reply only once it ends, so a helper
-    /// delegated early in a long reply finds its task only then: an unmatched thread is looked up again as
-    /// the conversations' files change, while another conversation works (one that could have delegated
-    /// it), for `delegationWait` at most.
+    /// Missing evidence is never a final negative. Recheck on registration, completion and watched
+    /// transcript writes, including for finished children. Ordinary unresolved rows stay visible.
     private func resolveDelegations() {
         guard !stopped else { return }
-        guard !resolvingDelegations else {
-            resolvesAgain = true
-            return
-        }
+        guard !resolvingDelegations else { resolvesAgain = true; return }
         let threads = center.allThreads.filter { $0.tool != .cursor }
-        let children = threads.filter { !delegationChecked.contains($0.id) }.compactMap { thread -> (id: String, prompt: String?, locate: (@Sendable () -> URL?)?)? in
+        let ids = Set(threads.map(\.id))
+        firstPrompts = firstPrompts.filter { ids.contains($0.key) }
+        hookTranscripts = hookTranscripts.filter { ids.contains($0.key) }
+        let children = threads.compactMap { thread -> (id: String, prompt: String?, locate: (@Sendable () -> URL?)?)? in
             let prompt = firstPrompts[thread.id], locate = transcriptLocator(thread.id)
             return prompt == nil && locate == nil ? nil : (thread.id, prompt, locate)
         }
-        guard !children.isEmpty else {
-            delegationSince = [:]
-            watchForDelegations(in: [], files: [])
-            return
-        }
+        guard !children.isEmpty else { watchForDelegations(in: []); center.finishDiscovery(); return }
         let parents = threads.compactMap { thread in transcriptLocator(thread.id).map { (id: thread.id, locate: $0) } }
+        let accounts = accounts
         let delegated = delegated
         resolvingDelegations = true
         queue.async { [weak self] in
-            delegated.keep(only: Set(parents.map(\.id)))
-            let parentFiles = parents.compactMap { parent in parent.locate().map { (id: parent.id, url: $0) } }
-            let results = children.map { child -> (id: String, match: DelegatedHelpers.Delegation?, prompt: String?) in
-                guard let prompt = child.prompt ?? child.locate?().flatMap(DelegatedHelpers.firstPrompt) else { return (child.id, nil, nil) }
-                return (child.id, delegated.parent(of: prompt, among: parentFiles.filter { $0.id != child.id }), prompt)
+            var parentFiles = parents.compactMap { parent in parent.locate().map { (id: parent.id, url: $0) } }
+            // Recover parents that are no longer in the provider's live-session list. Identity comes
+            // from provider metadata, never from a folder or a shared task prefix.
+            let knownPaths = Set(parentFiles.map { $0.url.path })
+            parentFiles += delegated.history(in: accounts).filter { !knownPaths.contains($0.url.path) }
+            var fromFiles: Set<String> = []
+            let prompts = Dictionary(uniqueKeysWithValues: children.compactMap { child -> (String, String)? in
+                // Hooks cap text at 64 KiB. Once saved, the actual first message takes precedence over
+                // that temporary prefix (and over a later prompt hook in an existing conversation).
+                let saved = child.locate?().flatMap(DelegatedHelpers.firstPrompt)
+                if saved != nil { fromFiles.insert(child.id) }
+                return (saved ?? child.prompt).map { (child.id, $0) }
+            })
+            let results = delegated.resolve(prompts, among: parentFiles)
+            let ambiguous = delegated.ambiguousIDs
+            let recovered = parentFiles.filter { parent in !ids.contains(parent.id) && results.values.contains(where: { $0.parentID == parent.id }) }.map { parent in
+                (id: parent.id, url: parent.url, details: DelegatedHelpers.parentDetails(parent.url, codex: parent.id.hasPrefix("codex:")))
             }
-            let folders = Set(parentFiles.map { $0.url.deletingLastPathComponent().path })
-            let files = Set(parentFiles.map { $0.url.lastPathComponent })
+            let roots = accounts.map { $0.folder.appending(path: $0.tool == .codex ? "sessions" : "projects").path }
+            let folders = Set((parentFiles.map { $0.url.deletingLastPathComponent().path } + roots).filter { path in
+                !roots.contains { path != $0 && path.hasPrefix($0 + "/") }
+            })
             Task { @MainActor in
                 guard let self else { return }
                 self.resolvingDelegations = false
                 guard !self.stopped else { return }
-                let now = Date()
-                let working = self.center.allThreads.filter { $0.tool != .cursor && !$0.status.isFinished }.map(\.id)
-                var waiting: [String: Date] = [:]
-                for result in results {
-                    if let match = result.match {
-                        self.center.setParent(of: result.id, to: match.parentID, title: match.title)
-                        self.delegationChecked.insert(result.id)
-                        self.firstPrompts[result.id] = nil
-                        continue
-                    }
-                    // Its task can still be on its way only while a conversation that could have delegated it works.
-                    let since = self.delegationSince[result.id] ?? now
-                    if now.timeIntervalSince(since) < Self.delegationWait, working.contains(where: { $0 != result.id }) {
-                        waiting[result.id] = since
-                        if let prompt = result.prompt { self.firstPrompts[result.id] = prompt }
-                    } else {
-                        self.delegationChecked.insert(result.id)
-                        self.firstPrompts[result.id] = nil
-                    }
+                for parent in recovered where self.center.thread(parent.id) == nil {
+                    self.hookTranscripts[parent.id] = parent.url.path
+                    self.center.apply(.init(id: parent.id, tool: parent.id.hasPrefix("codex:") ? .codex : .claude,
+                                            at: .now, title: parent.details.title, cwd: parent.details.cwd, status: .done, quietly: true))
                 }
-                self.delegationSince = waiting
-                self.watchForDelegations(in: waiting.isEmpty ? [] : folders, files: files)
-                if self.resolvesAgain {
-                    self.resolvesAgain = false
-                    self.resolveDelegations()
+                if !recovered.isEmpty { self.resolvesAgain = true }
+                for id in fromFiles { self.firstPrompts[id] = nil }
+                for child in children {
+                    if let prompt = prompts[child.id] { self.center.noteHelperPrompt(prompt, for: child.id) }
+                    if let match = results[child.id] {
+                        self.center.setParent(of: child.id, to: match.parentID, title: match.title)
+                    } else if ambiguous.contains(child.id) { self.center.clearParent(of: child.id) }
                 }
+                if !self.resolvesAgain { self.center.finishDiscovery() }
+                // Finished parents can flush hours later. Keep event subscriptions for retained rows;
+                // the scanner consumes only appended lines unless a new candidate needs backfill.
+                self.watchForDelegations(in: folders)
+                if self.resolvesAgain { self.resolvesAgain = false; self.resolveDelegations() }
             }
         }
     }
 
-    /// While a thread waits for its task, the folders of the conversations' files are watched: a saved
-    /// reply is looked at within a second. The watch stops once nothing waits.
-    private func watchForDelegations(in folders: Set<String>, files: Set<String>) {
-        delegationFiles = files
+    /// Retained conversations and account history roots are watched for late or newly registered
+    /// parent evidence. No polling; stopping the source releases the subscription.
+    private func watchForDelegations(in folders: Set<String>) {
         guard folders != delegationWatch?.folders else { return }
         var previous = delegationWatch.map { [$0.watcher] } ?? []
         delegationWatch = nil
@@ -468,7 +457,7 @@ final class LiveAgentSources {
             let names = paths.filter { $0.hasSuffix(".jsonl") }.map { ($0 as NSString).lastPathComponent }
             guard !names.isEmpty else { return }
             Task { @MainActor in
-                guard let self, names.contains(where: self.delegationFiles.contains) else { return }
+                guard let self else { return }
                 self.resolveDelegations()
             }
         }) {
@@ -599,7 +588,7 @@ final class LiveAgentSources {
                 guard let status = item.status, status.isFinished else {
                     update.step = .some(item.step)
                     update.quietly = true
-                    center.apply(update)
+                    center.apply(update, deferFinishAlert: true)
                     continue
                 }
                 requestSettled(id)
@@ -617,7 +606,7 @@ final class LiveAgentSources {
                 if item.isCatchUp, !status.isFinished, Date().timeIntervalSince(item.modified) > Self.quietLimit { continue }
                 update.quietly = item.isCatchUp
             }
-            center.apply(update)
+            center.apply(update, deferFinishAlert: true)
         }
         // Resolve the tree after every batch; parent and child files needn't arrive together.
         var grouped: [String: [AgentSubagent]] = [:]
