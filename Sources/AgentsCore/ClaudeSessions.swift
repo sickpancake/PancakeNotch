@@ -227,6 +227,14 @@ enum JSONLines {
     @discardableResult
     static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
                      shouldContinue: () -> Bool = { true }, line: (Data) -> Void) -> UInt64 {
+        read(url, from: offset, maxLine: maxLine, shouldContinue: shouldContinue) { data, _ in line(data) }
+    }
+
+    /// The same, also giving each line's offset in the file. Each 256 KB piece is let go once its lines
+    /// are read, so a long history streams in a few hundred KB rather than piling up until the end.
+    @discardableResult
+    static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
+                     shouldContinue: () -> Bool = { true }, lineAt: (Data, UInt64) -> Void) -> UInt64 {
         guard let handle = open(url) else { return offset }
         defer { try? handle.close() }
         guard let size = try? handle.seekToEnd(), size > offset else { return offset }
@@ -235,33 +243,42 @@ enum JSONLines {
         var chunkOffset = offset
         var pending = Data()
         var skipping = false
-        while shouldContinue(), let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty {
-            var start = chunk.startIndex
-            while let newline = chunk[start...].firstIndex(of: UInt8(ascii: "\n")) {
-                guard shouldContinue() else { return position }
-                if !skipping, pending.count + newline - start <= maxLine {
-                    if pending.isEmpty {
-                        line(Data(chunk[start..<newline]))
-                    } else {
-                        pending.append(chunk[start..<newline])
-                        line(pending)
+        var stopped = false
+        while !stopped, shouldContinue() {
+            let more: Bool = autoreleasepool {
+                guard let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty else { return false }
+                var start = chunk.startIndex
+                while let newline = chunk[start...].firstIndex(of: UInt8(ascii: "\n")) {
+                    guard shouldContinue() else { stopped = true; return false }
+                    if !skipping, pending.count + newline - start <= maxLine {
+                        // The line starts just after the previous complete one.
+                        autoreleasepool {
+                            if pending.isEmpty {
+                                lineAt(Data(chunk[start..<newline]), position)
+                            } else {
+                                pending.append(chunk[start..<newline])
+                                lineAt(pending, position)
+                            }
+                        }
                     }
+                    pending.removeAll(keepingCapacity: true)
+                    skipping = false
+                    position = chunkOffset + UInt64(newline + 1)
+                    start = chunk.index(after: newline)
                 }
-                pending.removeAll(keepingCapacity: true)
-                skipping = false
-                position = chunkOffset + UInt64(newline + 1)
-                start = chunk.index(after: newline)
+                let rest = chunk[start...]
+                if skipping {
+                    // Keep the last complete-line offset until the oversized line ends.
+                } else if pending.count + rest.count > maxLine {
+                    skipping = true
+                    pending.removeAll()
+                } else {
+                    pending.append(rest)
+                }
+                chunkOffset += UInt64(chunk.count)
+                return true
             }
-            let rest = chunk[start...]
-            if skipping {
-                // Keep the last complete-line offset until the oversized line ends.
-            } else if pending.count + rest.count > maxLine {
-                skipping = true
-                pending.removeAll()
-            } else {
-                pending.append(rest)
-            }
-            chunkOffset += UInt64(chunk.count)
+            if !more { break }
         }
         // Just after the last newline. An unfinished line, even an oversized one, is retried intact.
         return position

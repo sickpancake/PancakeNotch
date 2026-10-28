@@ -112,7 +112,10 @@ struct CodexRollout: Sendable {
         case .event:
             switch payload["type"] as? String {
             case "task_started": set(.working, at: date)
-            case "task_complete": set(.done, at: date)
+            // A turn that ended on an error (a usage limit, a lost connection) says so in `error`.
+            case "task_complete":
+                let failed = payload["error"] != nil && !(payload["error"] is NSNull)
+                set(failed ? AgentStatus.failed : AgentStatus.done, at: date)
             case "turn_aborted": set(.stopped, at: date)
             case "error": set(.failed, at: date)
             case "user_message":
