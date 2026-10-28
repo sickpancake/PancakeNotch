@@ -38,6 +38,12 @@ final class LiveAgentSources {
     private var codexSubagents: [String: (parentID: String, agent: AgentSubagent)] = [:]
     /// Host apps' helpers (T3 Code's delegated tasks), matched to the conversation that started them.
     private let delegated = DelegatedHelpers()
+    /// The rollouts of Codex threads still working, followed write by write. A host app's Codex (T3 Code)
+    /// keeps them open, and macOS tells a folder watch about writes to an open file only once it closes.
+    /// A turn that fails sends no Stop hook, so without this its end would never be seen.
+    private var codexFollowed: [String: (path: String, watcher: FileChangeWatcher)] = [:]
+    /// Each Codex thread's rollout, from its file or its hooks.
+    private var codexPaths: [String: String] = [:]
     /// The folders of the conversations' files, watched while a thread waits for its task.
     private var delegationWatch: (folders: Set<String>, watcher: FolderWatcher)?
     private var resolvingDelegations = false
@@ -90,6 +96,9 @@ final class LiveAgentSources {
         codexHelpers = [:]
         codexSpawned = []
         codexSubagents = [:]
+        for entry in codexFollowed.values { entry.watcher.stop() }
+        codexFollowed = [:]
+        codexPaths = [:]
         firstPrompts = [:]
         hookTranscripts = [:]
         let delegated = delegated
@@ -256,6 +265,7 @@ final class LiveAgentSources {
         }
         if let prompt = event.fullPrompt { center.noteHelperPrompt(prompt, for: id) }
         center.apply(update, deferFinishAlert: true)
+        if event.tool == .codex { followWorkingCodexRollouts() }
         // A host app's helper gets its task as its first prompt: match it now, while it starts.
         if event.tool != .cursor, let prompt = event.fullPrompt, !prompt.isEmpty {
             if firstPrompts[id] == nil { firstPrompts[id] = prompt }
@@ -579,6 +589,7 @@ final class LiveAgentSources {
                 continue
             }
             lastActivity[id] = item.modified
+            codexPaths[id] = item.path
             var update = AgentsCenter.Update(id: id, tool: .codex, at: item.statusAt ?? item.modified,
                                              accountID: AgentAccount(tool: .codex, folder: item.folder).id,
                                              title: item.title, lastMessage: item.lastMessage, cwd: item.cwd, hostBundleID: item.hostBundleID)
@@ -620,7 +631,36 @@ final class LiveAgentSources {
         for thread in center.threads where thread.tool == .codex {
             center.setSubagents(grouped[thread.id] ?? [], of: thread.id)
         }
+        followWorkingCodexRollouts()
         resolveDelegations()
+    }
+
+    /// Follows the rollout of every Codex thread and subagent still working, and lets go of the rest.
+    /// Each write wakes PancakeNotch once; it reads only the new lines. Nothing runs while nothing works.
+    private func followWorkingCodexRollouts() {
+        guard !stopped else { return }
+        var wanted: [String: String] = [:]
+        for thread in center.allThreads where thread.tool == .codex && !thread.status.isFinished {
+            if let path = codexPaths[thread.id] ?? hookTranscripts[thread.id] { wanted[thread.id] = path }
+        }
+        for (id, entry) in codexSubagents where !entry.agent.status.isFinished {
+            if let path = codexPaths[id] { wanted[id] = path }
+        }
+        codexPaths = codexPaths.filter { center.thread($0.key) != nil || codexSubagents[$0.key] != nil }
+        for (id, entry) in codexFollowed where wanted[id] != entry.path {
+            entry.watcher.stop()
+            codexFollowed[id] = nil
+        }
+        let folders = accounts.filter { $0.tool == .codex }.map(\.folder)
+        let reader = codex
+        for (id, path) in wanted where codexFollowed[id] == nil {
+            let watcher = FileChangeWatcher(path: path, queue: queue) { [weak self] in
+                let updates = reader.read(changed: [path], folders: folders)
+                guard !updates.isEmpty else { return }
+                Task { @MainActor in self?.codexRead(updates) }
+            }
+            codexFollowed[id] = (path, watcher)
+        }
     }
 
     /// Reopening the list also picks up names changed while a thread wasn't writing its rollout.
@@ -649,6 +689,7 @@ extension LiveAgentSources {
     fileprivate func codexSubagentRead(_ item: CodexReader.ThreadUpdate, id: String, parentID: String) {
         // Its hooks may have come in before its rollout said what it is.
         codexSpawned.insert(item.threadID)
+        codexPaths[id] = item.path
         if center.thread(id) != nil { center.forget(id) }
         guard let status = item.status,
               !(item.isCatchUp && Date().timeIntervalSince(item.modified) > ClaudeSubagents.quietLimit) else { return }
@@ -674,6 +715,8 @@ final class CodexReader: @unchecked Sendable {
         let modified: Date
         /// From the first look at a file (at launch), not something that just happened.
         let isCatchUp: Bool
+        /// The rollout's path.
+        let path: String
     }
 
     private var rollouts: [String: CodexRollout] = [:]
@@ -735,7 +778,7 @@ final class CodexReader: @unchecked Sendable {
                             lastMessage: rollout.lastMessage,
                             status: rollout.status, statusAt: rollout.statusAt, step: rollout.step,
                             hostBundleID: rollout.hostBundleID, parentThreadID: rollout.parentThreadID,
-                            modified: modified, isCatchUp: catchUp)
+                            modified: modified, isCatchUp: catchUp, path: url.path)
     }
 
     func rolloutURL(_ threadID: String) -> URL? {

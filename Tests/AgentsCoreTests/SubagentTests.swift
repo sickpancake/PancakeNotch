@@ -48,7 +48,7 @@ struct SubagentCenterTests {
         func update(_ id: String, parent: String? = nil, status: AgentStatus = .working) -> CodexReader.ThreadUpdate {
             .init(threadID: id, folder: URL(fileURLWithPath: "/tmp/codex"), cwd: "/tmp/app", title: id, lastMessage: nil,
                   status: status, statusAt: now, step: nil, hostBundleID: nil, parentThreadID: parent,
-                  modified: now, isCatchUp: false)
+                  modified: now, isCatchUp: false, path: "/tmp/codex/rollout-\(id).jsonl")
         }
         sources.codexRead([update("helper", parent: "main"), update("nested", parent: "helper")])
         #expect(center.threads.isEmpty)
