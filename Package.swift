@@ -1,6 +1,11 @@
 // swift-tools-version:6.0
 import PackageDescription
 
+// Switches that point the app at other folders, files or code (PANCAKENOTCH_SHELF_DIR, …_ADAPTER_DIR…)
+// exist only in builds for testing: debug builds, and release builds made with
+// PANCAKENOTCH_INTERNAL_TESTING=1 scripts/build-app.sh (CI's memory checks). Published builds ignore them.
+let testing: [SwiftSetting] = [.define("PANCAKENOTCH_INTERNAL_TESTING", .when(configuration: .debug))]
+
 let package = Package(
     name: "PancakeNotch",
     platforms: [.macOS(.v15)],
@@ -22,7 +27,8 @@ let package = Package(
                 "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
                 "AgentsCore", "ModuleAgents", "ConvertKit",
                 .product(name: "Sparkle", package: "Sparkle"),
-            ]
+            ],
+            swiftSettings: testing
         ),
         .target(name: "NotchCore"),
         .target(name: "HotKey"),
@@ -30,15 +36,17 @@ let package = Package(
         // Listening, usage and app-health statistics in a local SQLite file (ADR-0018).
         .target(
             name: "Stats",
+            swiftSettings: testing,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         // What's playing: the mediaremote-adapter helper, the Music/Spotify fallback and the
         // practice player (ADR-0012). No UI.
-        .target(name: "NowPlayingCore"),
+        .target(name: "NowPlayingCore", swiftSettings: testing),
         // AI agents and their usage: the tools' own files, the hook socket, Connect, prices (ADR-0037). No UI.
         .target(
             name: "AgentsCore",
             dependencies: ["Stats"],
+            swiftSettings: testing,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .target(
@@ -46,10 +54,11 @@ let package = Package(
             dependencies: ["NotchCore", "AgentsCore"]
         ),
         // C, so each hook call starts in a millisecond and has no runtime to load.
-        .executableTarget(name: "AgentHook"),
+        .executableTarget(name: "AgentHook", cSettings: [.define("PANCAKENOTCH_INTERNAL_TESTING", .when(configuration: .debug))]),
         .target(
             name: "ModuleShelf",
-            dependencies: ["NotchCore", "ConvertKit"]
+            dependencies: ["NotchCore", "ConvertKit"],
+            swiftSettings: testing
         ),
         // Convert (ADR-0038): formats, limits and the helper's messages. Foundation only, for the app.
         .target(name: "ConvertKit"),

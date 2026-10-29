@@ -25,9 +25,11 @@ public final class StatsStore: Sendable {
 
     /// `~/Library/Application Support/PancakeNotch/statistics.sqlite`. Creates the folder.
     public static func defaultURL() -> URL {
+        #if PANCAKENOTCH_INTERNAL_TESTING
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_STATS_FILE"] {
             return URL(fileURLWithPath: path)
         }
+        #endif
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let folder = support.appending(path: "PancakeNotch", directoryHint: .isDirectory)
         // Only this user may look inside: it holds statistics and AI Usage history.

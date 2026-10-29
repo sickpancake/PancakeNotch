@@ -7,6 +7,8 @@
 #   PANCAKENOTCH_BUILD     a number that grows with every release (CFBundleVersion; Sparkle compares it)
 #   SPARKLE_PUBLIC_ED_KEY  the update-signing public key; without it the app can't update itself
 #   CODESIGN_IDENTITY      a signing certificate's name; without it the app is signed ad hoc
+#   PANCAKENOTCH_INTERNAL_TESTING=1   keeps the testing switches in a release build (CI's memory checks);
+#                          never for a build people get (Package.swift)
 set -euo pipefail
 
 CONFIG="${1:-release}"
@@ -15,8 +17,12 @@ APP="$ROOT/build/PancakeNotch.app"
 IDENTITY="${CODESIGN_IDENTITY:--}"
 
 cd "$ROOT"
-"$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64
-BIN_DIR="$("$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64 --show-bin-path)"
+FLAGS=()
+if [[ "${PANCAKENOTCH_INTERNAL_TESTING:-}" == 1 ]]; then
+  FLAGS=(-Xswiftc -DPANCAKENOTCH_INTERNAL_TESTING -Xcc -DPANCAKENOTCH_INTERNAL_TESTING)
+fi
+"$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64 ${FLAGS[@]+"${FLAGS[@]}"}
+BIN_DIR="$("$ROOT/scripts/swift.sh" build -c "$CONFIG" --arch arm64 ${FLAGS[@]+"${FLAGS[@]}"} --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"

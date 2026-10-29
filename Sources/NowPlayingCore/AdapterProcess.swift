@@ -13,13 +13,28 @@ struct AdapterLocation: Equatable, Sendable {
     /// In the app: `Contents/Resources/mediaremote-adapter.pl` and
     /// `Contents/Frameworks/MediaRemoteAdapter.framework`. `PANCAKENOTCH_ADAPTER_DIR` (a folder holding
     /// both) wins, for runs from `.build`. nil when a file is missing.
+    /// Perl gets only what it needs, so nothing in the app's environment (`PERL5OPT`, `PERL5LIB`,
+    /// `DYLD_*`…) can make it run other code.
+    static var perlEnvironment: [String: String] {
+        let current = ProcessInfo.processInfo.environment
+        var environment = ["PATH": "/usr/bin:/bin"]
+        for key in ["HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE"] { environment[key] = current[key] }
+        return environment
+    }
+
     static func find(
         bundle: Bundle = .main,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default
     ) -> AdapterLocation? {
         let location: AdapterLocation
-        if let folder = environment["PANCAKENOTCH_ADAPTER_DIR"], !folder.isEmpty {
+        // Testing builds only: a published app never loads code from a folder an environment names.
+        #if PANCAKENOTCH_INTERNAL_TESTING
+        let folder = environment["PANCAKENOTCH_ADAPTER_DIR"]
+        #else
+        let folder: String? = nil
+        #endif
+        if let folder, !folder.isEmpty {
             let base = URL(fileURLWithPath: folder, isDirectory: true).standardizedFileURL
             location = AdapterLocation(
                 script: base.appending(path: scriptName),
@@ -91,6 +106,7 @@ final class AdapterProcess {
         let process = Process()
         process.executableURL = AdapterLocation.perl
         process.arguments = location.arguments(AdapterLocation.streamFunction)
+        process.environment = AdapterLocation.perlEnvironment
         process.standardInput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let pipe = Pipe()
@@ -155,6 +171,7 @@ final class AdapterProcess {
         let process = Process()
         process.executableURL = AdapterLocation.perl
         process.arguments = location.arguments(AdapterLocation.function(for: command))
+        process.environment = AdapterLocation.perlEnvironment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

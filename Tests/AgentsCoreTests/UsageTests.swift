@@ -333,4 +333,22 @@ struct PrivacyAndFreshnessTests {
         #expect(rates.limits.map(\.usedPercent) == [57, 10])
         #expect(rates.plan == "plus")
     }
+
+    /// Only OpenAI's own Codex runs as PancakeNotch's child.
+    @Test func onlyCodexSignedByOpenAIIsRun() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A program in Codex's place: Apple's own `true`, and an ad hoc signed copy of it.
+        let fake = folder.appending(path: ".local/bin/codex")
+        try FileManager.default.createDirectory(at: fake.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: fake)
+        #expect(!CodexLimitsRequest.isSignedByOpenAI(URL(fileURLWithPath: "/usr/bin/true")))
+        #expect(!CodexLimitsRequest.isSignedByOpenAI(fake))
+        #expect(CodexLimitsRequest.binary(home: folder) == nil || CodexLimitsRequest.binary(home: folder) != fake)
+        // The same check passes for the team that did sign a program (Apple's binaries have no team: use
+        // whatever OpenAI-signed Codex this Mac has, if any).
+        if let real = CodexLimitsRequest.binary(home: FileManager.default.homeDirectoryForCurrentUser) {
+            #expect(CodexLimitsRequest.isSignedByOpenAI(real))
+        }
+    }
 }

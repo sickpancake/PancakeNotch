@@ -9,6 +9,9 @@ APP="${1:-build/PancakeNotch.app}"
 SETTLE="${2:-20}"
 LIMIT_MIB="${3:-100}"   # ADR-0006: < 100 MB peak
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# A build without the testing switches would fill the real Shelf instead of a throwaway one.
+grep -aq PANCAKENOTCH_SHELF_DIR "$APP/Contents/MacOS/PancakeNotch" \
+  || { echo "$APP has no testing switches: build it with PANCAKENOTCH_INTERNAL_TESTING=1 scripts/build-app.sh" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'kill "${PID:-}" 2>/dev/null || true; rm -rf "$WORK"' EXIT

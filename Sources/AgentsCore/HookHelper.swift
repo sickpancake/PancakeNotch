@@ -18,9 +18,12 @@ enum HookHelper {
     static var installedURL: URL { supportFolder.appending(path: "bin/pancakenotch-hook") }
 
     /// The socket the helper writes to. The helper finds it the same way (`$HOME/Library/Application
-    /// Support/PancakeNotch/agents.sock`); `PANCAKENOTCH_AGENTS_SOCKET` moves both, for tests.
+    /// Support/PancakeNotch/agents.sock`); in testing builds `PANCAKENOTCH_AGENTS_SOCKET` moves both.
     static var socketPath: String {
-        ProcessInfo.processInfo.environment["PANCAKENOTCH_AGENTS_SOCKET"] ?? supportFolder.appending(path: "agents.sock").path
+        #if PANCAKENOTCH_INTERNAL_TESTING
+        if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_AGENTS_SOCKET"] { return path }
+        #endif
+        return supportFolder.appending(path: "agents.sock").path
     }
 
     /// The helper shipped with this app: in the bundle (Contents/MacOS), or beside the executable when

@@ -3,6 +3,9 @@
 # and open-view memory, including the Now Playing helper. Never connects a real AI tool.
 set -euo pipefail
 APP="${1:-build/PancakeNotch.app}"
+# A build without the testing switches would use the real statistics file and agents socket.
+grep -aq PANCAKENOTCH_STATS_FILE "$APP/Contents/MacOS/PancakeNotch" \
+  || { echo "$APP has no testing switches: build it with PANCAKENOTCH_INTERNAL_TESTING=1 scripts/build-app.sh" >&2; exit 1; }
 WORK="$(mktemp -d)"
 trap 'kill "${PID:-}" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
