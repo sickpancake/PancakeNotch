@@ -64,6 +64,8 @@ enum ClaudeTranscript {
     /// `<config>/projects/<folder>/<session id>.jsonl`. The folder is the cwd with `/` and `.` as `-`,
     /// but rather than rely on that, look for the file name in each project folder.
     static func url(folder: URL, sessionID: String, cwd: String) -> URL? {
+        // Session IDs are UUIDs: anything else (a "../") could name a file elsewhere.
+        guard isSessionID(sessionID) else { return nil }
         let projects = folder.appending(path: "projects", directoryHint: .isDirectory)
         let guess = projects.appending(path: cwd.map { $0.isLetter || $0.isNumber ? $0 : "-" }.reduce(into: "") { $0.append($1) })
             .appending(path: sessionID + ".jsonl")
@@ -71,6 +73,10 @@ enum ClaudeTranscript {
         let folders = (try? FileManager.default.contentsOfDirectory(atPath: projects.path)) ?? []
         return folders.lazy.map { projects.appending(path: $0).appending(path: sessionID + ".jsonl") }
             .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    static func isSessionID(_ id: String) -> Bool {
+        (1...64).contains(id.utf8.count) && id.utf8.allSatisfy { $0 == UInt8(ascii: "-") || (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0) }
     }
 
     static func details(at url: URL, wantsStep: Bool) -> (step: String?, title: String?, lastMessage: String?) {

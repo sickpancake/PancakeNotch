@@ -41,6 +41,13 @@ public enum AgentsSnapshot {
         asking.peekAlert = asking.center.threads.first { $0.status.needsYou }.map { AgentAlert(kind: .needsYou, thread: $0) }
         row(.compact, asking) { $0.peekForSnapshot(asking) }
         row(.expanded, agents(AgentsCenter(settings: emptySettings)))
+        // A request to change a file: Review in the list, then the whole change in the taller notch.
+        row(.expanded, agents(.practiceWithEdit()))
+        let reviewing = agents(.practiceWithEdit())
+        if let thread = reviewing.center.threads.first(where: { if case .edit? = $0.approval?.review.content { true } else { false } }) {
+            reviewing.review(thread)
+        }
+        row(.expanded, reviewing) { $0.setTall(true) }
 
         // AI Usage: one account, all of them, the account menu, the ear and strip for an account that
         // runs low, no accounts.
