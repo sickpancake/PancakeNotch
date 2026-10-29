@@ -12,6 +12,9 @@ on:
         description: Runs per build (the table shows medians)
         default: "3"
 
+permissions:
+  contents: read
+
 # A newer push replaces a measurement still running for the same branch.
 concurrency:
   group: benchmark-${{ github.ref }}
@@ -22,9 +25,10 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       # Both builds get an update key, so Sparkle runs as in a real release. A random key: nothing is
       # signed or published.
       - name: Update key
@@ -34,10 +38,12 @@ jobs:
       # An experiment can compare against another branch and take more runs: a `.benchmark-base`
       # file holding "<branch, tag or commit> [runs]".
       - name: Build the comparison
+        env:
+          INPUT_RUNS: ${{ inputs.runs }}
         run: |
           read -r BASE RUNS < .benchmark-base 2>/dev/null || true
           echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
-          echo "RUNS=${RUNS:-${{ inputs.runs }}}" >> "$GITHUB_ENV"
+          echo "RUNS=${RUNS:-$INPUT_RUNS}" >> "$GITHUB_ENV"
           COMPARISON="${BASE:-main}"
           if git show-ref --verify --quiet "refs/remotes/origin/$COMPARISON"; then
             COMPARISON="refs/remotes/origin/$COMPARISON"

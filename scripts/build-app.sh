@@ -2,11 +2,11 @@
 # Builds PancakeNotch.app into ./build using only Swift Package Manager (no Xcode needed).
 # Usage: scripts/build-app.sh [debug|release]   (default: release)
 #
-# Optional environment (the release workflow sets these):
+# Optional environment (for trying updates locally; releases set these in sign-release.sh):
 #   PANCAKENOTCH_VERSION   version shown to people, e.g. 0.1.0 (CFBundleShortVersionString; default: newest CHANGELOG.md version)
 #   PANCAKENOTCH_BUILD     a number that grows with every release (CFBundleVersion; Sparkle compares it)
 #   SPARKLE_PUBLIC_ED_KEY  the update-signing public key; without it the app can't update itself
-#   CODESIGN_IDENTITY      the signing certificate's name; without it the app is signed ad hoc
+#   CODESIGN_IDENTITY      a signing certificate's name; without it the app is signed ad hoc
 set -euo pipefail
 
 CONFIG="${1:-release}"
@@ -81,16 +81,8 @@ if [[ -n "$SPARKLE_LICENSE" ]]; then
   cp "$SPARKLE_LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 fi
 
-# Signed from the inside out (no --deep): Sparkle's helpers, the frameworks, then the app.
-# Ad hoc unless CODESIGN_IDENTITY names the project's self-signed certificate (the release workflow).
-sign() { codesign --force --sign "$IDENTITY" --timestamp=none "$@"; }
-SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
-sign "$SPARKLE/Autoupdate"
-sign "$SPARKLE/Updater.app"
-sign "$APP/Contents/Frameworks/Sparkle.framework"
-sign "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
-sign "$APP/Contents/MacOS/pancakenotch-hook"
-sign "$APP/Contents/MacOS/pancakenotch-convert"
-sign "$APP"
+# Signed from the inside out. Ad hoc unless CODESIGN_IDENTITY names a certificate; releases are signed
+# later, in their own step, by sign-release.sh.
+"$ROOT/scripts/sign-app.sh" "$APP" "$IDENTITY"
 
 echo "Built $APP"

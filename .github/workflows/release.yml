@@ -1,26 +1,88 @@
 name: Release
 
-# Pushing a version tag (e.g. v0.1.0) builds, signs and publishes that version: the GitHub Release
-# with PancakeNotch.zip, and the update feed on the website (ADR-0005). The version's notes come
-# from CHANGELOG.md.
+# Pushing a version tag (e.g. v0.3.0) on a commit that's on main releases that version (ADR-0005): the
+# GitHub Release with PancakeNotch.zip, and the update feed on the website. The notes come from
+# CHANGELOG.md.
+#
+# Each job gets only what it needs, so code that runs during the build (the app's packages, the
+# website's npm packages, the tests) never runs next to the signing keys (ADR-0005, 2026-10-28):
+#   build      tests and builds the app; no keys, read-only
+#   sign       waits for the maintainer's approval (the "release" environment, which holds the keys),
+#              then signs; it runs no build tools, package installs or the app
+#   check      checks the signed release with public information only, and its idle memory
+#   publish    creates the GitHub Release; the only job that can write to the repository
+#   website    puts the site together with the new feed; deploy publishes it; live-feed checks it
 
 on:
   push:
     tags: ["v*.*.*"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: macos-15
-    permissions:
-      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          fetch-depth: 0 # the build number counts commits
+          fetch-depth: 0 # the build number counts commits; main's history is checked below
+          persist-credentials: false
+
+      - name: Version
+        id: version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version tags look like v1.2.3, not $GITHUB_REF_NAME."; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF_NAME isn't on main. Only commits on main are released."; exit 1; }
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md needs a '## $version' section."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Test
+        # Fails with every thread's stack if the tests hang, rather than at the six-hour cutoff.
+        run: ./scripts/test-ci.sh 15
+
+      - name: Build the app
+        run: ./scripts/build-app.sh release
+
+      # Zipped, because artifacts on their own lose the bundle's links and permissions.
+      - name: Pack the app for signing
+        run: |
+          mkdir -p "$RUNNER_TEMP/unsigned"
+          ditto -c -k --norsrc --noextattr --noacl --keepParent build/PancakeNotch.app "$RUNNER_TEMP/unsigned/PancakeNotch.zip"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-app
+          path: ${{ runner.temp }}/unsigned/PancakeNotch.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  sign:
+    needs: build
+    runs-on: macos-15
+    # The maintainer approves this job on GitHub before it starts; the keys are this environment's secrets.
+    environment: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unsigned-app
+          path: ${{ runner.temp }}/unsigned
 
       - name: Check the signing keys are set up
         env:
@@ -35,33 +97,9 @@ jobs:
           [[ -n "$SPARKLE_PRIVATE_KEY" ]] || missing+=(SPARKLE_PRIVATE_KEY)
           [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || missing+=("SPARKLE_PUBLIC_ED_KEY (a variable)")
           if (( ${#missing[@]} )); then
-            echo "::error::Missing: ${missing[*]}. Make them with scripts/make-signing-keys.sh."
+            echo "::error::Missing: ${missing[*]}. See CONTRIBUTING.md › Releases."
             exit 1
           fi
-
-      - name: Version
-        id: version
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md needs a '## $version' section."; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Toolchain
-        run: swift --version
-
-      - name: Test
-        run: ./scripts/swift.sh test
-
-      - name: Signing certificate
-        id: cert
-        env:
-          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
-          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
-        run: |
-          echo "$SIGNING_CERT_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
-          echo "identity=$(./scripts/import-signing-cert.sh "$RUNNER_TEMP/signing.p12" "$SIGNING_CERT_PASSWORD")" >> "$GITHUB_OUTPUT"
-          rm "$RUNNER_TEMP/signing.p12"
 
       - name: Sparkle tools
         id: sparkle
@@ -70,53 +108,111 @@ jobs:
       - name: Current update feed
         id: feed
         run: |
-          ./scripts/build-site.sh "$RUNNER_TEMP/current-site"
-          if [[ -f "$RUNNER_TEMP/current-site/appcast.xml" ]]; then
-            echo "existing=$RUNNER_TEMP/current-site/appcast.xml" >> "$GITHUB_OUTPUT"
+          ./scripts/get-update-feed.sh "$RUNNER_TEMP/current-appcast.xml"
+          if [[ -f "$RUNNER_TEMP/current-appcast.xml" ]]; then
+            echo "existing=$RUNNER_TEMP/current-appcast.xml" >> "$GITHUB_OUTPUT"
           fi
 
-      # Its own step, so the build (and everything it runs) never sees the private key.
-      - name: Update key file
+      - name: Signing certificate
+        id: cert
         env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/update-key.txt"
+          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          printf '%s' "$SIGNING_CERT_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          echo "identity=$(./scripts/import-signing-cert.sh "$RUNNER_TEMP/signing.p12" "$SIGNING_CERT_PASSWORD")" >> "$GITHUB_OUTPUT"
+          rm "$RUNNER_TEMP/signing.p12"
 
-      - name: Build, sign and package
+      - name: Sign
         env:
-          PANCAKENOTCH_VERSION: ${{ steps.version.outputs.version }}
-          PANCAKENOTCH_BUILD: ${{ steps.version.outputs.build }}
+          PANCAKENOTCH_VERSION: ${{ needs.build.outputs.version }}
+          PANCAKENOTCH_BUILD: ${{ needs.build.outputs.build }}
           CODESIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-          SPARKLE_PRIVATE_KEY_FILE: ${{ runner.temp }}/update-key.txt
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
           DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/PancakeNotch.zip
           EXISTING_APPCAST: ${{ steps.feed.outputs.existing }}
-        run: ./scripts/package-release.sh
+        run: ./scripts/sign-release.sh "$RUNNER_TEMP/unsigned/PancakeNotch.zip" "$RUNNER_TEMP/release"
 
-      - name: Remove the update key file
-        if: always()
-        run: rm -f "$RUNNER_TEMP/update-key.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Idle memory budget (ADR-0006)
-        run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
+  check:
+    needs: [build, sign]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-release
+          path: ${{ runner.temp }}/release
+
+      - name: Check the signed release
+        env:
+          PANCAKENOTCH_VERSION: ${{ needs.build.outputs.version }}
+          PANCAKENOTCH_BUILD: ${{ needs.build.outputs.build }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+          DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/PancakeNotch.zip
+          SIGNING_CERT_LEAF: b1bc49266dc1101fc406204567f50952a15a42c6 # the certificate 0.1.0 and 0.2.0 were signed with
+        run: ./scripts/check-release.sh "$RUNNER_TEMP/release" "$RUNNER_TEMP/unpacked"
+
+      - name: Idle memory budget with updates on (ADR-0006)
+        run: ./scripts/check-memory.sh "$RUNNER_TEMP/unpacked/PancakeNotch.app" 30 50
+
+  publish:
+    needs: [build, check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-release
+          path: release
 
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" build/release/PancakeNotch.zip build/release/appcast.xml \
-            --title "PancakeNotch $VERSION Beta" --notes-file build/release/notes.md --verify-tag
+          gh release create "$GITHUB_REF_NAME" release/PancakeNotch.zip release/appcast.xml \
+            --repo "$GITHUB_REPOSITORY" --title "PancakeNotch $VERSION Beta" \
+            --notes-file release/notes.md --verify-tag
+
+  website:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-release
+          path: ${{ runner.temp }}/release
 
       - name: Website with the new update feed
-        run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
+        run: ./scripts/build-site.sh "$RUNNER_TEMP/site" "$RUNNER_TEMP/release/appcast.xml"
 
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/site
 
-  website:
-    needs: release
+  deploy:
+    needs: website
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -126,4 +222,30 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # GitHub Pages keeps one deploy per commit: if a website update already deployed this commit, this
+  # release's deploy is dropped and the site keeps the older feed. That happened with 0.2.0 and went
+  # unnoticed, so check it.
+  live-feed:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-release
+          path: release
+
+      - name: The website serves the new update feed
+        run: |
+          want="$(shasum -a 256 < release/appcast.xml)"
+          for attempt in $(seq 1 20); do
+            if curl -fsSL "https://sickpancake.github.io/PancakeNotch/appcast.xml?release=$GITHUB_RUN_ID-$attempt" -o live.xml \
+              && [[ "$(shasum -a 256 < live.xml)" == "$want" ]]; then
+              echo "The website serves this release's feed."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::The release is out, but the website still serves an older update feed, so people won't be offered it yet. Once main has a newer commit, run Actions › Website › Run workflow (it takes the feed from this release)."
+          exit 1

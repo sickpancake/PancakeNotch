@@ -38,6 +38,12 @@
 	<integer>86400</integer>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SUSignedFeedFailureExpirationInterval</key>
+	<integer>0</integer>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 PancakeNotch contributors. GPL-3.0.</string>
 </dict>
