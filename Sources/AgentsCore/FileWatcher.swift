@@ -80,11 +80,12 @@ final class FileChangeWatcher: @unchecked Sendable {
         source?.cancel()
         source = nil
         guard !stopped else { return }
-        let fd = open(path, O_EVTONLY)
+        // Non-blocking: a path that turns out to be a pipe would otherwise hang this queue on open.
+        let fd = open(path, O_EVTONLY | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else {
             // A first-use config may not exist yet. The parent directory tells us when it is created,
             // without a retry timer or a watch over everything below the user's home folder.
-            let parent = open((path as NSString).deletingLastPathComponent, O_EVTONLY)
+            let parent = open((path as NSString).deletingLastPathComponent, O_EVTONLY | O_NONBLOCK | O_CLOEXEC)
             guard parent >= 0 else { return }
             let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: parent, eventMask: [.write], queue: queue)
             source.setEventHandler { [weak self] in

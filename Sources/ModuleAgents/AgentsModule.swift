@@ -17,6 +17,9 @@ public final class AgentsModule: NotchModule {
     var peekAlert: AgentAlert?
     /// Threads whose subagents are shown under them.
     private(set) var openSubagents: Set<String> = []
+    /// The request whose change is on the review screen (the notch is taller meanwhile). Only the very
+    /// request Review was clicked for: once it's answered or replaced, the list comes back.
+    private(set) var reviewing: (threadID: String, approval: PendingApproval)?
     /// Whether this copy peeks for alerts. The center tells one module, so Home's live copy doesn't.
     @ObservationIgnored private let peeks: Bool
     /// Rendering off-screen: a plain list instead of a scroll view.
@@ -89,6 +92,7 @@ public final class AgentsModule: NotchModule {
 
     private func hideList() {
         openSubagents = []
+        reviewing = nil
         guard isShowingList else { return }
         isShowingList = false
         center.listHidden()
@@ -117,6 +121,20 @@ public final class AgentsModule: NotchModule {
     }
 
     // MARK: Actions (from the views)
+
+    /// Shows a request's whole change in the taller notch, to Allow or Deny it there.
+    func review(_ thread: AgentThread) {
+        guard let approval = thread.approval, case .edit = approval.review.content else { return }
+        reviewing = (thread.id, approval)
+        notch?.setTall(true)
+    }
+
+    /// Back to the list (Back, or the request went away).
+    func closeReview() {
+        guard reviewing != nil else { return }
+        reviewing = nil
+        notch?.setTall(false)
+    }
 
     func toggleSubagents(of thread: AgentThread) {
         if openSubagents.remove(thread.id) == nil { openSubagents.insert(thread.id) }

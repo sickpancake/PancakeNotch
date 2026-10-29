@@ -17,11 +17,13 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 #define MAX_INPUT (4 * 1024 * 1024)   // a huge tool input is cut, not refused
 #define MAX_ANSWER (64 * 1024)
 #define CONNECT_MS 250
+#define ANSWER_MS (10 * 60 * 1000)   // then the tool asks in its own window, even if PancakeNotch hangs
 
 // What to print when PancakeNotch has nothing to say. Cursor's beforeSubmitPrompt must allow the prompt;
 // everything else accepts an empty object (Codex's Stop needs JSON, so never print nothing).
@@ -155,11 +157,25 @@ int main(int argc, char **argv) {
         return finish(fallback);
     }
 
-    // Wait for Allow / Deny. PancakeNotch closing the connection without an answer means "ask in the app".
+    // Wait for Allow / Deny. PancakeNotch closing the connection without an answer means "ask in the app",
+    // and so does no answer within ANSWER_MS.
     char answer[MAX_ANSWER + 1];
     size_t used = 0;
-    ssize_t got;
-    while (used < MAX_ANSWER && (got = read(fd, answer + used, MAX_ANSWER - used)) != 0) {
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    while (used < MAX_ANSWER) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long left = ANSWER_MS - (long)((now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000);
+        struct pollfd wait = {.fd = fd, .events = POLLIN};
+        int ready = left > 0 ? poll(&wait, 1, (int)left) : 0;
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready <= 0) {
+            used = 0;
+            break;
+        }
+        ssize_t got = read(fd, answer + used, MAX_ANSWER - used);
+        if (got == 0) break;
         if (got < 0) {
             if (errno == EINTR) continue;
             used = 0;

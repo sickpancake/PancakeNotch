@@ -116,6 +116,15 @@ public final class AgentsCenter {
         return center
     }
 
+    /// The practice threads plus one asking to change a file (the off-screen snapshot's review screen).
+    public static func practiceWithEdit(now: Date = .now) -> AgentsCenter {
+        let center = practice(now: now)
+        let thread = PracticeAgents.editingThread(now: now)
+        center.storage[thread.id] = thread
+        center.hasOwnTitle.insert(thread.id)
+        return center
+    }
+
     /// Puts the practice threads back (after a try, or when a lesson starts again).
     public func reset(now: Date = .now) {
         guard isPractice else { return }
@@ -185,21 +194,20 @@ public final class AgentsCenter {
 
     // MARK: Answering and opening
 
-    /// Allow once / Deny the request `shown` was showing. Nothing happens if another request has
-    /// taken its place since.
+    /// Allow once / Deny the request `shown` was showing. Nothing happens if it was answered, or another
+    /// request took its place, since.
     public func allow(_ shown: AgentThread) { answer(shown, allow: true) }
     public func deny(_ shown: AgentThread) { answer(shown, allow: false) }
 
     private func answer(_ shown: AgentThread, allow: Bool) {
         let id = shown.id
-        guard let thread = storage[id], thread.canAnswer, thread.answerID == shown.answerID else { return }
+        guard let approval = storage[id]?.approval, approval == shown.approval else { return }
         if let practice {
             practice.answer(id, allow: allow)
             onPracticeEvent?(allow ? .allowed : .denied)
             return
         }
-        guard let requestID = thread.answerID else { return }
-        live?.answer(threadID: id, requestID: requestID, allow: allow)
+        live?.answer(threadID: id, requestID: approval.requestID, allow: allow)
     }
 
     /// Brings the thread's app forward. A pending permission request goes back to the app, so it can
@@ -243,9 +251,9 @@ public final class AgentsCenter {
         var status: AgentStatus?
         /// `.some(nil)` clears it.
         var step: String??
+        /// Ignored while the thread has a pending approval, unless the same update ends it.
         var request: String??
-        var canAnswer: Bool?
-        var answerID: Int?
+        var approval: PendingApproval??
         var processID: pid_t?
         var hostBundleID: String?
         /// Only adds the thread if it's new (a session seen idle at launch): no alerts.
@@ -275,11 +283,10 @@ public final class AgentsCenter {
         if !hasOwnTitle.contains(update.id) { thread.title = thread.project.isEmpty ? update.tool.name : thread.project }
         if let message = AgentNames.oneLine(update.lastMessage) { thread.lastMessage = message }
         if let step = update.step { thread.step = step }
-        if let request = update.request { thread.request = request }
-        if let canAnswer = update.canAnswer {
-            thread.canAnswer = canAnswer
-            thread.answerID = canAnswer ? update.answerID : nil
-        }
+        // A pending request's words stay as they arrived until it's answered, handed back or over.
+        let endsApproval = update.approval != nil || update.status.map { !$0.needsYou } == true
+        if let request = update.request, thread.approval == nil || endsApproval { thread.request = request }
+        if let approval = update.approval { thread.approval = approval }
         if let pid = update.processID, pid > 0 { processIDs[update.id] = pid }
         if let bundleID = update.hostBundleID { hostBundleIDs[update.id] = bundleID }
 
@@ -291,8 +298,7 @@ public final class AgentsCenter {
             thread.statusSince = update.at
             if !status.needsYou {
                 if update.request == nil { thread.request = nil }
-                thread.canAnswer = false
-                thread.answerID = nil
+                thread.approval = nil
             }
             if status.isFinished {
                 thread.subagents = []

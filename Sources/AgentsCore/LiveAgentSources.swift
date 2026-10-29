@@ -118,7 +118,7 @@ final class LiveAgentSources {
         pending[threadID] = nil
         server?.answer(requestID, with: Self.decision(allow: allow, tool: thread.tool))
         // Either way the agent carries on: with the command, or with the news that it was denied.
-        center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), canAnswer: false))
+        center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), approval: .some(nil)))
     }
 
     /// The tools' own answer format (Claude Code and Codex share it).
@@ -135,7 +135,7 @@ final class LiveAgentSources {
         guard let requestID = pending.removeValue(forKey: threadID) else { return }
         server?.answer(requestID, with: nil)
         if let thread = center.thread(threadID) {
-            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, canAnswer: false, quietly: true))
+            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, approval: .some(nil), quietly: true))
         }
     }
 
@@ -148,7 +148,7 @@ final class LiveAgentSources {
         guard let threadID = pending.first(where: { $0.value == requestID })?.key else { return }
         pending[threadID] = nil
         if let thread = center.thread(threadID) {
-            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, canAnswer: false, quietly: true))
+            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, approval: .some(nil), quietly: true))
         }
     }
 
@@ -157,8 +157,8 @@ final class LiveAgentSources {
     private func requestSettled(_ threadID: String) {
         guard let requestID = pending.removeValue(forKey: threadID) else { return }
         server?.answer(requestID, with: nil)
-        if let thread = center.thread(threadID), thread.canAnswer {
-            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, canAnswer: false, quietly: true))
+        if let thread = center.thread(threadID), thread.approval != nil {
+            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, approval: .some(nil), quietly: true))
         }
     }
 
@@ -206,17 +206,20 @@ final class LiveAgentSources {
             update.status = .working
             update.lastMessage = event.prompt
         case (_, "PermissionRequest"):
+            // One that doesn't wait for an answer never touches a request that does.
+            if event.requestID == nil, pending[id] != nil { return }
             update.status = .needsYou(.permission)
             update.request = .some(event.summary)
             if let requestID = event.requestID {
                 requestSettled(id)
                 center.apply(update, deferFinishAlert: true)
                 // Already looking at its app, or more to it than the notch can show: ask there right away.
-                if center.isFrontmost(id) || !event.isFullyShown {
+                if center.isFrontmost(id) || event.review == nil {
                     server?.answer(requestID, with: nil)
-                } else {
+                } else if let review = event.review {
                     pending[id] = requestID
-                    center.apply(.init(id: id, tool: event.tool, at: now, canAnswer: true, answerID: requestID, quietly: true))
+                    center.apply(.init(id: id, tool: event.tool, at: now,
+                                       approval: .some(PendingApproval(requestID: requestID, review: review)), quietly: true))
                 }
                 return
             }

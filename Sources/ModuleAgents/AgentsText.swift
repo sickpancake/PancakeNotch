@@ -28,10 +28,62 @@ enum AgentsText {
     static func subtitle(_ thread: AgentThread) -> String {
         let detail: String? = switch thread.status {
         case .working: thread.step
-        case .needsYou: thread.request
+        case .needsYou: thread.approval.map { asks($0.review) } ?? thread.request
         case .done, .stopped, .failed: nil
         }
         return [thread.byline ?? thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// What a request the notch can answer asks for, ahead of the command or change itself: "Wants to
+    /// run:", "Wants to change Button.tsx".
+    static func asks(_ review: AgentReview) -> String {
+        switch review.content {
+        case .command: return String(localized: "Wants to run:", comment: "Agent permission request, the whole command follows")
+        case .read: return String(localized: "Wants to read:", comment: "Agent permission request, the file follows")
+        case .edit(let change):
+            let name = String(change.path.joined().split(separator: "/").last ?? "")
+            return switch change.action {
+            case .change: String(localized: "Wants to change \(name)", comment: "Agent permission request: a file's name")
+            case .create: String(localized: "Wants to create \(name)", comment: "Agent permission request: a file's name")
+            case .replace: String(localized: "Wants to replace \(name)", comment: "Agent permission request: a file's name")
+            case .delete: String(localized: "Wants to delete \(name)", comment: "Agent permission request: a file's name")
+            }
+        }
+    }
+
+    /// The lines a command or a file to read shows in its row; none for a change (it has a review screen).
+    static func rowLines(_ review: AgentReview?) -> [String] {
+        switch review?.content {
+        case .command(let lines), .read(let lines): lines
+        case .edit, nil: []
+        }
+    }
+
+    /// Above a change on the review screen: "Wants to change", "Wants to create a file"…
+    static func action(_ change: AgentReview.FileChange) -> String {
+        switch change.action {
+        case .change: String(localized: "Wants to change", comment: "Agent review screen, above the file's location")
+        case .create: String(localized: "Wants to create", comment: "Agent review screen, above the file's location")
+        case .replace: String(localized: "Wants to replace the whole file", comment: "Agent review screen, above the file's location")
+        case .delete: String(localized: "Wants to delete", comment: "Agent review screen, above the file's location")
+        }
+    }
+
+    static func warning(_ warning: AgentReview.FileChange.Warning) -> String {
+        switch warning {
+        case .outsideProject: String(localized: "This file is outside the project.", comment: "Agent review screen warning")
+        case .runsCode: String(localized: "Changes here can run code or change how your tools behave.", comment: "Agent review screen warning")
+        }
+    }
+
+    /// "Removed: …", "Added: …" for VoiceOver, one per line of the change.
+    static func spoken(_ line: AgentReview.FileChange.Line) -> String {
+        switch line.kind {
+        case .removed: String(localized: "Removed: \(line.text)", comment: "VoiceOver: a removed line of a change")
+        case .added: String(localized: "Added: \(line.text)", comment: "VoiceOver: an added line of a change")
+        case .context: String(localized: "Unchanged: \(line.text)", comment: "VoiceOver: an unchanged line around a change")
+        case .gap: String(localized: "Elsewhere in the file:", comment: "VoiceOver: a break between parts of a change")
+        }
     }
 
     /// "2 working · 1 needs you", with "1 done" for finished threads when asked. `nil` when there's nothing.
@@ -68,7 +120,8 @@ enum AgentsText {
     /// For VoiceOver, one row: "Fix the login redirect, Claude Code, web-app · Running tests, Working · 4m,
     /// 2 subagents".
     static func spoken(_ thread: AgentThread, now: Date) -> String {
-        [thread.title, thread.tool.name, subtitle(thread), statusLine(thread.status, since: thread.statusSince, now: now),
+        [thread.title, thread.tool.name, subtitle(thread), rowLines(thread.approval?.review).joined(),
+         statusLine(thread.status, since: thread.statusSince, now: now),
          thread.subagents.isEmpty ? "" : subagents(thread.subagents.count)]
             .filter { !$0.isEmpty }.joined(separator: ", ")
     }

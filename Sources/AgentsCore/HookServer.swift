@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 import os
 
-/// One event from the hook helper, with the few fields PancakeNotch uses (never file contents; of a
-/// prompt, only its first line, to name the thread).
+/// One event from the hook helper, with the few fields PancakeNotch uses (of a prompt, only its first
+/// line, to name the thread; of a permission request's change, only what the notch shows while it waits).
 struct HookEvent: Sendable {
     let tool: AgentTool
     /// The tool's event name ("PermissionRequest", "Stop", "beforeSubmitPrompt"…).
@@ -26,8 +26,8 @@ struct HookEvent: Sendable {
     var fullPrompt: String?
     /// "Wants to run: npm test" (permission requests) or "Running npm test" (Cursor's steps).
     var summary: String?
-    /// `summary` shows all of what Allow would approve (`AgentSteps.isFullyShown`).
-    var isFullyShown = false
+    /// All of what Allow would approve, when the notch can show it whole (permission requests).
+    var review: AgentReview?
     var notificationType: String?
     /// A notification's text, or an error's.
     var message: String?
@@ -55,7 +55,9 @@ struct HookEvent: Sendable {
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
             summary = AgentSteps.request(tool: toolName, input: input)
-            isFullyShown = AgentSteps.isFullyShown(tool: toolName, input: input, cwd: cwd)
+            if name == "PermissionRequest" {
+                review = AgentReview.make(tool: toolName, input: input, cwd: cwd, home: FileManager.default.homeDirectoryForCurrentUser.path)
+            }
         } else if name == "afterShellExecution" {
             summary = AgentSteps.step(tool: "Shell", input: payload)
         } else if name == "afterFileEdit" {
@@ -84,6 +86,10 @@ final class HookServer: @unchecked Sendable {
 
     static let maxHeader = 1024
     static let maxBody = 4 * 1024 * 1024 + 1024
+    /// More connections than this at once are turned away (the tool then asks in its own window).
+    static let maxClients = 32
+    /// A helper that hasn't sent its whole event by then is dropped.
+    static let sendDeadline: DispatchTimeInterval = .seconds(5)
 
     private final class Client {
         let fd: Int32
@@ -152,6 +158,8 @@ final class HookServer: @unchecked Sendable {
         }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
+        // Programs the app starts (the Codex check, helpers) don't inherit the socket.
+        _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
         unlink(path)
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
@@ -176,6 +184,11 @@ final class HookServer: @unchecked Sendable {
         while true {
             let fd = accept(listenFD, nil, nil)
             guard fd >= 0 else { return }
+            _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
+            guard clients.count < Self.maxClients else {
+                Darwin.close(fd)
+                continue
+            }
             var one: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
             // Only this user's processes may talk to PancakeNotch.
@@ -195,6 +208,11 @@ final class HookServer: @unchecked Sendable {
             client.source = source
             clients[fd] = client
             source.resume()
+            // One check when the time's up, not a timer: a helper waiting for an answer has sent it all.
+            queue.asyncAfter(deadline: .now() + Self.sendDeadline) { [weak self, weak client] in
+                guard let self, let client, self.clients[client.fd] === client, client.requestID == nil else { return }
+                self.close(client)
+            }
         }
     }
 

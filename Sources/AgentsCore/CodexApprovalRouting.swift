@@ -23,8 +23,10 @@ enum CodexApprovalRouting {
         return false
     }
 
+    /// A granular policy can switch asking off per kind of request, and which kind a hook is isn't mapped
+    /// yet: Codex asks those itself.
     private static func canAsk(_ policy: Any?) -> Bool {
-        if let policy = policy as? String { return ["on-request", "untrusted", "on-failure"].contains(policy) }
-        return (policy as? [String: Any])?["granular"] as? [String: Any] != nil
+        guard let policy = policy as? String else { return false }
+        return ["on-request", "untrusted", "on-failure"].contains(policy)
     }
 }

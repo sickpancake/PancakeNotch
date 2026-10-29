@@ -15,6 +15,28 @@ final class PracticeAgents {
     static let workingID = "claude:practice-login"
     static let askingID = "codex:practice-parser"
     static let doneID = "cursor:practice-readme"
+    static let editingID = "claude:practice-button"
+
+    /// A thread asking to change a file, for the off-screen snapshot's review screen.
+    static func editingThread(now: Date) -> AgentThread {
+        let change = AgentReview.FileChange(
+            path: ["src/components/Button.tsx"], action: .change, warning: nil, everyMatch: false,
+            lines: [
+                .init(kind: .context, text: "export function Button({ label, onClick }: Props) {"),
+                .init(kind: .removed, text: "  return <button onClick={onClick}>{label}</button>"),
+                .init(kind: .added, text: "  return ("),
+                .init(kind: .added, text: "    <button className=\"button\" onClick={onClick} disabled={!onClick}>"),
+                .init(kind: .added, text: "      {label}"),
+                .init(kind: .added, text: "    </button>"),
+                .init(kind: .added, text: "  )"),
+                .init(kind: .context, text: "}"),
+            ])
+        return AgentThread(id: editingID, tool: .claude, title: String(localized: "Tidy the button styles", comment: "Practice agent thread"),
+                           project: "web-app", status: .needsYou(.permission), statusSince: now.addingTimeInterval(-20),
+                           workStarted: now.addingTimeInterval(-3 * 60),
+                           request: String(localized: "Wants to edit Button.tsx", comment: "Practice agent request"),
+                           approval: PendingApproval(requestID: 1, review: AgentReview(content: .edit(change))), canOpen: true)
+    }
 
     static func threads(now: Date) -> [AgentThread] {
         [
@@ -32,7 +54,8 @@ final class PracticeAgents {
                         project: "compiler", status: .needsYou(.permission), statusSince: now.addingTimeInterval(-40),
                         workStarted: now.addingTimeInterval(-6 * 60),
                         request: String(localized: "Wants to run: rm -rf build", comment: "Practice agent request"),
-                        canAnswer: true, canOpen: true),
+                        approval: PendingApproval(requestID: 0, review: AgentReview(content: .command(lines: ["rm -rf build"]))),
+                        canOpen: true),
             AgentThread(id: doneID, tool: .cursor, title: String(localized: "Update the README", comment: "Practice agent thread"),
                         project: "docs", status: .done, statusSince: now.addingTimeInterval(-2 * 60), canOpen: true, isSeen: true),
         ]

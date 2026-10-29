@@ -48,6 +48,14 @@ struct CodexApprovalTests {
         #expect(!CodexApprovalRouting.needsUser(event(url)))
     }
 
+    @Test func granularPoliciesAreAnsweredInCodex() throws {
+        let url = try transcript("""
+        {"type":"turn_context","payload":{"turn_id":"current","approval_policy":{"granular":{"sandbox_approval":false}},"approvals_reviewer":"user"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        #expect(!CodexApprovalRouting.needsUser(event(url)))
+    }
+
     @Test func anOlderHumanTurnCannotOverrideTheLatestAutomaticTurn() throws {
         let url = try transcript("""
         {"type":"turn_context","payload":{"turn_id":"old","approval_policy":"on-request","approvals_reviewer":"user"}}
@@ -94,7 +102,7 @@ struct CodexApprovalSocketTests {
                                                  "transcript_path": event.transcriptPath ?? ""])
             background.requestID = event.requestID
             background.summary = event.summary
-            background.isFullyShown = event.isFullyShown
+            background.review = event.review
             sources.handle(background)
             if let id = event.requestID { server?.answer(id, with: LiveAgentSources.decision(allow: false, tool: event.tool)) }
         }

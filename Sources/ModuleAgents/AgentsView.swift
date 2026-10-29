@@ -15,7 +15,11 @@ struct AgentsView: View {
             band(threads, hasFinished: center.hasFinished)
                 .frame(height: layout.bandHeight)
                 .padding(.horizontal, AgentsLayout.sidePadding)
-            if threads.isEmpty {
+            if let (thread, change) = reviewed(threads) {
+                AgentsReviewScreen(module: module, thread: thread, change: change)
+                    .padding(.horizontal, AgentsLayout.sidePadding)
+                    .padding(.bottom, AgentsLayout.bottomPadding)
+            } else if threads.isEmpty {
                 PanelNote(symbol: "sparkles", title: "No agents running",
                           detail: "Start Claude Code or Codex and they'll show up here. Cursor too, after Connect.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,10 +28,21 @@ struct AgentsView: View {
                 AgentsList(module: module, threads: threads)
             }
         }
+        // The request on the review screen was answered, handed back or replaced: back to the list.
+        .onChange(of: reviewed(threads) == nil) { _, gone in
+            if gone { module.closeReview() }
+        }
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Agents"))
+    }
+
+    /// The thread and change on the review screen, while that very request still waits.
+    private func reviewed(_ threads: [AgentThread]) -> (AgentThread, AgentReview.FileChange)? {
+        guard let reviewing = module.reviewing, let thread = threads.first(where: { $0.id == reviewing.threadID }),
+              thread.approval == reviewing.approval, case .edit(let change) = reviewing.approval.review.content else { return nil }
+        return (thread, change)
     }
 
     /// Beside the notch: nothing on the left (the module tabs live there); on the right what's going on,
@@ -145,6 +160,27 @@ private struct AgentRow: View {
     @State private var isHovered = false
 
     var body: some View {
+        let lines = AgentsText.rowLines(thread.approval?.review)
+        VStack(alignment: .leading, spacing: 0) {
+            summary
+                .frame(height: 40)
+            // A command or a file to read, whole, under the title: Allow approves exactly this.
+            if !lines.isEmpty {
+                RequestLines(lines: lines)
+                    .padding(.leading, 32)
+                    .padding(.bottom, 9)
+            }
+        }
+        .padding(.horizontal, Self.inset)
+        .background(.white.opacity(isHovered && thread.canOpen ? 0.08 : 0), in: .rect(cornerRadius: 9, style: .continuous))
+        .contentShape(.rect(cornerRadius: 9, style: .continuous))
+        .onHover { isHovered = $0 }
+        .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
+        .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
+        .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
+    }
+
+    private var summary: some View {
         HStack(spacing: 10) {
             AgentMark(status: thread.status, size: 22)
             VStack(alignment: .leading, spacing: 1) {
@@ -182,14 +218,25 @@ private struct AgentRow: View {
                 }
             }
         }
-        .padding(.horizontal, Self.inset)
-        .frame(height: 40)
-        .background(.white.opacity(isHovered && thread.canOpen ? 0.08 : 0), in: .rect(cornerRadius: 9, style: .continuous))
-        .contentShape(.rect(cornerRadius: 9, style: .continuous))
-        .onHover { isHovered = $0 }
-        .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
-        .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
-        .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
+    }
+}
+
+/// A command or a file's place, line for line as cut to fit (`AgentReview.columns`), in a fixed-width
+/// font so nothing can pass for something else. Read out as part of the row.
+struct RequestLines: View {
+    let lines: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(verbatim: line)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -282,9 +329,16 @@ private struct OpensOnClick: ViewModifier {
 }
 
 /// Open (when its app is known), Deny and Allow, for a request that can be answered here. Allow means once.
-private struct AnswerButtons: View {
+/// A change shows Review instead: Allow is on the review screen, under the whole change. Allow wakes up
+/// half a second after its request appears, so a click meant for something else can't land on it.
+struct AnswerButtons: View {
     let module: AgentsModule
     let thread: AgentThread
+    /// On the review screen: no Review, Allow instead.
+    var inReview = false
+    /// False when the review screen can't show the whole change: Open and Deny only.
+    var allowsAllow = true
+    @State private var armed: PendingApproval?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -298,10 +352,23 @@ private struct AnswerButtons: View {
                          help: String(localized: "Say no to this request")) {
                 module.center.deny(thread)
             }
-            AnswerButton(title: String(localized: "Allow"), label: String(localized: "Allow once"),
-                         help: String(localized: "Say yes to this request, this once"), prominent: true) {
-                module.center.allow(thread)
+            if case .edit? = thread.approval?.review.content, !inReview {
+                AnswerButton(title: String(localized: "Review"), label: String(localized: "Review the change"),
+                             help: String(localized: "See the whole change, then Allow or Deny it"), prominent: true) {
+                    module.review(thread)
+                }
+            } else if allowsAllow {
+                AnswerButton(title: String(localized: "Allow"), label: String(localized: "Allow once"),
+                             help: String(localized: "Say yes to this request, this once"), prominent: true,
+                             isEnabled: module.isSnapshot || (armed != nil && armed == thread.approval)) {
+                    module.center.allow(thread)
+                }
             }
+        }
+        .task(id: thread.approval) {
+            armed = nil
+            try? await Task.sleep(for: .milliseconds(500))
+            if !Task.isCancelled { armed = thread.approval }
         }
     }
 }
@@ -312,11 +379,14 @@ private struct AnswerButton: View {
     let label: String
     let help: String
     var prominent = false
+    var isEnabled = true
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            if isEnabled { action() }
+        } label: {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(prominent ? .black : .white)
@@ -328,6 +398,7 @@ private struct AnswerButton: View {
                     if !prominent { Capsule().strokeBorder(.white.opacity(0.4), lineWidth: 1) }
                 }
                 .contentShape(Capsule())
+                .opacity(isEnabled ? 1 : 0.5)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
