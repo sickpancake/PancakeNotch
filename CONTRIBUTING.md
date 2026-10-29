@@ -46,10 +46,21 @@ publishes to GitHub Pages when it changes on `main`. The app's Help page links t
 ## Releases (maintainers)
 
 1. Add a `## X.Y.Z` section to `CHANGELOG.md`. Write it for people using the app: it becomes the
-   update window's text and the GitHub Release notes.
-2. Push a `vX.Y.Z` tag. The Release workflow tests, builds, signs, checks memory and privacy,
-   publishes the GitHub Release and updates the website's update feed.
+   update window's text and the GitHub Release notes. Merge it in a pull request of its own, without
+   website changes: GitHub Pages keeps one deploy per commit, so if merging it updates the website,
+   the release's own website update is dropped and the site keeps the older update feed.
+2. Push a `vX.Y.Z` tag on that commit on `main`. The Release workflow tests and builds the app, then
+   waits for you.
+3. Approve it: open the run (Actions › Release) and choose **Review deployments › release ›
+   Approve and deploy**. Only then does it sign, check the signed release (signatures, privacy,
+   memory), publish the GitHub Release and update the website's feed. The last job checks the
+   website really serves the new feed; if it fails, its message says how to fix it.
 
-`./scripts/package-release.sh` is what the workflow runs. Every pull request also runs it with
-throwaway keys (the `release-dry-run` CI job), so problems show up before release day. Signing keys
-are made once with `./scripts/make-signing-keys.sh` and kept as repository secrets, never committed.
+The workflow's steps are scripts you can read: `build-app.sh`, then `sign-release.sh` (the only one
+that sees the keys), then `check-release.sh`. Every pull request runs them with throwaway keys (the
+`release-dry-run` CI job), so problems show up before release day.
+
+Signing keys are made once with `./scripts/make-signing-keys.sh` and never committed. They live in
+two places only: the `release` environment's secrets on GitHub (Settings › Environments › release,
+which also requires your approval and allows only `v*` tags), and the maintainer's encrypted backup.
+The update key can't be replaced: installed copies only accept updates signed with it.

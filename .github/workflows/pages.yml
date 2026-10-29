@@ -1,13 +1,16 @@
 name: Website
 
 # Publishes the website to GitHub Pages whenever web/ (the home page) or site/ (Help) changes on main.
-# The update feed is carried over from the live site (releases add to it; see release.yml).
+# The update feed is carried over from the latest GitHub Release (releases add to it; see release.yml).
 
 on:
   push:
     branches: [main]
-    paths: ["web/**", "site/**", "scripts/build-site.sh"]
+    paths: ["web/**", "site/**", "scripts/build-site.sh", "scripts/get-update-feed.sh"]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: pages
@@ -17,15 +20,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Put the site together
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/site
 
@@ -40,4 +45,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

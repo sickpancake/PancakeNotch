@@ -5,11 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Toolchain
         run: swift --version
       - name: Test
@@ -31,8 +36,10 @@ jobs:
   website:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -40,45 +47,86 @@ jobs:
       - name: Put the site together
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
 
-  # The release pipeline end to end with throwaway keys (nothing is published): certificate import
-  # and trust, signing, the update signature, the feed, the privacy check, and the idle memory of a
-  # build that can update itself (Sparkle running).
+  # The release workflow's steps end to end with throwaway keys (nothing is published): build, then
+  # certificate import and trust, signing, the update and feed signatures, the release checks, and the
+  # idle memory of a build that can update itself (Sparkle running). Also checks that the live update
+  # feed is one the next release will accept, and that a changed or unsigned feed is refused.
   release-dry-run:
     runs-on: macos-15
+    env:
+      DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/dry-run/PancakeNotch.zip
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - name: Version
+        run: |
+          echo "PANCAKENOTCH_VERSION=$(sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CHANGELOG.md | head -1)" >> "$GITHUB_ENV"
+          echo "PANCAKENOTCH_BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+      - name: Build the app (as the release's build job does)
+        run: |
+          ./scripts/build-app.sh release
+          mkdir -p "$RUNNER_TEMP/unsigned"
+          ditto -c -k --norsrc --noextattr --noacl --keepParent build/PancakeNotch.app "$RUNNER_TEMP/unsigned/PancakeNotch.zip"
       - name: Throwaway signing keys
-        run: ./scripts/make-signing-keys.sh "$RUNNER_TEMP/keys" --throwaway
+        run: |
+          ./scripts/make-signing-keys.sh "$RUNNER_TEMP/keys" --throwaway
+          echo "SPARKLE_PUBLIC_ED_KEY=$(cat "$RUNNER_TEMP/keys/update-public-key.txt")" >> "$GITHUB_ENV"
       - name: Signing certificate
         id: cert
         run: echo "identity=$(./scripts/import-signing-cert.sh "$RUNNER_TEMP/keys/signing.p12" "$(cat "$RUNNER_TEMP/keys/signing-p12-password.txt")")" >> "$GITHUB_OUTPUT"
       - name: Sparkle tools
         id: sparkle
         run: echo "bin=$(./scripts/get-sparkle-tools.sh "$RUNNER_TEMP/sparkle")" >> "$GITHUB_OUTPUT"
-      - name: Build, sign and package
+      - name: The live update feed is one the next release accepts
+        env:
+          LIVE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: |
-          export PANCAKENOTCH_VERSION="$(sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CHANGELOG.md | head -1)"
-          export PANCAKENOTCH_BUILD="$(git rev-list --count HEAD)"
-          export CODESIGN_IDENTITY="${{ steps.cert.outputs.identity }}"
-          export SPARKLE_PUBLIC_ED_KEY="$(cat "$RUNNER_TEMP/keys/update-public-key.txt")"
-          export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/keys/update-private-key.txt"
-          export SPARKLE_BIN="${{ steps.sparkle.outputs.bin }}"
-          export DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/dry-run/PancakeNotch.zip"
-          ./scripts/package-release.sh
+          ./scripts/get-update-feed.sh "$RUNNER_TEMP/live-appcast.xml"
+          if [[ -z "$LIVE_PUBLIC_ED_KEY" || ! -f "$RUNNER_TEMP/live-appcast.xml" ]]; then
+            echo "::notice::Skipped: no update key variable here (pull requests from forks) or no feed yet."
+          else
+            ./scripts/check-update-feed.sh "$RUNNER_TEMP/live-appcast.xml" "$LIVE_PUBLIC_ED_KEY"
+          fi
+      - name: Sign (as the release's sign job does)
+        env:
+          CODESIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+          SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
+        run: |
+          SPARKLE_PRIVATE_KEY="$(cat "$RUNNER_TEMP/keys/update-private-key.txt")" \
+            ./scripts/sign-release.sh "$RUNNER_TEMP/unsigned/PancakeNotch.zip" build/release
+      - name: Check (as the release's check job does)
+        run: ./scripts/check-release.sh build/release "$RUNNER_TEMP/unpacked"
+      - name: A signed feed carries over; a changed or unsigned one is refused
+        env:
+          CODESIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+          SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
+        run: |
+          export SPARKLE_PRIVATE_KEY="$(cat "$RUNNER_TEMP/keys/update-private-key.txt")"
+          EXISTING_APPCAST=build/release/appcast.xml ./scripts/sign-release.sh "$RUNNER_TEMP/unsigned/PancakeNotch.zip" "$RUNNER_TEMP/again"
+          sed 's/Updates for PancakeNotch\./Updates for PancakeNotch!/' build/release/appcast.xml > "$RUNNER_TEMP/changed-feed.xml"
+          sed '/<!-- sparkle-signatures:/,$d' build/release/appcast.xml > "$RUNNER_TEMP/unsigned-feed.xml"
+          for feed in changed-feed unsigned-feed; do
+            if EXISTING_APPCAST="$RUNNER_TEMP/$feed.xml" ./scripts/sign-release.sh \
+                "$RUNNER_TEMP/unsigned/PancakeNotch.zip" "$RUNNER_TEMP/out-$feed" 2> "$RUNNER_TEMP/$feed.log"; then
+              echo "::error::The $feed was accepted."
+              exit 1
+            fi
+            grep -q "update feed" "$RUNNER_TEMP/$feed.log" || { cat "$RUNNER_TEMP/$feed.log"; echo "::error::The $feed failed for another reason."; exit 1; }
+          done
       - name: Signed with the project certificate
         run: |
-          codesign -dvv build/PancakeNotch.app 2>&1 | grep -E '^(Authority|Identifier|TeamIdentifier)='
-          codesign -d -r- build/PancakeNotch.app 2>&1 | grep 'certificate leaf'
+          codesign -dvv "$RUNNER_TEMP/unpacked/PancakeNotch.app" 2>&1 | grep -E '^(Authority|Identifier|TeamIdentifier)='
+          codesign -d -r- "$RUNNER_TEMP/unpacked/PancakeNotch.app" 2>&1 | grep 'certificate leaf'
       - name: Idle memory budget with updates on (ADR-0006)
-        run: ./scripts/check-memory.sh build/PancakeNotch.app 30 50
-      - uses: actions/setup-node@v5
+        run: ./scripts/check-memory.sh "$RUNNER_TEMP/unpacked/PancakeNotch.app" 30 50
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
       - name: Website
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site" build/release/appcast.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-dry-run
           path: |
