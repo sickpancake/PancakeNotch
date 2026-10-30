@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 /// Claude Code's own list of live sessions: one small `<config>/sessions/<pid>.json` per running
 /// session, removed when it quits (ADR-0037). Status is busy / shell / idle / waiting.
@@ -13,9 +14,10 @@ struct ClaudeSession: Equatable, Sendable {
 
     init?(data: Data) {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let pid = object["pid"] as? Int, let sessionID = object["sessionId"] as? String,
+              let rawPID = object["pid"] as? NSNumber, CFGetTypeID(rawPID) != CFBooleanGetTypeID(), let pid = Int32(exactly: rawPID.doubleValue), pid > 0,
+              let sessionID = object["sessionId"] as? String,
               let status = object["status"] as? String else { return nil }
-        self.pid = pid_t(pid)
+        self.pid = pid
         self.sessionID = sessionID
         cwd = object["cwd"] as? String ?? ""
         // Only a name the user gave it (/rename). The others are the folder's ("pancakenotch-5a") or made
@@ -25,7 +27,7 @@ struct ClaudeSession: Equatable, Sendable {
         self.status = status
         waitingFor = (object["waitingFor"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let millis = object["statusUpdatedAt"] as? Double ?? object["updatedAt"] as? Double ?? 0
-        statusUpdated = millis > 0 ? Date(timeIntervalSince1970: millis / 1000) : .now
+        statusUpdated = millis.isFinite && millis > 0 ? Date(timeIntervalSince1970: millis / 1000) : .now
     }
 
     /// Working, needing you, or nil for idle (finished its turn, or never started).

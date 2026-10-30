@@ -53,55 +53,60 @@ enum DelegationScript {
             index += expected.count
             return true
         }
+        private func isWord(_ byte: UInt8) -> Bool {
+            (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte) || byte == 95 || byte == 36
+        }
         init(_ source: String) {
-            let chars = Array(source)
+            let chars = Array(source.utf8)
             var i = 0
             while i < chars.count {
+                guard tokens.count < 32_768 else { tokens = ["<unsupported>"]; return }
                 let c = chars[i]
-                if c.isWhitespace { i += 1; continue }
-                if c == "/", i + 1 < chars.count, chars[i + 1] == "/" {
-                    while i < chars.count, chars[i] != "\n" { i += 1 }; continue
+                if [9, 10, 11, 12, 13, 32].contains(c) { i += 1; continue }
+                if c == 47, i + 1 < chars.count, chars[i + 1] == 47 {
+                    while i < chars.count, chars[i] != 10 { i += 1 }; continue
                 }
-                if c == "/", i + 1 < chars.count, chars[i + 1] == "*" {
+                if c == 47, i + 1 < chars.count, chars[i + 1] == 42 {
                     i += 2
-                    while i + 1 < chars.count, !(chars[i] == "*" && chars[i + 1] == "/") { i += 1 }
+                    while i + 1 < chars.count, !(chars[i] == 42 && chars[i + 1] == 47) { i += 1 }
                     i = min(chars.count, i + 2); continue
                 }
-                if c == "\"" || c == "'" || c == "`" {
+                if c == 34 || c == 39 || c == 96 {
                     let quote = c
                     i += 1
-                    var value = "", valid = true, closed = false
+                    var value: [UInt8] = []
+                    var valid = true, closed = false
                     while i < chars.count {
                         let c = chars[i]; i += 1
                         if c == quote { closed = true; break }
-                        if quote == "`", c == "$", i < chars.count, chars[i] == "{" { valid = false }
-                        if c == "\\", i < chars.count {
+                        if quote == 96, c == 36, i < chars.count, chars[i] == 123 { valid = false }
+                        if c == 92, i < chars.count {
                             let escape = chars[i]; i += 1
                             switch escape {
-                            case "n": value.append("\n")
-                            case "r": value.append("\r")
-                            case "t": value.append("\t")
-                            case "\\", "\"", "'", "`", "$": value.append(escape)
-                            case "u":
-                                if i + 4 <= chars.count, let code = UInt32(String(chars[i..<i+4]), radix: 16), let scalar = UnicodeScalar(code) {
-                                    value.unicodeScalars.append(scalar); i += 4
+                            case 110: value.append(10)
+                            case 114: value.append(13)
+                            case 116: value.append(9)
+                            case 92, 34, 39, 96, 36: value.append(escape)
+                            case 117:
+                                if i + 4 <= chars.count, let code = UInt32(String(decoding: chars[i..<i+4], as: UTF8.self), radix: 16), let scalar = UnicodeScalar(code) {
+                                    value.append(contentsOf: String(scalar).utf8); i += 4
                                 } else { valid = false }
                             default: valid = false
                             }
                         } else { value.append(c) }
                     }
-                    if valid && closed, let data = try? JSONSerialization.data(withJSONObject: [value]),
+                    if valid && closed, let data = try? JSONSerialization.data(withJSONObject: [String(decoding: value, as: UTF8.self)]),
                        let encoded = String(data: data, encoding: .utf8) { tokens.append(String(encoded.dropFirst().dropLast())) }
                     else { tokens.append("<unsupported>") }
-                } else if c.isLetter || c == "_" || c == "$" || c.isNumber {
+                } else if isWord(c) {
                     let start = i; i += 1
-                    while i < chars.count, chars[i].isLetter || chars[i].isNumber || chars[i] == "_" || chars[i] == "$" { i += 1 }
-                    tokens.append(String(chars[start..<i]))
-                } else if i + 2 < chars.count, String(chars[i..<i+3]) == "..." {
+                    while i < chars.count, isWord(chars[i]) { i += 1 }
+                    tokens.append(String(decoding: chars[start..<i], as: UTF8.self))
+                } else if i + 2 < chars.count, String(decoding: chars[i..<i+3], as: UTF8.self) == "..." {
                     tokens.append("..."); i += 3
-                } else if i + 1 < chars.count, String(chars[i..<i+2]) == "=>" {
+                } else if i + 1 < chars.count, String(decoding: chars[i..<i+2], as: UTF8.self) == "=>" {
                     tokens.append("=>"); i += 2
-                } else { tokens.append(String(c)); i += 1 }
+                } else { tokens.append(String(decoding: [c], as: UTF8.self)); i += 1 }
             }
         }
 

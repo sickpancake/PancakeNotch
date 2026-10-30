@@ -237,13 +237,10 @@ struct SpotifyAdTests {
         #expect(song.track(previous: nil, at: Date())?.isAdvertisement == false)
     }
 
-    @Test @MainActor func helperReportsGetSpotifysAdMark() {
-        let ad = NowPlayingTrack(title: "Advertisement", bundleID: ScriptablePlayers.spotify)
-        let marked = CompositeBackend.marking(NowPlayingUpdate(track: ad), spotifyAdTitle: "Advertisement")
-        #expect(marked.track?.isAdvertisement == true)
-        let other = NowPlayingTrack(title: "Advertisement", bundleID: "com.google.Chrome")
-        #expect(CompositeBackend.marking(NowPlayingUpdate(track: other), spotifyAdTitle: "Advertisement").track?.isAdvertisement == false)
-        #expect(CompositeBackend.marking(NowPlayingUpdate(track: ad), spotifyAdTitle: nil).track?.isAdvertisement == false)
+    @Test @MainActor func helperReportsIgnoreSpotifysAdAnnouncements() {
+        let track = NowPlayingTrack(title: "Advertisement", bundleID: ScriptablePlayers.spotify)
+        #expect(!CompositeBackend.acceptsHint(playerRunning: true, adapterTrack: track))
+        #expect(!track.isAdvertisement)
     }
 
     @Test func enabledCommandsComeFromTheHelper() throws {

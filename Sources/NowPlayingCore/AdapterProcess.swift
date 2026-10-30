@@ -113,11 +113,9 @@ final class AdapterProcess {
         process.standardOutput = pipe
 
         let reader = AdapterStreamReader { [weak self] update in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let self, self.generation == generation else { return }
-                    self.onOutput?(update)
-                }
+            MainActor.assumeIsolated {
+                guard let self, self.generation == generation else { return }
+                self.onOutput?(update)
             }
         }
         process.terminationHandler = { [weak self] ended in
@@ -195,6 +193,9 @@ final class AdapterStreamReader: @unchecked Sendable {
     // `parser` is only touched on `queue`, which makes this safe to share.
     private let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.nowplaying.stream", qos: .utility)
     private var parser = AdapterStreamParser()
+    private let lock = NSLock()
+    private var latest: NowPlayingUpdate?
+    private var scheduled = false
     private let deliver: @Sendable (NowPlayingUpdate) -> Void
 
     init(deliver: @escaping @Sendable (NowPlayingUpdate) -> Void) {
@@ -202,10 +203,24 @@ final class AdapterStreamReader: @unchecked Sendable {
     }
 
     func consume(_ data: Data) {
-        queue.async {
-            if let update = self.parser.feed(data, receivedAt: Date()) {
-                self.deliver(update)
-            }
+        // Parse before returning to the pipe: the producer waits instead of queuing raw chunks.
+        queue.sync {
+            guard let update = autoreleasepool(invoking: { parser.feed(data, receivedAt: Date()) }) else { return }
+            lock.lock()
+            latest = update
+            let needsDelivery = !scheduled
+            scheduled = true
+            lock.unlock()
+            if needsDelivery { DispatchQueue.main.async { self.flush() } }
         }
+    }
+
+    private func flush() {
+        lock.lock()
+        let update = latest
+        latest = nil
+        scheduled = false
+        lock.unlock()
+        if let update { deliver(update) }
     }
 }

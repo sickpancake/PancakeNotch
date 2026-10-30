@@ -27,10 +27,7 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
     private var startupTask: Task<Void, Never>?
     private var restartTask: Task<Void, Never>?
     private var silenceTask: Task<Void, Never>?
-    /// Spotify's own announcement says when it plays an ad (its address starts with "spotify:ad:"),
-    /// which the helper doesn't: the ad's title, added to the helper's reports. Needs no permission.
-    private var spotifyAdTitle: String?
-    /// The helper's last report as it came (to add or remove the ad mark when Spotify's word changes).
+    /// The last trusted MediaRemote report takes priority over distributed hints.
     private var lastAdapterUpdate: NowPlayingUpdate?
     private let now: () -> Date
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "nowplaying")
@@ -78,7 +75,6 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
         adapter.stop()
         players.stop()
         watcher.stop()
-        spotifyAdTitle = nil
         lastAdapterUpdate = nil
     }
 
@@ -152,34 +148,18 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
         startupTask?.cancel()
         connection = .connected
         lastAdapterUpdate = update
-        onUpdate?(Self.marking(update, spotifyAdTitle: spotifyAdTitle))
+        onUpdate?(update)
     }
 
-    /// The helper's report with Spotify's ad flagged when Spotify announced this title as an ad.
-    static func marking(_ update: NowPlayingUpdate, spotifyAdTitle: String?) -> NowPlayingUpdate {
-        guard var track = update.track, !track.isAdvertisement, let spotifyAdTitle, track.title == spotifyAdTitle,
-              track.bundleID == ScriptablePlayers.spotify || track.sourceBundleID == ScriptablePlayers.spotify
-        else { return update }
-        track.isAdvertisement = true
-        return NowPlayingUpdate(track: track, artwork: update.artwork)
-    }
-
-    /// Spotify announced a new item: remember whether it's an ad, and fix the shown song if that changes it.
-    private func spotifyAnnounced(_ info: PlayerNotificationInfo) {
-        let adTitle = SpotifyAd.isAdAddress(info.trackID) ? info.title : nil
-        guard adTitle != spotifyAdTitle else { return }
-        let before = lastAdapterUpdate.map { Self.marking($0, spotifyAdTitle: spotifyAdTitle) }
-        spotifyAdTitle = adTitle
-        guard let last = lastAdapterUpdate else { return }
-        let after = Self.marking(last, spotifyAdTitle: adTitle)
-        if after.track?.isAdvertisement != before?.track?.isAdvertisement { onUpdate?(after) }
+    static func acceptsHint(playerRunning: Bool, adapterTrack: NowPlayingTrack?) -> Bool {
+        playerRunning && adapterTrack == nil
     }
 
     private func playerAnnounced(_ info: PlayerNotificationInfo) {
-        guard isRunning else { return }
+        guard isRunning, Self.acceptsHint(playerRunning: ScriptedPlayers.isRunning(info.bundleID),
+                                         adapterTrack: lastAdapterUpdate?.track) else { return }
         switch policy.source {
         case .adapter:
-            if info.bundleID == ScriptablePlayers.spotify { spotifyAnnounced(info) }
             if info.state == .playing {
                 perform(policy.handle(.playerStartedPlaying(bundleID: info.bundleID, at: now())))
             }
