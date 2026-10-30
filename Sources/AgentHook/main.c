@@ -83,10 +83,12 @@ static char *read_stdin(size_t *length) {
     return buffer;
 }
 
-// $HOME/Library/Application Support/PancakeNotch/agents.sock, or PANCAKENOTCH_AGENTS_SOCKET (tests).
+// $HOME/Library/Application Support/PancakeNotch/agents.sock, or PANCAKENOTCH_AGENTS_SOCKET in testing builds.
 static int socket_path(char *path, size_t size) {
+#ifdef PANCAKENOTCH_INTERNAL_TESTING
     const char *override = getenv("PANCAKENOTCH_AGENTS_SOCKET");
     if (override && *override) return snprintf(path, size, "%s", override) < (int)size ? 0 : -1;
+#endif
     const char *home = getenv("HOME");
     if (!home || !*home) {
         struct passwd *user = getpwuid(getuid());

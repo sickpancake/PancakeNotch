@@ -15,11 +15,14 @@ public final class ShelfStore {
 
     public private(set) var items: [ShelfItem] = []
 
-    /// `~/Library/Application Support/PancakeNotch/Shelf`, or `PANCAKENOTCH_SHELF_DIR` (tests, memory checks).
+    /// `~/Library/Application Support/PancakeNotch/Shelf`, or in testing builds `PANCAKENOTCH_SHELF_DIR`
+    /// (tests, memory checks).
     public static var defaultDirectory: URL {
+        #if PANCAKENOTCH_INTERNAL_TESTING
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SHELF_DIR"] {
             return URL(fileURLWithPath: path, isDirectory: true)
         }
+        #endif
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appending(path: "PancakeNotch/Shelf", directoryHint: .isDirectory)
     }

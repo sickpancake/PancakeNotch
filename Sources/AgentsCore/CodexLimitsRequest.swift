@@ -1,4 +1,6 @@
 import Foundation
+import Security
+import os
 
 /// Asks Codex itself for an account's current limits, so AI Usage is up to date without a new prompt
 /// (ADR-0037, amended 2026-10-22). It starts `codex app-server` for a moment and sends one
@@ -86,7 +88,32 @@ enum CodexLimitsRequest {
             + prefixes.map { "\($0)/\(npmPackage)" }
             + ["/Applications/Codex.app/Contents/Resources/codex",
                "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"]
-        return candidates.lazy.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() }.first(where: isProgram)
+        // Only OpenAI's own: a program someone put in one of these (mostly user-writable) places never runs
+        // as PancakeNotch's child. A Codex built elsewhere still shows its limits from its files.
+        return candidates.lazy.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() }
+            .first { isProgram($0) && isSignedByOpenAI($0) }
+    }
+
+    /// OpenAI's Developer ID team.
+    static let openAITeam = "2DC432GLL2"
+    private static let checked = OSAllocatedUnfairLock(initialState: [String: (stamp: [Int], signed: Bool)]())
+
+    /// Signed with OpenAI's Developer ID and unchanged since. Checked once per version of the file (it's
+    /// large), and again whenever it changes.
+    static func isSignedByOpenAI(_ url: URL, team: String = openAITeam) -> Bool {
+        var info = stat()
+        guard stat(url.path, &info) == 0 else { return false }
+        let stamp = [Int(info.st_dev), Int(info.st_ino), Int(info.st_size), info.st_mtimespec.tv_sec, info.st_mtimespec.tv_nsec, Int(info.st_ctimespec.tv_sec)]
+        let key = url.path + "|" + team
+        if let known = checked.withLock({ $0[key] }), known.stamp == stamp { return known.signed }
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        let text = "anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"" as CFString
+        let signed = SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess
+            && SecRequirementCreateWithString(text, [], &requirement) == errSecSuccess
+            && code.map { SecStaticCodeCheckValidity($0, SecCSFlags(rawValue: kSecCSStrictValidate), requirement) == errSecSuccess } == true
+        checked.withLock { $0[key] = (stamp, signed) }
+        return signed
     }
 
     /// An arm64 or universal Mach-O file that can be run.

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The hardened runtime refuses frameworks signed by another team, and the project's certificate has
+	     no team: without this, the app couldn't load its own frameworks. Injected libraries stay refused. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- Controls Music and Spotify (Now Playing's fallback); macOS still asks the user first. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<!-- The sound bars' system-audio tap; macOS still asks the user first. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

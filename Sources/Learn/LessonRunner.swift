@@ -18,7 +18,8 @@ public final class LessonRunner {
 
     @ObservationIgnored private let advanceDelay: Duration
     /// The one-shot wait between a tick and the next step. Cancelled by skip/back/restart.
-    @ObservationIgnored private var advanceTask: Task<Void, Never>?
+    /// Readable inside the module so tests can wait for it rather than for the clock.
+    @ObservationIgnored private(set) var advanceTask: Task<Void, Never>?
 
     public init(lesson: Lesson, advanceDelay: Duration = .milliseconds(700)) {
         self.lesson = lesson

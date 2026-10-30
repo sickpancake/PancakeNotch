@@ -11,6 +11,10 @@ permissions:
 jobs:
   build-and-test:
     runs-on: macos-15
+    env:
+      # The memory checks use a test Shelf, statistics file and agents socket (switches published builds
+      # don't have; release-dry-run checks a build without them).
+      PANCAKENOTCH_INTERNAL_TESTING: 1
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:

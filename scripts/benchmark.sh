@@ -62,6 +62,8 @@ launch() {   # <app> [env...]: starts the app, sets PID and LAUNCH_MS
 
 # Builds from before the debug player was added can't play music: their music rows show "–".
 plays_music() { grep -aq PANCAKENOTCH_DEBUG_PLAYER "$1/Contents/MacOS/PancakeNotch"; }
+# The Shelf row needs a throwaway Shelf: only builds with the testing switches (PANCAKENOTCH_INTERNAL_TESTING=1).
+has_test_shelf() { grep -aq PANCAKENOTCH_SHELF_DIR "$1/Contents/MacOS/PancakeNotch"; }
 
 # A practice song playing: settles 5 s, then CPU over ACTIVE seconds, for the app and for WindowServer
 # (Core Animation draws the moving parts there, outside the app), then memory.
@@ -137,12 +139,14 @@ for run in $(seq "$RUNS"); do
         stop_app
 
         # A full Shelf, open, so every thumbnail loads.
-        rm -rf "$WORK/shelf" && mkdir -p "$WORK/shelf"
-        launch "$app" PANCAKENOTCH_DEBUG_STATE=expanded PANCAKENOTCH_SHELF_DIR="$WORK/shelf" \
-            PANCAKENOTCH_SHELF_SEED="$WORK/seed"
-        sleep "$SHELF"
-        record "$label" shelf "$(family_footprint "$PID")"
-        stop_app
+        if has_test_shelf "$app"; then
+            rm -rf "$WORK/shelf" && mkdir -p "$WORK/shelf"
+            launch "$app" PANCAKENOTCH_DEBUG_STATE=expanded PANCAKENOTCH_SHELF_DIR="$WORK/shelf" \
+                PANCAKENOTCH_SHELF_SEED="$WORK/seed"
+            sleep "$SHELF"
+            record "$label" shelf "$(family_footprint "$PID")"
+            stop_app
+        fi
 
         if plays_music "$app"; then
             measure_music "$label" closed "$app"   # the compact notch: ears and dancing sound bars

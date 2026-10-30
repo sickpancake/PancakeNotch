@@ -110,6 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Writing to a helper that already quit (Codex's limits request) is an error, not a reason to quit.
         signal(SIGPIPE, SIG_IGN)
+        // Off-screen pictures, in testing builds only (Package.swift).
+        #if PANCAKENOTCH_INTERNAL_TESTING
         if let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SNAPSHOT"] {
             writeSnapshot(to: path)
             return
@@ -119,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        #endif
         NSApp.mainMenu = MainMenu.make(target: self, settingsAction: #selector(showSettings),
                                        updatesAction: updates.isAvailable ? #selector(checkForUpdates) : nil)
         notchController.onOpen = { [weak self] in
@@ -231,7 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `PANCAKENOTCH_SHELF_SEED=/folder` fills an empty Shelf with that folder's files (memory checks;
     /// pair it with `PANCAKENOTCH_SHELF_DIR` so the real Shelf isn't touched).
     private func seedShelfIfRequested() {
-        guard let path = ProcessInfo.processInfo.environment["PANCAKENOTCH_SHELF_SEED"], shelfStore.items.isEmpty,
+        #if PANCAKENOTCH_INTERNAL_TESTING
+        let seed = ProcessInfo.processInfo.environment["PANCAKENOTCH_SHELF_SEED"]
+        #else
+        let seed: String? = nil
+        #endif
+        guard let path = seed, shelfStore.items.isEmpty,
               let files = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: path), includingPropertiesForKeys: nil)
         else { return }
         let inputs = files.sorted { $0.path < $1.path }.map { ShelfInput.file($0, owned: false) }
