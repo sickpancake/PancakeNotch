@@ -318,7 +318,7 @@ struct PrivacyAndFreshnessTests {
     @Test func emailsAreHalfHidden() throws {
         let parts = try #require(EmailPrivacy.parts("sam@studio.example"))
         #expect(parts.first == "s" && parts.hidden == "am" && parts.domain == "@studio.example")
-        #expect(EmailPrivacy.masked("thesickpancake@gmail.com") == "t••••••••@gmail.com")
+        #expect(EmailPrivacy.masked("tester@example.com") == "t•••••@example.com")
         #expect(EmailPrivacy.masked("Work") == "Work")
         #expect(EmailPrivacy.parts("@nothing") == nil)
     }
