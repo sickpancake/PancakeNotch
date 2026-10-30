@@ -12,6 +12,8 @@ import Foundation
 struct ConvertHelper {
     @MainActor
     static func main() async {
+        // Darwin's RLIMIT_AS/RLIMIT_RSS limits virtual address space, not physical footprint;
+        // media frameworks reserve far more than their resident bytes. Bound inputs instead.
         let arguments = Array(CommandLine.arguments.dropFirst())
         switch arguments.first {
         case "probe" where arguments.count > 1:

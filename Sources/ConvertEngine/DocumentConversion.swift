@@ -30,6 +30,7 @@ enum DocumentConversion {
     }
 
     static func read(_ url: URL, kind: ConvertKind) throws -> (NSAttributedString, [NSAttributedString.DocumentAttributeKey: Any]) {
+        _ = try DocumentInput.bytes(url, kind: kind)
         if kind == .plainText {
             guard let string = readText(url) else { throw ConvertFailure.unreadable }
             let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.black]

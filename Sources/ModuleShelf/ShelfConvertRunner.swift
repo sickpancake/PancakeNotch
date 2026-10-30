@@ -23,7 +23,7 @@ struct ShelfConvertHelper: ShelfConvertRunning {
     }
 
     func probe(_ files: [URL]) async throws -> [ConvertFileInfo] {
-        let job = try Job(executable, arguments: ["probe"] + files.map(\.path))
+        let job = try Job(executable, arguments: ["probe"] + files.map(\.path), timeout: 5)
         var infos: [ConvertFileInfo]?
         for try await line in job.lines {
             infos = try? JSONDecoder().decode([ConvertFileInfo].self, from: Data(line.utf8))
@@ -58,8 +58,9 @@ struct ShelfConvertHelper: ShelfConvertRunning {
         private let process = Process()
         private let output = Pipe()
         private let exit: AsyncStream<Int32>
+        private var watchdog: Task<Void, Never>?
 
-        init(_ executable: URL, arguments: [String]) throws {
+        init(_ executable: URL, arguments: [String], timeout: Double? = nil) throws {
             process.executableURL = executable
             process.arguments = arguments
             process.standardOutput = output
@@ -75,6 +76,14 @@ struct ShelfConvertHelper: ShelfConvertRunning {
                 }
             }
             try process.run()
+            if let timeout {
+                // A framework probe may block on a damaged file; kill the disposable helper too.
+                watchdog = Task.detached {
+                    try? await Task.sleep(for: .seconds(timeout))
+                    guard !Task.isCancelled, process.isRunning else { return }
+                    kill(process.processIdentifier, SIGKILL)
+                }
+            }
         }
 
         var lines: AsyncThrowingStream<String, any Error> {
@@ -102,6 +111,7 @@ struct ShelfConvertHelper: ShelfConvertRunning {
         }
 
         deinit {
+            watchdog?.cancel()
             if process.isRunning { process.terminate() }
         }
     }

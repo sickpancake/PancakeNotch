@@ -2,12 +2,19 @@ import AVFoundation
 import ConvertKit
 import CoreGraphics
 import Foundation
+import Darwin
 import ImageIO
 
 /// Looks at a file before converting: picture size, page count, a clip's length and size. Reads headers
 /// only (never decodes a whole picture or video).
 public enum ConvertProbe {
-    public static func info(for url: URL) async -> ConvertFileInfo {
+    public static func info(for source: URL) async -> ConvertFileInfo {
+        let url = source.resolvingSymlinksInPath()
+        let fd = Darwin.open(url.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return ConvertFileInfo(kind: nil, isReadable: false) }
+        defer { close(fd) }
+        var file = stat()
+        guard fstat(fd, &file) == 0, file.st_mode & S_IFMT == S_IFREG else { return ConvertFileInfo(kind: nil, isReadable: false) }
         guard let kind = ConvertKind(url: url) else { return ConvertFileInfo(kind: nil, isReadable: false) }
         guard FileManager.default.isReadableFile(atPath: url.path) else { return ConvertFileInfo(kind: kind, isReadable: false) }
         switch kind {
@@ -15,8 +22,15 @@ public enum ConvertProbe {
         case .pdf: return pdf(url)
         case .audio: return await audio(url)
         case .video: return await video(url)
-        case .wordDocument: return ConvertFileInfo(kind: kind, hasPictures: DocumentConversion.hasPictures(url))
-        case .plainText, .richText: return ConvertFileInfo(kind: kind)
+        case .plainText, .richText, .wordDocument:
+            do {
+                let bytes = try DocumentInput.bytes(url, kind: kind)
+                return ConvertFileInfo(kind: kind, hasPictures: kind == .wordDocument ? DocumentConversion.hasPictures(url) : nil, documentBytes: bytes)
+            } catch ConvertFailure.tooBig {
+                return ConvertFileInfo(kind: kind, documentBytes: .max)
+            } catch {
+                return ConvertFileInfo(kind: kind, isReadable: false)
+            }
         }
     }
 
