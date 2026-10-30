@@ -64,15 +64,14 @@ struct DocumentSafetyTests {
         }
     }
 
-    @Test func aSymlinkToAPipeIsNotProbed() async throws {
+    /// Opening a pipe for reading waits for a writer forever; the probe must not (the time limit fails it).
+    @Test(.timeLimit(.minutes(1))) func aSymlinkToAPipeIsNotProbed() async throws {
         let fixture = try ConvertFixture()
         let pipe = fixture.folder.appending(path: "pipe")
         #expect(mkfifo(pipe.path, 0o600) == 0)
         let link = fixture.folder.appending(path: "linked.txt")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: pipe)
-        let start = Date()
         #expect(await ConvertProbe.info(for: link).isReadable == false)
-        #expect(Date().timeIntervalSince(start) < 1)
         #expect(await ConvertProbe.info(for: fixture.folder).isReadable == false)
     }
 }

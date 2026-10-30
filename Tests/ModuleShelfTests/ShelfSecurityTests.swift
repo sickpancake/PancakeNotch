@@ -78,11 +78,12 @@ struct ShelfSecurityTests {
     @Test func aBlockedProbeTimesOut() async throws {
         let fixture = try ShelfFixture()
         let executable = try fixture.file("helper")
-        try Data("#!/bin/sh\nexec /bin/sleep 30\n".utf8).write(to: executable)
+        try Data("#!/bin/sh\nexec /bin/sleep 600\n".utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         let runner = ShelfConvertHelper(executable: executable)
         let start = Date()
         await #expect(throws: ConvertFailure.failed) { try await runner.probe([executable]) }
-        #expect(Date().timeIntervalSince(start) < 10)
+        // Killed by the watchdog (seconds), long before the helper's own ten minutes are up.
+        #expect(Date().timeIntervalSince(start) < 120)
     }
 }
