@@ -137,6 +137,12 @@ extension ShelfModule {
 
     /// The row from the files' names straight away; the helper then reads them to dim what won't fit.
     private func look(at session: ShelfConversion) {
+        let resolved = session.sources.map { $0.resolvingSymlinksInPath() }
+        guard resolved.allSatisfy({ (try? $0.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true }) else {
+            session.phase = .failed(ConvertFailure.unreadable.message)
+            return
+        }
+        session.sources = resolved
         let wordToPDF = settings.convertWordToPDF
         let formats = convertFormats(for: session.sources)
         guard !formats.isEmpty else {
@@ -266,10 +272,12 @@ extension ShelfModule {
             return manager.isWritableFile(atPath: folder.path) ? folder : nil
         }
         guard let source else { return nil }
-        let path = source.standardizedFileURL.path
+        let realSource = source.resolvingSymlinksInPath()
+        guard (try? realSource.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { return nil }
+        let path = realSource.standardizedFileURL.path
         let ownFolders = [store.filesDirectory, ShelfSharing.temporaryRoot].map { $0.standardizedFileURL.path + "/" }
         guard !ownFolders.contains(where: path.hasPrefix) else { return nil }
-        let folder = source.deletingLastPathComponent()
+        let folder = realSource.deletingLastPathComponent()
         return manager.isWritableFile(atPath: folder.path) ? folder : nil
     }
 

@@ -78,7 +78,12 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
         mouseDownEvent = nil
         narrowSelectionOnMouseUp = false
         expandOnMouseUp = false
-        beginDragOut(with: start)
+        Task { [weak self] in
+            guard let self else { return }
+            let payload = await module.dragPayload(for: itemID)
+            guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
+            beginDragOut(with: start, payload: payload)
+        }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -91,8 +96,7 @@ final class ShelfTileNSView: NSView, NSDraggingSource {
 
     // MARK: Dragging out
 
-    private func beginDragOut(with event: NSEvent) {
-        let payload = module.dragPayload(for: itemID)
+    private func beginDragOut(with event: NSEvent, payload: [(item: ShelfItem, writer: any NSPasteboardWriting)]) {
         guard !payload.isEmpty else { return }
         draggedIDs = payload.map(\.item.id)
         let size = ShelfThumbnails.pointSize
