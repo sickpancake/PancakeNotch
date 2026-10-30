@@ -94,6 +94,34 @@ for q in best balanced smaller; do check gif "$q" "$IN/clip1080.mov"; done
 echo "Documents"
 check pdf balanced "$IN/long.txt"; check rtf balanced "$IN/long.txt"
 check pdf balanced "$IN/long.rtf"; check text balanced "$IN/long.docx"
+check pdf balanced "$IN/short.rtf"; check text balanced "$IN/short.rtf"
+check pdf balanced "$IN/short.docx"; check text balanced "$IN/short.docx"
+
+# Refusal must stay small even when the source is huge or highly compressed.
+python3 - "$IN" <<'PYFIXTURES'
+import pathlib, sys, zipfile
+folder = pathlib.Path(sys.argv[1])
+with (folder / 'oversized.txt').open('wb') as file:
+    file.truncate(50 * 1024 * 1024)
+with zipfile.ZipFile(folder / 'bomb.docx', 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+    with archive.open('word/document.xml', 'w') as entry:
+        for _ in range(1024):
+            entry.write(b'x' * 65536)
+PYFIXTURES
+for name in oversized.txt bomb.docx; do
+    out="$(mktemp -d "$WORK/refused.XXXX")"
+    request="$(python3 -c 'import json, sys; print(json.dumps({"sources": [sys.argv[1]], "format": "pdf", "quality": "balanced", "outputFolder": sys.argv[2], "pageName": "Page"}))' "$IN/$name" "$out")"
+    /usr/bin/time -l "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || true
+    peak="$(awk '/peak memory footprint/ { printf "%.1f", $1 / 1048576 }' "$out.time")"
+    result="$(tail -1 "$out.log")"
+    CHECKED=$((CHECKED + 1))
+    if python3 -c 'import json, sys; m = json.loads(sys.argv[1]); assert not m.get("outputs") and m["errors"][0]["failure"] == "tooBig"; assert float(sys.argv[2]) < 65' "$result" "$peak"; then
+        echo "  $name: Too big, $peak MiB peak on refusal, ok"
+    else
+        echo "  $name: FAILED refusal or memory check"
+        FAILED=$((FAILED + 1))
+    fi
+done
 
 echo "$CHECKED conversions measured, $FAILED failed."
 (( FAILED == 0 )) || { echo "Convert memory check failed"; exit 1; }

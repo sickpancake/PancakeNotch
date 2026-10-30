@@ -5,7 +5,7 @@ import Foundation
 enum AIUsageText {
     /// "63" for the share a limit has left, in whole percent.
     static func percent(_ value: Double) -> Int {
-        Int(value.rounded())
+        value.isFinite && value >= 0 ? (Int(exactly: value.rounded()) ?? 0) : 0
     }
 
     /// "Session · On pace", or just "Session" while the pace isn't known.

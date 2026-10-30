@@ -205,4 +205,11 @@ for (name, type) in [("long.rtf", NSAttributedString.DocumentType.rtf), ("long.d
     try document.data(from: NSRange(location: 0, length: document.length), documentAttributes: [.documentType: type])
         .write(to: folder.appending(path: name))
 }
+// Small rich documents remain convertible under the unpacked-text cap.
+let short = NSAttributedString(string: (1...100).map { "Line \($0). " + paragraph.prefix(200) }.joined(separator: "\n"),
+                               attributes: [.font: NSFont.systemFont(ofSize: 12)])
+for (name, type) in [("short.rtf", NSAttributedString.DocumentType.rtf), ("short.docx", .officeOpenXML)] {
+    try short.data(from: NSRange(location: 0, length: short.length), documentAttributes: [.documentType: type])
+        .write(to: folder.appending(path: name))
+}
 print("Fixtures in \(folder.path)")

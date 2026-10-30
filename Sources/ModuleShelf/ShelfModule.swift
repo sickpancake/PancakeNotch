@@ -841,8 +841,9 @@ public final class ShelfModule: NotchModule {
         targets(for: id).compactMap { item in
             switch item.kind {
             case .file:
-                // The path checked when the notch opened: no disk access as the drag starts.
-                guard let url = item.fileURL ?? store.resolvedURL(for: item) else { return nil }
+                // Where the file is now (a quick bookmark lookup), not where it was when the notch opened:
+                // a moved file must never drag whatever took its old place, and a deleted one drags nothing.
+                guard let url = store.resolvedURL(for: item) else { return nil }
                 return (item, url as NSURL)
             case .text(let text):
                 return (item, text as NSString)

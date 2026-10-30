@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pay-per-use prices in US dollars per million tokens, built into the app so AI Usage stays offline
+/// Pay-per-use prices in US dollars per million tokens, built into the app so cost estimates need no network request
 /// (ADR-0037). From Anthropic's and OpenAI's pricing pages on 2026-10-21, cross-checked with LiteLLM's
 /// table (MIT, © Berri AI). A model that isn't here counts as "no known price", never a guess.
 struct ModelPrice: Sendable {

@@ -58,6 +58,19 @@ struct HotKeyTests {
         #expect(hotKey.modifierFlags == .command)
     }
 
+    @Test func decodingValidatesSavedShortcuts() {
+        for json in [
+            #"{"keyCode":45,"modifiers":0,"keyLabel":"N"}"#,
+            #"{"keyCode":45,"modifiers":131072,"keyLabel":"N"}"#,
+            #"{"keyCode":4294967295,"modifiers":524288,"keyLabel":"N"}"#,
+            #"{"keyCode":12,"modifiers":1048576,"keyLabel":"Q"}"#,
+        ] {
+            #expect(throws: DecodingError.self) { try JSONDecoder().decode(HotKey.self, from: Data(json.utf8)) }
+            // ShortcutController uses try?: rejected data falls back to its unassigned default.
+            #expect((try? JSONDecoder().decode(HotKey.self, from: Data(json.utf8))) == nil)
+        }
+    }
+
     @Test func survivesSaving() throws {
         let hotKey = try #require(HotKey(keyCode: UInt32(kVK_Space), modifiers: [.option], keyLabel: "Space"))
         let data = try JSONEncoder().encode(hotKey)

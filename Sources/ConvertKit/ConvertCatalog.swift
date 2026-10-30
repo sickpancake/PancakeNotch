@@ -89,13 +89,17 @@ public struct ConvertFileInfo: Codable, Equatable, Sendable {
     public var largestPictureBytes: Int?
     /// A PDF's biggest page, in square points.
     public var largestPageArea: Double?
+    /// A text document's text in bytes (a Word or ODT file's unpacked XML), and everything else it holds
+    /// while reading (`DocumentInput`). `.max` for a ZIP the index check refused.
+    public var documentBytes: Int?
+    public var documentOtherBytes: Int?
 
     public init(
         kind: ConvertKind?, isReadable: Bool = true, pixelWidth: Int? = nil, pixelHeight: Int? = nil,
         hasAlpha: Bool? = nil, pageCount: Int? = nil, isLocked: Bool? = nil, duration: Double? = nil,
         videoWidth: Int? = nil, videoHeight: Int? = nil, hasAudio: Bool? = nil, repackages: [ConvertFormat]? = nil,
         hasPictures: Bool? = nil, imageType: String? = nil, isCMYK: Bool? = nil, largestPictureBytes: Int? = nil,
-        largestPageArea: Double? = nil
+        largestPageArea: Double? = nil, documentBytes: Int? = nil, documentOtherBytes: Int? = nil
     ) {
         self.kind = kind
         self.isReadable = isReadable
@@ -114,6 +118,8 @@ public struct ConvertFileInfo: Codable, Equatable, Sendable {
         self.isCMYK = isCMYK
         self.largestPictureBytes = largestPictureBytes
         self.largestPageArea = largestPageArea
+        self.documentBytes = documentBytes
+        self.documentOtherBytes = documentOtherBytes
     }
 
     var pixelCount: Int { (pixelWidth ?? 0) * (pixelHeight ?? 0) }
@@ -169,12 +175,18 @@ public enum ConvertLimits {
     public static let gifVideoShortSide = 1080
 
     /// The helper's peak in MiB for turning this file into `format`, or nil where the size doesn't matter
-    /// (audio, video and text stream). `passesThrough`: whether a PDF of pictures is written without
+    /// (audio and video stream). `passesThrough`: whether a PDF of pictures is written without
     /// decoding them (every picture going in passes through).
     public static func estimatedPeak(of format: ConvertFormat, from info: ConvertFileInfo, quality: ConvertQuality, passesThrough: Bool) -> Double? {
         switch info.kind {
         case .image:
             return picturePeak(of: format, from: info, quality: quality, passesThrough: passesThrough)
+        case .plainText, .richText, .wordDocument:
+            // Measured: laying out pages costs about 50 MiB per MiB of text, writing text or RTF about 10
+            // (a 1 MiB file: 59 MiB to PDF; a 4 MiB one: 46 MiB to text), plus the file and any pictures read.
+            guard let text = info.documentBytes else { return nil }
+            let perMiB = format == .pdf ? 55.0 : 12.0
+            return 8 + Double(text) * perMiB / 1_048_576 + Double(info.documentOtherBytes ?? 0) / 1_048_576
         case .pdf:
             // macOS decodes each picture on a page it draws, colour ones at about 2 bytes per byte.
             let pictures = 2.1 * Double(info.largestPictureBytes ?? 0) / 1_048_576
@@ -371,8 +383,11 @@ public enum ConvertCatalog {
                 return nil
             }
         case .wordDocument:
+            if tooBig { return .tooBig }
             return format == .pdf && info.hasPictures == true ? .picturesNotKept : nil
-        case .audio, .plainText, .richText, nil:
+        case .plainText, .richText:
+            return tooBig ? .tooBig : nil
+        case .audio, nil:
             return nil
         }
     }

@@ -13,9 +13,12 @@ struct ClaudeSession: Equatable, Sendable {
 
     init?(data: Data) {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let pid = object["pid"] as? Int, let sessionID = object["sessionId"] as? String,
+              // A PID that isn't a whole positive number is no PID (never one clamped onto another process).
+              let number = object["pid"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let pid = Int32(exactly: number.doubleValue), pid > 0,
+              let sessionID = object["sessionId"] as? String,
               let status = object["status"] as? String else { return nil }
-        self.pid = pid_t(pid)
+        self.pid = pid
         self.sessionID = sessionID
         cwd = object["cwd"] as? String ?? ""
         // Only a name the user gave it (/rename). The others are the folder's ("pancakenotch-5a") or made
@@ -25,7 +28,7 @@ struct ClaudeSession: Equatable, Sendable {
         self.status = status
         waitingFor = (object["waitingFor"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let millis = object["statusUpdatedAt"] as? Double ?? object["updatedAt"] as? Double ?? 0
-        statusUpdated = millis > 0 ? Date(timeIntervalSince1970: millis / 1000) : .now
+        statusUpdated = millis.isFinite && millis > 0 ? Date(timeIntervalSince1970: millis / 1000) : .now
     }
 
     /// Working, needing you, or nil for idle (finished its turn, or never started).

@@ -150,7 +150,8 @@ final class PlayerNotificationWatcher: NSObject {
     nonisolated private func deliver(_ info: PlayerNotificationInfo) {
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.isWatching else { return }
+                // Any app can post these: only one from a player that's really running counts.
+                guard let self, self.isWatching, ScriptedPlayers.isRunning(info.bundleID) else { return }
                 self.onInfo?(info)
             }
         }

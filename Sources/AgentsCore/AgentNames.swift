@@ -40,10 +40,13 @@ enum AgentNames {
     /// The first line, at most `limit` characters. Nil for text the tool added itself, which starts with
     /// a tag or a heading ("<environment_context>", "# AGENTS.md instructions…").
     static func oneLine(_ text: String?, limit: Int = 80) -> String? {
-        guard let line = text?.split(whereSeparator: \.isNewline).lazy
-            .map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: { !$0.isEmpty }),
-              !line.hasPrefix("<"), !line.hasPrefix("#") else { return nil }
-        let collapsed = line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard let text, limit > 0 else { return nil }
+        // Bound the scan too: a tool can send megabytes of whitespace or one enormous line.
+        let prefix = String(decoding: text.utf8.prefix(640), as: UTF8.self)
+        guard let line = prefix.split(whereSeparator: \.isNewline).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return nil }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.hasPrefix("<"), !trimmed.hasPrefix("#") else { return nil }
+        let collapsed = trimmed.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return collapsed.count > limit ? String(collapsed.prefix(limit - 1)) + "…" : collapsed
     }
 }

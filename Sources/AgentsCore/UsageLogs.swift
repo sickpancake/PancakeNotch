@@ -2,9 +2,13 @@ import Foundation
 import os
 import Stats
 
-/// A token count from decoded JSON (0 when it's missing).
+/// A token count from decoded JSON: 0 when it's missing, -1 when it isn't a whole number from 0 to a
+/// trillion. No real message comes near that, and the cap keeps every sum of counts far from overflowing.
 private func count(_ value: Any?) -> Int64 {
-    (value as? NSNumber)?.int64Value ?? 0
+    guard let value, !(value is NSNull) else { return 0 }
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+          let count = Int64(number.stringValue), (0...1_000_000_000_000).contains(count) else { return -1 }
+    return count
 }
 
 /// Token counts from Claude Code's transcripts (`projects/**/*.jsonl`): one record per assistant message
@@ -26,11 +30,13 @@ enum ClaudeUsageLog {
               let date = (object["timestamp"] as? String).flatMap(CodexRollout.date) else { return nil }
         let input = count(usage["input_tokens"]), output = count(usage["output_tokens"])
         let read = count(usage["cache_read_input_tokens"]), written = count(usage["cache_creation_input_tokens"])
-        guard input + output + read + written > 0 else { return nil }
+        let counts = [input, output, read, written]
+        guard counts.allSatisfy({ $0 >= 0 }), counts.contains(where: { $0 > 0 }) else { return nil }
         // Writes kept for an hour cost more than the usual five minutes.
         let split = usage["cache_creation"] as? [String: Any]
         let hour = split.map { count($0["ephemeral_1h_input_tokens"]) } ?? 0
         let fiveMinutes = split.map { count($0["ephemeral_5m_input_tokens"]) } ?? written
+        guard hour >= 0, fiveMinutes >= 0 else { return nil }
         let cost = ModelPrices.claudeCost(model: model, input: input, output: output, cacheWrite5m: fiveMinutes,
                                           cacheWrite1h: hour, cacheRead: read, fast: usage["speed"] as? String == "fast")
         return AIUsageRecord(account: account, id: id, date: date, model: ModelPrices.normalized(model), input: input,
@@ -79,6 +85,7 @@ struct CodexUsageLog: Codable, Equatable {
               let totals = info["total_token_usage"] as? [String: Any] else { return nil }
         let new = (input: count(totals["input_tokens"]), cached: count(totals["cached_input_tokens"]),
                    output: count(totals["output_tokens"]), total: count(totals["total_tokens"]))
+        guard [new.input, new.cached, new.output, new.total, input, cached, output, total].allSatisfy({ $0 >= 0 }) else { return nil }
         defer { (input, cached, output, total) = (new.input, new.cached, new.output, new.total) }
         // The same total again (a limits-only update), or a total that went down (start over from it).
         guard new.total > total, let date = (decoded.object["timestamp"] as? String).flatMap(CodexRollout.date) else { return nil }

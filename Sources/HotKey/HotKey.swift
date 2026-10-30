@@ -23,6 +23,20 @@ public struct HotKey: Codable, Equatable, Sendable {
         self.keyLabel = keyLabel
     }
 
+    private enum CodingKeys: String, CodingKey { case keyCode, modifiers, keyLabel }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let code = try values.decode(UInt32.self, forKey: .keyCode)
+        let modifiers = try values.decode(UInt.self, forKey: .modifiers)
+        let label = try values.decode(String.self, forKey: .keyLabel)
+        guard let shortcut = Self(keyCode: code, modifiers: NSEvent.ModifierFlags(rawValue: modifiers), keyLabel: label),
+              code <= 127, !label.isEmpty, label.utf8.count <= 64, !shortcut.isReservedBySystem else {
+            throw DecodingError.dataCorruptedError(forKey: .keyCode, in: values, debugDescription: "Invalid keyboard shortcut")
+        }
+        self = shortcut
+    }
+
     /// Builds a shortcut from a key press, or `nil` if it isn't usable as one.
     public init?(event: NSEvent) {
         let keyCode = UInt32(event.keyCode)

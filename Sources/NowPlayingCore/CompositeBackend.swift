@@ -29,6 +29,8 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
     private var silenceTask: Task<Void, Never>?
     /// Spotify's own announcement says when it plays an ad (its address starts with "spotify:ad:"),
     /// which the helper doesn't: the ad's title, added to the helper's reports. Needs no permission.
+    /// Any app can post that announcement, so it only ever marks the song the helper reports from a
+    /// running Spotify, and never changes anything else.
     private var spotifyAdTitle: String?
     /// The helper's last report as it came (to add or remove the ad mark when Spotify's word changes).
     private var lastAdapterUpdate: NowPlayingUpdate?
@@ -175,6 +177,7 @@ final class CompositeBackend: NowPlayingBackend, NowPlayingAutomationReporting {
         if after.track?.isAdvertisement != before?.track?.isAdvertisement { onUpdate?(after) }
     }
 
+    /// Music or Spotify announced a change (the watcher drops announcements from a player that isn't running).
     private func playerAnnounced(_ info: PlayerNotificationInfo) {
         guard isRunning else { return }
         switch policy.source {

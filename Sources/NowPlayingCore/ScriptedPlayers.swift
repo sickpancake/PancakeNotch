@@ -121,7 +121,7 @@ enum PlayerScripts {
         guard first != "stopped", items.count >= 8 else { return ScriptedPlayerState(state: .stopped) }
         func text(_ index: Int) -> String { items[index].nonMissing?.stringValue ?? "" }
         func number(_ index: Int) -> Double? { items[index].nonMissing.map(\.doubleValue) }
-        func whole(_ index: Int) -> Int? { number(index).flatMap { $0 < 0 ? nil : Int($0) } }
+        func whole(_ index: Int) -> Int? { number(index).flatMap { $0 < 0 ? nil : Int(exactly: $0) } }
         let isAd = items.count >= 11 && SpotifyAd.isAd(address: text(8), popularity: whole(9), trackNumber: whole(10))
         return ScriptedPlayerState(
             state: first == "playing" ? .playing : .paused,

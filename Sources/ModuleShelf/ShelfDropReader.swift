@@ -17,6 +17,10 @@ struct ShelfDrop {
 enum ShelfDropReader {
     /// Longer text is kept as a `.txt` file instead of inside the item list.
     static let textLimit = 100_000
+    /// A picture or text dropped as data (not a file) over this is skipped, and a drop keeps at most
+    /// `dropLimit` of it in all: a screenshot fits, a pasteboard of junk can't fill memory.
+    static let dataLimit = 16 * 1024 * 1024
+    static let dropLimit = 32 * 1024 * 1024
 
     private static let promiseTypes = Set(NSFilePromiseReceiver.readableDraggedTypes)
     private static let imageTypes: [(NSPasteboard.PasteboardType, String)] = [(.png, "png"), (.tiff, "tiff")]
@@ -35,37 +39,54 @@ enum ShelfDropReader {
         var receivers = ((pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self]) as? [NSFilePromiseReceiver]) ?? [])
             .makeIterator()
 
+        var remaining = dropLimit
         for item in pasteboard.pasteboardItems ?? [] {
             let types = item.types
             let promise = types.contains { promiseTypes.contains($0.rawValue) } ? receivers.next() : nil
 
             // A real file wins over a promised copy: the Shelf keeps a reference, not a duplicate.
-            if let string = item.string(forType: .fileURL), let url = URL(string: string), url.isFileURL {
+            if let string = string(item, type: .fileURL, remaining: &remaining), let url = URL(string: string), url.isFileURL {
                 drop.inputs.append(.file(url.standardizedFileURL, owned: false))
             } else if let promise {
                 drop.promises.append(promise)
-            } else if let (data, ext) = imageData(item) {
+            } else if let (data, ext) = imageData(item, remaining: &remaining) {
                 if let url = try? write(data, name: String(localized: "Image") + "." + ext, newFolder: newFolder) {
                     drop.inputs.append(.file(url, owned: true))
                 }
-            } else if let string = item.string(forType: .URL), let url = webURL(string) {
+            } else if let string = string(item, type: .URL, remaining: &remaining), let url = webURL(string) {
                 drop.inputs.append(.link(url))
-            } else if let text = item.string(forType: .string), let input = textInput(text, newFolder: newFolder) {
+            } else if let text = string(item, type: .string, remaining: &remaining), let input = textInput(text, newFolder: newFolder) {
                 drop.inputs.append(input)
             }
         }
         return drop
     }
 
-    private static func imageData(_ item: NSPasteboardItem) -> (Data, String)? {
+    private static func imageData(_ item: NSPasteboardItem, remaining: inout Int) -> (Data, String)? {
         for (type, ext) in imageTypes {
-            if let data = item.data(forType: type) { return (data, ext) }
+            if let data = data(item, type: type, remaining: &remaining) { return (data, ext) }
         }
         return nil
     }
 
+    /// AppKit has no public size-only read. Check the returned bytes before decoding or copying,
+    /// and bound the whole drop so many items cannot accumulate in memory.
+    private static func data(_ item: NSPasteboardItem, type: NSPasteboard.PasteboardType, remaining: inout Int) -> Data? {
+        autoreleasepool {
+            guard remaining > 0, let data = item.data(forType: type), data.count <= min(dataLimit, remaining) else { return nil }
+            remaining -= data.count
+            return data
+        }
+    }
+
+    private static func string(_ item: NSPasteboardItem, type: NSPasteboard.PasteboardType, remaining: inout Int) -> String? {
+        guard let data = data(item, type: type, remaining: &remaining) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     /// Plain text, a single link typed as text, or a `.txt` file when it's long.
     static func textInput(_ text: String, newFolder: () throws -> URL) -> ShelfInput? {
+        guard text.utf8.count <= dataLimit else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if !trimmed.contains(where: \.isWhitespace), let url = webURL(trimmed) { return .link(url) }
@@ -99,8 +120,27 @@ enum ShelfDropReader {
         arrived: @escaping @Sendable (URL?) -> Void
     ) {
         receiver.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: queue) { url, error in
-            arrived(error == nil ? url : nil)
+            guard error == nil else { arrived(nil); return }
+            do {
+                try quarantineIfNeeded(url)
+                arrived(url)
+            } catch { arrived(nil) }
         }
+    }
+
+    /// Promises can come from a browser or mail client. Preserve their existing provenance;
+    /// otherwise mark the new file as quarantined before offering or sharing it.
+    nonisolated static func quarantineIfNeeded(_ url: URL) throws {
+        var file = url
+        let existing = try file.resourceValues(forKeys: [.quarantinePropertiesKey])
+        guard existing.quarantineProperties == nil else { return }
+        var values = URLResourceValues()
+        values.quarantineProperties = [
+            "LSQuarantineAgentName": "PancakeNotch",
+            "LSQuarantineType": "LSQuarantineTypeOtherDownload",
+            "LSQuarantineTimeStamp": Date(),
+        ]
+        try file.setResourceValues(values)
     }
 
     /// How many files the promises will deliver (at least one each).

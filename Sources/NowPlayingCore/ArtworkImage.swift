@@ -8,7 +8,11 @@ enum ArtworkImage {
 
     static func downsample(_ data: Data) -> NSImage? {
         guard !data.isEmpty,
-              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              accepts(width: width, height: height)
         else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -18,6 +22,11 @@ enum ArtworkImage {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+
+    /// At most 8192 px a side and 16 megapixels: even a thumbnail of a bigger one can decode it whole.
+    static func accepts(width: Int, height: Int) -> Bool {
+        width > 0 && height > 0 && width <= 8192 && height <= 8192 && width * height <= 16_000_000
     }
 
     /// A short ID that changes when the bytes change (only compared within one run of the app).
