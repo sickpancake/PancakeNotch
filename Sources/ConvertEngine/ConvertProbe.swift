@@ -24,8 +24,9 @@ public enum ConvertProbe {
         case .video: return await video(url)
         case .plainText, .richText, .wordDocument:
             do {
-                let bytes = try DocumentInput.bytes(url, kind: kind)
-                return ConvertFileInfo(kind: kind, hasPictures: kind == .wordDocument ? DocumentConversion.hasPictures(url) : nil, documentBytes: bytes)
+                let size = try DocumentInput.size(of: url)
+                return ConvertFileInfo(kind: kind, hasPictures: kind == .wordDocument ? DocumentConversion.hasPictures(url) : nil,
+                                       documentBytes: size.text, documentOtherBytes: size.other)
             } catch ConvertFailure.tooBig {
                 return ConvertFileInfo(kind: kind, documentBytes: .max)
             } catch {

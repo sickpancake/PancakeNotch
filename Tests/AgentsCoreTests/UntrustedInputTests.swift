@@ -19,14 +19,21 @@ struct UntrustedInputTests {
         #expect(ClaudeSession(data: valid)?.pid == 123)
     }
 
+    private func claudeLine(_ counts: String) -> Data {
+        Data("{\"type\":\"assistant\",\"timestamp\":\"2026-10-22T10:00:00Z\",\"message\":{\"id\":\"test\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\(counts)}}}".utf8)
+    }
+
     @Test func overflowingAndNegativeTokenCountsAreRejected() {
         for counts in [#""input_tokens":9223372036854775807,"output_tokens":1"#,
                        #""input_tokens":-1,"output_tokens":2"#,
                        #""input_tokens":1e100,"output_tokens":2"#,
-                       #""input_tokens":1.5,"output_tokens":2"#] {
-            let line = Data("{\"type\":\"assistant\",\"timestamp\":\"2026-10-22T10:00:00Z\",\"message\":{\"id\":\"test\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\(counts)}}}".utf8)
-            #expect(ClaudeUsageLog.record(line, account: "test") == nil)
+                       #""input_tokens":1.5,"output_tokens":2"#,
+                       #""input_tokens":2000000000000,"output_tokens":2"#] {
+            #expect(ClaudeUsageLog.record(claudeLine(counts), account: "test") == nil)
         }
+        // A count left empty is none, not a reason to drop the message.
+        let empty = ClaudeUsageLog.record(claudeLine(#""input_tokens":5,"output_tokens":2,"cache_read_input_tokens":null"#), account: "test")
+        #expect(empty?.input == 5)
         var codex = CodexUsageLog()
         let line = Data(#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":-1,"total_tokens":9223372036854775807}}}}"#.utf8)
         #expect(codex.record(line, account: "test", fallbackThread: "test") == nil)

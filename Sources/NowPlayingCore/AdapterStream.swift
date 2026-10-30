@@ -141,9 +141,10 @@ struct AdapterMessage {
 /// Splits the adapter's output into lines and keeps the current state, including a small copy of
 /// the artwork. Runs off the main thread; not thread-safe on its own (one queue owns it).
 struct AdapterStreamParser {
-    /// Bound JSON before decoding it, including base64 artwork.
-    static let maxLineLength = 2 * 1024 * 1024
-    static let maxArtworkLength = 1024 * 1024
+    /// A line longer than this is garbage (artwork lines are a few hundred KB, rarely a few MB): it's
+    /// dropped before decoding. Artwork over 4 MB of base64 (a 3 MB picture) isn't decoded either.
+    static let maxLineLength = 6 * 1024 * 1024
+    static let maxArtworkLength = 4 * 1024 * 1024
 
     private(set) var state = AdapterState()
     private var buffer = Data()

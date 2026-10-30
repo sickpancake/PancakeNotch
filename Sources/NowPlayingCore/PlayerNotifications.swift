@@ -106,7 +106,6 @@ struct PlayerNotificationInfo: Equatable, Sendable {
 final class PlayerNotificationWatcher: NSObject {
     var onInfo: ((PlayerNotificationInfo) -> Void)?
     var onQuit: ((_ bundleID: String) -> Void)?
-    var isPlayerRunning: @MainActor (String) -> Bool = ScriptedPlayers.isRunning
 
     private var isWatching = false
     private var quitObserver: NSObjectProtocol?
@@ -151,7 +150,8 @@ final class PlayerNotificationWatcher: NSObject {
     nonisolated private func deliver(_ info: PlayerNotificationInfo) {
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.isWatching, self.isPlayerRunning(info.bundleID) else { return }
+                // Any app can post these: only one from a player that's really running counts.
+                guard let self, self.isWatching, ScriptedPlayers.isRunning(info.bundleID) else { return }
                 self.onInfo?(info)
             }
         }

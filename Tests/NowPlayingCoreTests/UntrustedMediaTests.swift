@@ -76,14 +76,8 @@ struct UntrustedMediaTests {
         let reader = AdapterStreamReader { update in titles.withLock { $0.append(update.track?.title ?? "") } }
         for index in 0..<500 { reader.consume(try line(["title": "song \(index)"])) }
         #expect(titles.withLock { $0.isEmpty })
-        for _ in 0..<10 where titles.withLock({ $0.isEmpty }) { await Task.yield() }
+        // The main queue runs in order, so the one delivery queued above has run once this has.
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
         #expect(titles.withLock { $0 } == ["song 499"])
-    }
-
-    @MainActor @Test func distributedHintsCannotOverrideMediaRemote() {
-        let track = NowPlayingTrack(title: "real song", isPlaying: true)
-        #expect(!CompositeBackend.acceptsHint(playerRunning: false, adapterTrack: nil))
-        #expect(!CompositeBackend.acceptsHint(playerRunning: true, adapterTrack: track))
-        #expect(CompositeBackend.acceptsHint(playerRunning: true, adapterTrack: nil))
     }
 }

@@ -42,12 +42,12 @@ struct ShelfSecurityTests {
         try FileManager.default.moveItem(at: original, to: moved)
         // The cached path deliberately remains stale.
         #expect(item.fileURL == original)
-        let payload = await module.dragPayload(for: item.id)
+        let payload = module.dragPayload(for: item.id)
         let dragged = try #require(payload.first?.writer as? NSURL) as URL
         #expect(try dragged.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier?.isEqual(
             moved.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier) == true)
         try FileManager.default.removeItem(at: moved)
-        #expect(await module.dragPayload(for: item.id).isEmpty)
+        #expect(module.dragPayload(for: item.id).isEmpty)
     }
 
     @Test func promisesGainQuarantineAndKeepExistingProvenance() throws {

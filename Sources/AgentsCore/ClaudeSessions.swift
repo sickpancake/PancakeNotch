@@ -1,5 +1,4 @@
 import Foundation
-import CoreFoundation
 
 /// Claude Code's own list of live sessions: one small `<config>/sessions/<pid>.json` per running
 /// session, removed when it quits (ADR-0037). Status is busy / shell / idle / waiting.
@@ -14,7 +13,9 @@ struct ClaudeSession: Equatable, Sendable {
 
     init?(data: Data) {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rawPID = object["pid"] as? NSNumber, CFGetTypeID(rawPID) != CFBooleanGetTypeID(), let pid = Int32(exactly: rawPID.doubleValue), pid > 0,
+              // A PID that isn't a whole positive number is no PID (never one clamped onto another process).
+              let number = object["pid"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let pid = Int32(exactly: number.doubleValue), pid > 0,
               let sessionID = object["sessionId"] as? String,
               let status = object["status"] as? String else { return nil }
         self.pid = pid

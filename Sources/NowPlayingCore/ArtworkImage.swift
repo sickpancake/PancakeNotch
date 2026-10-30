@@ -7,7 +7,7 @@ enum ArtworkImage {
     static let maxPixelSize = 256
 
     static func downsample(_ data: Data) -> NSImage? {
-        guard !data.isEmpty, data.count <= 768 * 1024,
+        guard !data.isEmpty,
               let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
@@ -24,6 +24,7 @@ enum ArtworkImage {
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
+    /// At most 8192 px a side and 16 megapixels: even a thumbnail of a bigger one can decode it whole.
     static func accepts(width: Int, height: Int) -> Bool {
         width > 0 && height > 0 && width <= 8192 && height <= 8192 && width * height <= 16_000_000
     }

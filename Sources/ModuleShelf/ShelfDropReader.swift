@@ -17,8 +17,10 @@ struct ShelfDrop {
 enum ShelfDropReader {
     /// Longer text is kept as a `.txt` file instead of inside the item list.
     static let textLimit = 100_000
-    static let dataLimit = 4 * 1024 * 1024
-    static let dropLimit = 8 * 1024 * 1024
+    /// A picture or text dropped as data (not a file) over this is skipped, and a drop keeps at most
+    /// `dropLimit` of it in all: a screenshot fits, a pasteboard of junk can't fill memory.
+    static let dataLimit = 16 * 1024 * 1024
+    static let dropLimit = 32 * 1024 * 1024
 
     private static let promiseTypes = Set(NSFilePromiseReceiver.readableDraggedTypes)
     private static let imageTypes: [(NSPasteboard.PasteboardType, String)] = [(.png, "png"), (.tiff, "tiff")]
@@ -38,7 +40,7 @@ enum ShelfDropReader {
             .makeIterator()
 
         var remaining = dropLimit
-        for item in (pasteboard.pasteboardItems ?? []).prefix(100) {
+        for item in pasteboard.pasteboardItems ?? [] {
             let types = item.types
             let promise = types.contains { promiseTypes.contains($0.rawValue) } ? receivers.next() : nil
 

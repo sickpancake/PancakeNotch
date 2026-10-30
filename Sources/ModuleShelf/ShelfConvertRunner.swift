@@ -23,7 +23,7 @@ struct ShelfConvertHelper: ShelfConvertRunning {
     }
 
     func probe(_ files: [URL]) async throws -> [ConvertFileInfo] {
-        let job = try Job(executable, arguments: ["probe"] + files.map(\.path), timeout: 5)
+        let job = try Job(executable, arguments: ["probe"] + files.map(\.path), timeout: 5 + Double(files.count))
         var infos: [ConvertFileInfo]?
         for try await line in job.lines {
             infos = try? JSONDecoder().decode([ConvertFileInfo].self, from: Data(line.utf8))

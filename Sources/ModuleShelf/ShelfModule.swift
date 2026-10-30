@@ -837,21 +837,13 @@ public final class ShelfModule: NotchModule {
     // MARK: Dragging out
 
     /// What a drag starting on `id` carries (the whole selection if `id` is selected; everything for `nil`).
-    func dragPayload(for id: UUID?) async -> [(item: ShelfItem, writer: any NSPasteboardWriting)] {
-        let items = targets(for: id)
-        let paths = await Task.detached(priority: .userInitiated) {
-            items.map { item -> String? in
-                guard case .file(let bookmark, _) = item.kind,
-                      case .found(let path, _) = ShelfBookmark.resolve(bookmark) else { return nil }
-                return path
-            }
-        }.value
-        return zip(items, paths).compactMap { item, path in
+    func dragPayload(for id: UUID?) -> [(item: ShelfItem, writer: any NSPasteboardWriting)] {
+        targets(for: id).compactMap { item in
             switch item.kind {
             case .file:
-                // A moved or deleted file must never drag the old cached path.
-                guard let path else { return nil }
-                let url = URL(fileURLWithPath: path)
+                // Where the file is now (a quick bookmark lookup), not where it was when the notch opened:
+                // a moved file must never drag whatever took its old place, and a deleted one drags nothing.
+                guard let url = store.resolvedURL(for: item) else { return nil }
                 return (item, url as NSURL)
             case .text(let text):
                 return (item, text as NSString)

@@ -227,9 +227,19 @@ final class ScriptedPlayers {
 
     /// Music or Spotify announced a change.
     func handle(_ info: PlayerNotificationInfo) {
-        guard isActive, Self.isRunning(info.bundleID) else { return }
-        // Distributed payloads are untrusted; ask the actual player instead of displaying them.
-        refresh(info.bundleID)
+        guard isActive else { return }
+        let bundleID = info.bundleID
+        let previous = entries[bundleID]
+        if let track = info.track(previous: previous?.track, at: now()) {
+            let sameSong = previous?.track.identity == track.identity
+            entries[bundleID] = Entry(track: track, artwork: sameSong ? previous?.artwork : nil,
+                                      artworkChecked: sameSong ? previous?.artworkChecked : nil)
+            touch(bundleID)
+            publish()
+            refresh(bundleID)
+        } else {
+            remove(bundleID)
+        }
     }
 
     func playerQuit(_ bundleID: String) {

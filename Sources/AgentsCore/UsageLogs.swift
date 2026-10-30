@@ -1,13 +1,13 @@
 import Foundation
-import CoreFoundation
 import os
 import Stats
 
-/// A token count from decoded JSON (0 when it's missing).
+/// A token count from decoded JSON: 0 when it's missing, -1 when it isn't a whole number from 0 to a
+/// trillion. No real message comes near that, and the cap keeps every sum of counts far from overflowing.
 private func count(_ value: Any?) -> Int64 {
-    guard let value else { return 0 }
+    guard let value, !(value is NSNull) else { return 0 }
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-          let count = Int64(number.stringValue), count >= 0 else { return -1 }
+          let count = Int64(number.stringValue), (0...1_000_000_000_000).contains(count) else { return -1 }
     return count
 }
 
@@ -31,11 +31,7 @@ enum ClaudeUsageLog {
         let input = count(usage["input_tokens"]), output = count(usage["output_tokens"])
         let read = count(usage["cache_read_input_tokens"]), written = count(usage["cache_creation_input_tokens"])
         let counts = [input, output, read, written]
-        guard counts.allSatisfy({ $0 >= 0 }),
-              counts.reduce(Int64(0), { total, value in
-                  let sum = total.addingReportingOverflow(value)
-                  return sum.overflow || total < 0 ? -1 : sum.partialValue
-              }) > 0 else { return nil }
+        guard counts.allSatisfy({ $0 >= 0 }), counts.contains(where: { $0 > 0 }) else { return nil }
         // Writes kept for an hour cost more than the usual five minutes.
         let split = usage["cache_creation"] as? [String: Any]
         let hour = split.map { count($0["ephemeral_1h_input_tokens"]) } ?? 0
