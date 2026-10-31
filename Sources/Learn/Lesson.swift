@@ -80,8 +80,8 @@ public struct Lesson: Identifiable, Sendable {
         steps: [
             LessonStep(
                 id: "basics.open",
-                title: String(localized: "Hover to open", comment: "Lesson step title"),
-                detail: String(localized: "Rest the pointer on the notch and it slides open.", comment: "Lesson step detail"),
+                title: String(localized: "Open the notch", comment: "Lesson step title"),
+                detail: String(localized: "Hover over the notch to open it, or click it if Open on click only is on.", comment: "Lesson step detail"),
                 symbol: "cursorarrow.rays",
                 signal: .notchOpened
             ),
@@ -120,7 +120,7 @@ public struct Lesson: Identifiable, Sendable {
             LessonStep(
                 id: "nowPlaying.open",
                 title: String(localized: "Open the player", comment: "Lesson step title"),
-                detail: String(localized: "A pretend song is playing: see its album art and sound bars beside the notch? Hover the notch to open it.", comment: "Lesson step detail"),
+                detail: String(localized: "A pretend song is playing: see its album art and sound bars beside the notch? Hover or click the notch to open it.", comment: "Lesson step detail"),
                 symbol: "cursorarrow.rays",
                 signal: .notchOpened
             ),

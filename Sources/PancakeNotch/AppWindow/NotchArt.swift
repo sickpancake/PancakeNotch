@@ -152,7 +152,9 @@ struct NotchStage: View {
             Image(systemName: isActive ? "cursorarrow.rays" : "power")
                 .font(.app(size: 12, weight: .semibold))
             Text(isActive
-                ? activeHint ?? String(localized: "Hover the notch to try it. Click it to keep it small, and again to close it.")
+                ? activeHint ?? (behavior.openOnClickOnly
+                    ? String(localized: "Click the notch to open it. Move away to close it.")
+                    : String(localized: "Hover the notch to try it. Click it to keep it small, and again to close it."))
                 : inactiveHint ?? String(localized: "Turn the notch on to try it here."))
                 .font(.app(size: 12.5, weight: .medium))
         }

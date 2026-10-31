@@ -76,6 +76,10 @@ let package = Package(
             dependencies: ["NotchCore", "NowPlayingCore"]
         ),
         .testTarget(
+            name: "PancakeNotchTests",
+            dependencies: ["PancakeNotch"]
+        ),
+        .testTarget(
             name: "NotchCoreTests",
             dependencies: ["NotchCore"]
         ),

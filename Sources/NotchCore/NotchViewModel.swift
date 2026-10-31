@@ -83,7 +83,15 @@ public final class NotchViewModel {
     @ObservationIgnored private var isHandlingClick = false
 
     /// Hover delays and haptics from Settings.
-    @ObservationIgnored public var behavior: NotchBehavior
+    @ObservationIgnored public var behavior: NotchBehavior {
+        didSet {
+            // Cancel a queued hover-open, including if the user switches back before its delay ends.
+            // An expanded notch may have a queued close: keep that close when the setting changes.
+            if behavior.openOnClickOnly, !oldValue.openOnClickOnly, state != .expanded {
+                hoverTask?.cancel()
+            }
+        }
+    }
     /// Current pointer position in screen coordinates; injectable for tests.
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     /// Whether Mission Control is up; injectable for tests.
@@ -300,7 +308,7 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         guard !isPinned else { return }
         if isHovering {
-            guard state != .expanded, !waitsForPointerToLeave else { return }
+            guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
                 model.open(fromHover: true)
                 if model.state == .expanded, model.behavior.hapticOnOpen {

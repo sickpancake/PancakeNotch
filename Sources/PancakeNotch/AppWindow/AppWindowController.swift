@@ -184,6 +184,10 @@ extension AppWindowController {
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
         try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
         try render("notch-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = true
+        try render("notch-click-only", section: .notch)
+        try render("notch-click-only-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = false
         preferences.fullScreenHiding = .always
         try render("notch-long-always", section: .notch, size: CGSize(width: 1000, height: 2000))
         preferences.fullScreenHiding = .whileWatching

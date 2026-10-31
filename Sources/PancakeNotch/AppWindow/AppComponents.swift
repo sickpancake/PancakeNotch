@@ -287,6 +287,7 @@ private struct MonochromeSwitch: View {
 
 /// A slider in white on grey. Arrow keys move it by one step; VoiceOver can adjust it too.
 struct MonochromeSlider: View {
+    @Environment(\.isEnabled) private var isEnabled
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double = 10
@@ -323,7 +324,8 @@ struct MonochromeSlider: View {
             )
         }
         .frame(height: 22)
-        .focusable()
+        .allowsHitTesting(isEnabled)
+        .focusable(isEnabled)
         .onKeyPress(.leftArrow) { set(value - step); return .handled }
         .onKeyPress(.rightArrow) { set(value + step); return .handled }
         .onKeyPress(.downArrow) { set(value - step); return .handled }
@@ -348,6 +350,7 @@ struct MonochromeSlider: View {
 
     /// Snaps to `step` and keeps the value inside `range`.
     private func set(_ newValue: Double) {
+        guard isEnabled else { return }
         let snapped = (newValue / step).rounded() * step
         value = min(max(snapped, range.lowerBound), range.upperBound)
     }

@@ -17,6 +17,11 @@ final class Preferences {
         didSet { defaults.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon) }
     }
 
+    /// Disable hover-to-open while keeping clicks, shortcuts and file drops available.
+    var openOnClickOnly: Bool {
+        didSet { defaults.set(openOnClickOnly, forKey: Keys.openOnClickOnly) }
+    }
+
     /// Milliseconds the pointer rests on the notch before it opens.
     var openDelayMilliseconds: Double {
         didSet { defaults.set(openDelayMilliseconds, forKey: Keys.openDelay) }
@@ -40,7 +45,8 @@ final class Preferences {
         NotchBehavior(
             openDelay: .milliseconds(Int(openDelayMilliseconds)),
             closeDelay: .milliseconds(Int(closeDelayMilliseconds)),
-            hapticOnOpen: hapticOnOpen
+            hapticOnOpen: hapticOnOpen,
+            openOnClickOnly: openOnClickOnly
         )
     }
 
@@ -49,6 +55,7 @@ final class Preferences {
         defaults.register(defaults: [
             Keys.notchEnabled: true,
             Keys.showMenuBarIcon: true,
+            Keys.openOnClickOnly: false,
             Keys.openDelay: Self.defaultOpenDelay,
             Keys.closeDelay: Self.defaultCloseDelay,
             Keys.hapticOnOpen: false,
@@ -56,6 +63,7 @@ final class Preferences {
         ])
         notchEnabled = defaults.bool(forKey: Keys.notchEnabled)
         showMenuBarIcon = defaults.bool(forKey: Keys.showMenuBarIcon)
+        openOnClickOnly = defaults.bool(forKey: Keys.openOnClickOnly)
         openDelayMilliseconds = defaults.double(forKey: Keys.openDelay)
         closeDelayMilliseconds = defaults.double(forKey: Keys.closeDelay)
         hapticOnOpen = defaults.bool(forKey: Keys.hapticOnOpen)
@@ -71,6 +79,7 @@ final class Preferences {
     private enum Keys {
         static let notchEnabled = "notchEnabled"
         static let showMenuBarIcon = "showMenuBarIcon"
+        static let openOnClickOnly = "openOnClickOnly"
         static let openDelay = "openDelayMilliseconds"
         static let closeDelay = "closeDelayMilliseconds"
         static let hapticOnOpen = "hapticOnOpen"
