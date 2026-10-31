@@ -131,3 +131,37 @@ struct AgentsSubagentTextTests {
         #expect(AgentsText.spoken(thread.subagents[0], now: now) == "Subagent, Check it, Working · 0s")
     }
 }
+
+@MainActor
+struct ResetTextTests {
+    @Test func textNamesThePlanAndLimitsAndMasksEmails() throws {
+        let account = AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/tmp/reset"), email: "tester@example.com", plan: "Max", name: "tester@example.com")
+        let items = [UsageLimit.Kind.session, .weekly].map { kind in
+            LimitResetNotice.Item(account: account, reset: LimitReset(accountID: account.id, kind: kind, endedAt: .now, leftBefore: 5))
+        }
+        let notice = LimitResetNotice(items: items)
+        let text = AIUsageText.resetPeek(notice)
+        #expect(text.subject == "Claude · t•••••@example.com")
+        #expect(text.detail == "Max · Session and Weekly reset")
+        let unknown = AgentAccount(tool: .codex, folder: URL(fileURLWithPath: "/tmp/unknown"), name: "Personal")
+        let single = LimitResetNotice(items: [.init(account: unknown, reset: LimitReset(accountID: unknown.id, kind: .weekly, endedAt: .now, leftBefore: 80))])
+        #expect(AIUsageText.resetPeek(single).detail == "Weekly reset")
+        let summary = LimitResetNotice(items: items + single.items)
+        #expect(AIUsageText.resetPeek(summary).subject == "3 limits reset")
+        #expect(AIUsageText.resetPeek(summary).detail == "2 accounts")
+        #expect(summary.lowestLeftBefore == 5)
+    }
+}
+
+@MainActor
+struct DefaultAccountTextTests {
+    @Test func defaultResetLabelDoesNotRepeatProviderOrTier() throws {
+        let center = UsageCenter.practice()
+        let notice = try #require(center.exampleResetNotice())
+        let text = AIUsageText.resetPeek(notice)
+        #expect(text.subject == "Claude Max 2")
+        #expect(text.detail == "Session reset")
+        let near = try #require(center.earReading)
+        #expect(AIUsageText.peek(near, now: .now).subject == "Claude Max 2")
+    }
+}

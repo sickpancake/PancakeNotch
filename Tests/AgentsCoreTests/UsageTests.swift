@@ -65,8 +65,8 @@ struct AccountTests {
     }
 
     @Test func claudePlans() {
-        #expect(AccountIdentity.claudePlan(type: "claude_max", tier: "default_claude_max_5x") == "Max 5×")
-        #expect(AccountIdentity.claudePlan(type: "claude_max", tier: "default_claude_max_20x") == "Max 20×")
+        #expect(AccountIdentity.claudePlan(type: "claude_max", tier: "default_claude_max_5x") == "Max")
+        #expect(AccountIdentity.claudePlan(type: "claude_max", tier: "default_claude_max_20x") == "Ultra")
         #expect(AccountIdentity.claudePlan(type: "claude_pro", tier: nil) == "Pro")
         #expect(AccountIdentity.claudePlan(type: nil, tier: nil) == nil)
     }

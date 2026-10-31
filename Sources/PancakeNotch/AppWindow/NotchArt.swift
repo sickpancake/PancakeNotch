@@ -85,6 +85,7 @@ struct NotchStage: View {
     var startState: NotchState?
     /// "Live" or "Practice" in the bottom corner; none where it's obvious (the welcome).
     var badge: StageBadge?
+    var resetExampleRequest = 0
     @State private var own = PracticeSet()
     /// The preview's state, so the hint can step aside while it's open.
     @State private var previewState: NotchState = .closed
@@ -139,6 +140,9 @@ struct NotchStage: View {
         .clipped()
         .onAppear(perform: updatePractice)
         .onChange(of: practice) { updatePractice() }
+        .onChange(of: resetExampleRequest) {
+            if isActive { own.usage?.showResetExample() }
+        }
         .onDisappear { own.close() }
     }
 

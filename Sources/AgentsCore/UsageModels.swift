@@ -16,11 +16,35 @@ public struct AgentAccount: Identifiable, Hashable, Sendable {
     public let tool: AgentTool
     public let folder: URL
     public var email: String?
-    /// "Pro", "Max 5×", "Plus"…
+    /// "Pro", "Max", "Plus"…
     public var plan: String?
     public var billing: Billing
-    /// The user's nickname for it, else the email, else the tool's name.
+    /// The user's nickname, otherwise provider + tier + an optional account number.
     public var name: String
+    public internal(set) var isDefaultName: Bool
+    internal var accountNumber: Int?
+
+    public var defaultName: String {
+        [tool.shortName, plan?.isEmpty == false ? plan : nil, accountNumber.map(String.init)]
+            .compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// Number accounts within each provider in stable folder order, independent of discovery order.
+    static func named(_ accounts: [AgentAccount], nicknames: [String: String] = [:]) -> [AgentAccount] {
+        let groups = Dictionary(grouping: accounts, by: \.tool)
+        return accounts.map { account in
+            var named = account
+            let peers = (groups[account.tool] ?? []).sorted { $0.id < $1.id }
+            named.accountNumber = peers.count > 1 ? peers.firstIndex(where: { $0.id == account.id }).map { $0 + 1 } : nil
+            if let nickname = nicknames[account.id] {
+                named.name = nickname
+                named.isDefaultName = false
+            } else if account.isDefaultName {
+                named.name = named.defaultName
+            }
+            return named
+        }
+    }
 
     public init(tool: AgentTool, folder: URL, email: String? = nil, plan: String? = nil,
                 billing: Billing = .unknown, name: String? = nil) {
@@ -30,13 +54,16 @@ public struct AgentAccount: Identifiable, Hashable, Sendable {
         self.email = email
         self.plan = plan
         self.billing = billing
-        self.name = name ?? email ?? tool.shortName
+        self.accountNumber = nil
+        self.isDefaultName = name == nil
+        self.name = name ?? [tool.shortName, plan?.isEmpty == false ? plan : nil].compactMap { $0 }.joined(separator: " ")
     }
 
     /// For the avatar: a nickname's first letters ("W" for Work, "WM" for Work Max), else the email's
     /// first letter and its domain's ("AD" for a@d.com), else the name's first two letters.
     public var initials: String {
-        if name != email, name != tool.shortName {
+        if isDefaultName, let accountNumber { return String(accountNumber) }
+        if !isDefaultName, name != email, name != tool.shortName {
             let words = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2)
             let letters = words.compactMap(\.first).map(String.init).joined()
             if !letters.isEmpty { return letters.uppercased() }
@@ -75,11 +102,29 @@ public enum UsagePace: Equatable, Sendable {
 
 /// A plan limit: Claude's 5-hour session and weekly limits, Codex's primary and secondary windows.
 public struct UsageLimit: Identifiable, Equatable, Sendable {
-    public enum Kind: Hashable, Sendable {
+    public enum Kind: Hashable, Sendable, Codable {
         case session
         case weekly
         /// A weekly limit for one model family ("Opus").
         case weeklyModel(String)
+
+        /// "Session", "Weekly", "Weekly · Opus".
+        public var label: String {
+            switch self {
+            case .session: String(localized: "Session", comment: "Usage limit: the 5-hour window")
+            case .weekly: String(localized: "Weekly", comment: "Usage limit")
+            case .weeklyModel(let family): String(localized: "Weekly · \(family)", comment: "Usage limit for one model family")
+            }
+        }
+
+        /// A stable key for saving which resets were already announced.
+        public var storageKey: String {
+            switch self {
+            case .session: "session"
+            case .weekly: "weekly"
+            case .weeklyModel(let family): "weekly:\(family)"
+            }
+        }
     }
 
     public let kind: Kind
@@ -99,13 +144,7 @@ public struct UsageLimit: Identifiable, Equatable, Sendable {
     public var id: Kind { kind }
 
     /// "Session", "Weekly", "Weekly · Opus".
-    public var label: String {
-        switch kind {
-        case .session: String(localized: "Session", comment: "Usage limit: the 5-hour window")
-        case .weekly: String(localized: "Weekly", comment: "Usage limit")
-        case .weeklyModel(let family): String(localized: "Weekly · \(family)", comment: "Usage limit for one model family")
-        }
-    }
+    public var label: String { kind.label }
 
     /// What's left, 0…100. A window that has reset counts as untouched.
     public func leftPercent(now: Date = .now) -> Double {

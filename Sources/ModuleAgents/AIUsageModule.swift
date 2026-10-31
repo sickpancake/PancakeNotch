@@ -23,6 +23,13 @@ public final class AIUsageModule: NotchModule {
     }
     /// What the peek strip is about (the latest account to run low).
     var peekNear: NearLimit?
+    var peekReset: LimitResetNotice?
+    @ObservationIgnored private var exampleTask: Task<Void, Never>?
+    @ObservationIgnored private var resetRetryObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var attachment = 0
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private var retryInputMonitor: Any?
+    @ObservationIgnored private var retryLocalInputMonitor: Any?
     /// Emails show in full after a click on one, until the notch closes.
     private(set) var revealsEmails = false
     /// Whether this copy peeks. The center tells one module, so Home's live copy doesn't.
@@ -57,14 +64,34 @@ public final class AIUsageModule: NotchModule {
     public var accessibilityStatus: String? { center.earReading.map { AIUsageText.spoken($0, now: .now) } }
 
     public func attach(to notch: NotchViewModel?) {
+        attachment += 1
         self.notch = notch
         guard notch != nil else {
             closeMenu()
             hideHistory()
-            if peeks { center.onNearLimit = nil }
+            if peeks { center.onNearLimit = nil; center.onResetsPending = nil }
+            exampleTask?.cancel()
+            stopResetRetry()
+            for observer in resetRetryObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+            resetRetryObservers = []
             return
         }
-        if peeks { center.onNearLimit = { [weak self] near in self?.ranLow(near) } }
+        if peeks {
+            center.onNearLimit = { [weak self] near in self?.ranLow(near) }
+            center.onResetsPending = { [weak self] in self?.showPendingReset() }
+            if resetRetryObservers.isEmpty {
+                for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
+                    let observer = NSWorkspace.shared.notificationCenter.addObserver(
+                        forName: name, object: nil, queue: .main
+                    ) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.resetRetryInteractionOccurred() }
+                    }
+                    resetRetryObservers.append(observer)
+                }
+            }
+            observeResetDelivery(generation: attachment)
+            showPendingReset()
+        }
         observeCenter()
         notch?.activityChanged()
     }
@@ -78,7 +105,11 @@ public final class AIUsageModule: NotchModule {
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {
-        peekNear.map { AnyView(AIUsagePeek(near: $0)) }
+        if let peekReset {
+            return AnyView(AIUsageResetPeek(notice: peekReset, snapshot: isSnapshot)
+                .id(peekReset.items.map { "\($0.reset.key):\($0.reset.endedAt.timeIntervalSince1970)" }.joined(separator: ",")))
+        }
+        return peekNear.map { AnyView(AIUsagePeek(near: $0)) }
     }
 
     /// The token history is read only while this view is on screen.
@@ -128,8 +159,96 @@ public final class AIUsageModule: NotchModule {
     /// An account dropped under 10% left: a peek, unless the notch is open and shows it.
     private func ranLow(_ near: NearLimit) {
         guard let notch, notch.state != .expanded else { return }
+        // A reset already showing keeps its four seconds. Near-limit warnings can try next time.
+        guard peekReset == nil || notch.peekModuleID != moduleID else { return }
+        peekReset = nil
         peekNear = near
         notch.peek(self, for: .seconds(4))
+    }
+
+    private func observeResetDelivery(generation: Int) {
+        withObservationTracking {
+            _ = notch?.state
+            _ = notch?.peekModuleID
+            _ = notch?.automaticPeeksAvailable
+            _ = notch?.isPinned
+            _ = center.settings.peeksOnReset
+            _ = center.settings.usageEnabled
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.notch != nil, self.attachment == generation else { return }
+                if !self.center.settings.peeksOnReset || !self.center.settings.usageEnabled {
+                    self.stopResetRetry()
+                    if self.peekReset != nil { self.notch?.cancelPeek(for: self) }
+                } else { self.showPendingReset() }
+                self.observeResetDelivery(generation: generation)
+            }
+        }
+    }
+
+    func showPendingReset() {
+        guard peeks, let notch else { return }
+        guard let notice = center.nextResetNotice() else {
+            if center.pendingResets.isEmpty { stopResetRetry() }
+            return
+        }
+        guard notch.state != .expanded, notch.peekModuleID == nil else { return }
+        peekReset = notice
+        if notch.peek(self, for: .seconds(4), revealOverFullScreen: true, waitingForOtherPeeks: true) {
+            center.resetNoticeStarted(notice)
+            stopResetRetry()
+        } else {
+            peekReset = nil
+            // Approved behavior: Mission Control can defer a reset until the next interaction.
+            // Cover the pointer both outside and inside PancakeNotch. Monitors exist only while
+            // delivery is blocked; no task reschedules itself to poll for overlay dismissal.
+            let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseUp, .scrollWheel]
+            if retryInputMonitor == nil {
+                retryInputMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.resetRetryInteractionOccurred() }
+                }
+            }
+            if retryLocalInputMonitor == nil {
+                retryLocalInputMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+                    MainActor.assumeIsolated { self?.resetRetryInteractionOccurred() }
+                    return event
+                }
+            }
+        }
+    }
+
+    /// One attempt after an actual pointer, application or Space event. The short delay lets that
+    /// event's overlay animation settle; if it is still blocked, another real event is required.
+    func resetRetryInteractionOccurred() {
+        guard peeks, notch != nil, retryTask == nil, !center.pendingResets.isEmpty else { return }
+        retryTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(600)) } catch { return }
+            guard let self else { return }
+            self.retryTask = nil
+            self.showPendingReset()
+        }
+    }
+
+    private func stopResetRetry() {
+        retryTask?.cancel()
+        retryTask = nil
+        if let retryInputMonitor { NSEvent.removeMonitor(retryInputMonitor) }
+        if let retryLocalInputMonitor { NSEvent.removeMonitor(retryLocalInputMonitor) }
+        retryInputMonitor = nil
+        retryLocalInputMonitor = nil
+    }
+
+    /// Only the Modules card's practice copy receives this request from its own button.
+    public func showResetExample() {
+        guard center.isPractice, let notch, let notice = center.exampleResetNotice() else { return }
+        exampleTask?.cancel()
+        notch.close()
+        exampleTask = Task { [weak self, weak notch] in
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            guard let self, let notch, self.notch === notch else { return }
+            self.peekReset = notice
+            notch.peek(self, for: .seconds(4))
+        }
     }
 
     // MARK: The account menu

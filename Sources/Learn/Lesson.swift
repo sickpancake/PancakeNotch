@@ -283,7 +283,7 @@ public struct Lesson: Identifiable, Sendable {
             LessonStep(
                 id: "aiUsage.account",
                 title: String(localized: "Pick an account", comment: "Lesson step title"),
-                detail: String(localized: "Choose one to see its limits. All accounts adds token use and API value together; limits stay separate.", comment: "Lesson step detail"),
+                detail: String(localized: "Choose one to see its limits. All accounts adds token use and API value together; limits stay separate. By default, a short pop-up tells you when a limit you used resets. Try Show example in the AI Usage module settings.", comment: "Lesson step detail"),
                 symbol: "person.2",
                 signal: .usageAccountChosen
             ),

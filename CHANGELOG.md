@@ -5,6 +5,8 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Your AI limits, ready again.** AI Usage can briefly show the account, plan and limit that reset under the notch, with a small ring that fills back up. It is on by default, with a switch and a practice example in the module settings.
+
 - **Convert files.** Drop files on the new Convert area while you drag them to the notch, and turn them into another format in one click: pictures to JPEG, PNG, HEIC, TIFF or PDF, PDFs to pictures or text, sound to M4A, WAV and more, videos to MP4, MOV, their sound or a short GIF, and text to PDF. Several pictures and PDFs can become one PDF. It stays light: anything too big for the memory limit says so instead.
 
 ## 0.2.0 — beta
