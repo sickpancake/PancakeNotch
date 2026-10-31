@@ -1,7 +1,7 @@
 # Coverage sync record
 
-Last reviewed base commit: `9f7bc4125575fca0edff09ad5fa5921a8836cd59`.
-The click-only implementation is an uncommitted patch on that base. The SHA-256 values below identify the exact reviewed working files; the base commit alone does not contain the feature. Reconfirm the model mapping before advancing this record to a commit containing the change.
+Sync commit: `6ee178e5eff8b8187518867cdca6ae63d89422fc`.
+The SHA-256 values below identify the reviewed source at this commit. The model mapping, regression tests and deliberately broken variants were checked against these exact source bytes. Move this sync commit forward only after confirming that the verification still describes the covered code.
 
 | Covered file | Reviewed SHA-256 |
 | --- | --- |
