@@ -18,9 +18,9 @@ public enum TimerEarContent: String, CaseIterable, Sendable {
 
 /// How the digits change.
 public enum TimerDigitAnimation: String, CaseIterable, Sendable {
-    /// Each digit rolls over like a drum (a horizontal cylinder).
+    /// Each changed digit rolls to the next ("Roll").
     case drum
-    /// Each digit slides up or down.
+    /// The digits cross-fade ("Fade"; the stored name is from an earlier "Slide").
     case slide
     case off
 }

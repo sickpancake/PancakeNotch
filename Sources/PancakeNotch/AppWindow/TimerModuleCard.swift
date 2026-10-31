@@ -72,13 +72,13 @@ struct TimerSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "Numbers"),
-                subtitle: String(localized: "How the digits change. With Reduce Motion on, Roll and Slide fade instead.")
+                subtitle: String(localized: "How the digits change. With Reduce Motion on, Roll fades instead.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "Numbers"),
                     options: [
                         (TimerDigitAnimation.drum, String(localized: "Roll")),
-                        (.slide, String(localized: "Slide")),
+                        (.slide, String(localized: "Fade")),
                         (.off, String(localized: "Just change")),
                     ],
                     selection: $settings.digitAnimation
