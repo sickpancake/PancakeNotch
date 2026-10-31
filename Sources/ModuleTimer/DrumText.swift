@@ -119,11 +119,13 @@ private struct DrumFace: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // A positive anchorZ puts the axis behind the digit, so a turning face moves away and
+            // shrinks. A negative one swung it toward the viewer, past its column, and clipping cut it up.
             .rotation3DEffect(
-                .degrees(-turn * 90),
+                .degrees(turn * 90),
                 axis: (x: 1, y: 0, z: 0),
                 anchor: .center,
-                anchorZ: -depth,
+                anchorZ: depth,
                 perspective: 0.5
             )
             .opacity(turn == 0 ? 1 : 0)
