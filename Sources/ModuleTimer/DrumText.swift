@@ -9,7 +9,7 @@ enum DrumDirection {
 
 /// A time whose digits roll over when they change (ADR-0040): each digit sits on a small horizontal
 /// cylinder that turns to the next face (Rolling drum), slides (Simple slide), or just changes (Off).
-/// Reduce Motion always cross-fades. Separators (":" ".") stand still.
+/// Reduce Motion cross-fades Roll and Slide. Separators (":" ".") stand still.
 ///
 /// Columns are keyed from the right, so "9:59" → "10:00" adds a column on the left without moving the
 /// others. The last `steadyDigits` columns change without rolling (a stopwatch's hundredths change
@@ -37,11 +37,15 @@ struct DrumText: View {
             }
         }
         .font(.system(size: size, weight: weight).monospacedDigit())
+        // 10:00 → 9:59 drops a column: the others glide over rather than jump.
+        .animation(motion == .none ? nil : .easeOut(duration: 0.2), value: characters.count)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(text))
     }
 
     private var motion: DrumColumn.Motion {
+        // "Just change" means no motion at all; Reduce Motion turns the others into a fade.
+        if style == .off { return .none }
         if reduceMotion { return .fade }
         switch style {
         case .drum: return .drum

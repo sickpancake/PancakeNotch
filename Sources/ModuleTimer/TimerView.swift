@@ -38,10 +38,13 @@ struct TimerView: View {
             Group {
                 if sideBySide {
                     HStack(spacing: 0) {
+                        // Room on each side of the line, so neither page runs into it.
                         TimerPane(module: module, isCompact: true)
+                            .padding(.trailing, 12)
                             .frame(maxWidth: .infinity)
                         Rectangle().fill(.white.opacity(0.12)).frame(width: 1).padding(.vertical, 6)
                         StopwatchPane(module: module, isCompact: true)
+                            .padding(.leading, 14)
                             .frame(maxWidth: .infinity)
                     }
                 } else {
@@ -82,15 +85,15 @@ struct TimerView: View {
     }
 }
 
-/// Timer · Stopwatch, in the style of AI Usage's range switch. A dot marks the one that's running while
-/// the other shows.
+/// Timer · Stopwatch, in the style of AI Usage's range switch. A dot marks the other page while something
+/// is on it (running, paused, done or stopped); VoiceOver says which.
 private struct ModeSwitch: View {
     let module: TimerModule
 
     var body: some View {
         HStack(spacing: 2) {
-            segment(.timer, title: String(localized: "Timer"), busy: !module.center.timer.isIdle)
-            segment(.stopwatch, title: String(localized: "Stopwatch"), busy: !module.center.stopwatch.isIdle)
+            segment(.timer, title: String(localized: "Timer"), status: timerStatus)
+            segment(.stopwatch, title: String(localized: "Stopwatch"), status: stopwatchStatus)
         }
         .padding(2)
         .background(.white.opacity(0.08), in: Capsule())
@@ -99,8 +102,23 @@ private struct ModeSwitch: View {
         .accessibilityLabel(Text("Mode"))
     }
 
-    private func segment(_ mode: TimerMode, title: String, busy: Bool) -> some View {
-        ModeSegment(title: title, isSelected: module.mode == mode, showsDot: busy && module.mode != mode) {
+    private var timerStatus: String? {
+        switch module.center.timer.phase {
+        case .idle: nil
+        case .running: String(localized: "Running")
+        case .paused: String(localized: "Paused")
+        case .done: String(localized: "Done")
+        }
+    }
+
+    private var stopwatchStatus: String? {
+        let stopwatch = module.center.stopwatch
+        if stopwatch.isRunning { return String(localized: "Running") }
+        return stopwatch.isStopped ? String(localized: "Stopped") : nil
+    }
+
+    private func segment(_ mode: TimerMode, title: String, status: String?) -> some View {
+        ModeSegment(title: title, isSelected: module.mode == mode, status: module.mode == mode ? nil : status) {
             module.showMode(mode)
         }
     }
@@ -109,7 +127,8 @@ private struct ModeSwitch: View {
 private struct ModeSegment: View {
     let title: String
     let isSelected: Bool
-    let showsDot: Bool
+    /// What's on the other page ("Paused"), shown as a dot.
+    let status: String?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -119,7 +138,7 @@ private struct ModeSegment: View {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                if showsDot {
+                if status != nil {
                     Circle().fill(.white).frame(width: 4, height: 4)
                 }
             }
@@ -132,7 +151,7 @@ private struct ModeSegment: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityValue(Text(showsDot ? String(localized: "Running") : ""))
+        .accessibilityValue(Text(status ?? ""))
     }
 }
 
@@ -221,16 +240,26 @@ private struct TimerSetup: View {
                 NotchPill(title: String(localized: "Start"), symbol: "play.fill", prominent: true) {
                     module.startWheels()
                 }
-                .disabled(module.pendingWheelSeconds < 1)
-                .opacity(module.wheelSeconds < 1 ? 0.4 : 1)
+                .disabled(!module.canStartWheels)
+                .opacity(module.canStartWheels ? 1 : 0.4)
                 .accessibilityHint(Text("Starts a timer for the time on the wheels."))
             }
             .frame(maxWidth: presets.isEmpty ? .infinity : nil)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            // While typing, a click beside the wheels ends it, like leaving a text field. Not otherwise:
+            // a click on the open notch shrinks it (ADR-0011).
+            if module.editing != nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { module.endEditing() }
+            }
+        }
     }
 }
 
-/// The quick-start times as small buttons. Shows as many as fit; the rest are in Settings.
+/// The quick-start times as small buttons: all 12 at full size, the first 6 side by side (Settings says so).
 private struct PresetGrid: View {
     let module: TimerModule
     let presets: [TimerPreset]
@@ -288,9 +317,9 @@ private struct TimerRunning: View {
     var body: some View {
         let timer = module.center.timer
         Group {
-            if let end = timer.end, !module.isSnapshot, !module.isDisplayAsleep {
+            if let end = timer.end, module.pageTicks {
                 // Ticks on each whole second before the end, only while this page shows (AGENTS.md rule 2).
-                TimelineView(.periodic(from: end.addingTimeInterval(-(end.timeIntervalSince(module.center.now).rounded(.down) + 1)), by: 1)) { context in
+                TimelineView(.periodic(from: end.addingTimeInterval(-(max(0, end.timeIntervalSince(module.center.now)).rounded(.down) + 1)), by: 1)) { context in
                     face(now: context.date)
                 }
             } else {
@@ -329,9 +358,10 @@ private struct TimerRunning: View {
                         .lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
+                // Rounded up, as the digits show it; with the end time the screen shows under them.
                 .accessibilityLabel(Text(timer.isPaused
-                    ? String(localized: "Timer paused, \(TimerText.spoken(remaining)) left")
-                    : String(localized: "\(TimerText.spoken(remaining.rounded(.up))) left")))
+                    ? String(localized: "Timer paused, \(TimerText.spoken(remaining.rounded(.up))) left")
+                    : String(localized: "\(TimerText.spoken(remaining.rounded(.up))) left") + ", " + statusLine(timer)))
             }
             if !isCompact { Spacer(minLength: 0) }
             controls(timer)
@@ -382,11 +412,14 @@ private struct TimerDone: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Done", comment: "Timer: it finished")
                     .font(.system(size: isCompact ? 28 : 44, weight: .medium))
-                Text(TimerDoneText.detail(module.center))
-                    .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                // Redrawn once, a minute after the end, when "ended 3:42 PM" joins the line.
+                TimelineView(.explicit(module.center.timer.endedAt.map { [$0.addingTimeInterval(60)] } ?? [])) { _ in
+                    Text(TimerDoneText.detail(module.center))
+                        .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
@@ -420,13 +453,13 @@ struct StopwatchPane: View {
 
     var body: some View {
         let stopwatch = module.center.stopwatch
-        let ticks = stopwatch.isRunning && !module.isSnapshot && !module.isDisplayAsleep
+        let ticks = stopwatch.isRunning && module.pageTicks
         let now = module.center.now
         // Only the time and the lap being timed tick; the done laps are drawn once.
         let doneLaps = Array(stopwatch.laps(at: now).dropFirst())
         let lapList = LapList(
             current: stopwatch.lapTotals.isEmpty ? nil : Ticking(ticks: ticks, now: now) { now in
-                if let current = stopwatch.laps(at: now).first { LapRow(lap: current, isCompact: isCompact) }
+                if let current = stopwatch.currentLap(at: now) { LapRow(lap: current, isRunning: stopwatch.isRunning, isCompact: isCompact) }
             },
             done: doneLaps,
             isSnapshot: module.isSnapshot,
@@ -483,7 +516,7 @@ struct StopwatchPane: View {
                     module.user { module.center.lap() }
                 }
                 .disabled(!stopwatch.canLap)
-                .opacity(stopwatch.isRunning ? 1 : 0.35)
+                .opacity(stopwatch.canLap ? 1 : 0.35)
             }
             if stopwatch.isRunning {
                 TimerRoundButton(symbol: "stop.fill", label: String(localized: "Stop stopwatch"), prominent: true, size: size) {
@@ -543,7 +576,7 @@ private struct LapList<Current: View>: View {
         LazyVStack(spacing: 0) {
             ForEach(done) { lap in
                 Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
-                LapRow(lap: lap, isCompact: isCompact)
+                LapRow(lap: lap, isRunning: false, isCompact: isCompact)
             }
         }
     }
@@ -551,6 +584,8 @@ private struct LapList<Current: View>: View {
 
 private struct LapRow: View {
     let lap: Stopwatch.Lap
+    /// The stopwatch runs: the current lap is being timed (stopped, it just waits).
+    let isRunning: Bool
     let isCompact: Bool
 
     var body: some View {
@@ -585,7 +620,7 @@ private struct LapRow: View {
 
     private var spoken: String {
         var parts = [String(localized: "Lap \(lap.number)"), TimerText.spoken(lap.time.rounded(.down))]
-        if lap.isCurrent { parts.append(String(localized: "running")) }
+        if lap.isCurrent, isRunning { parts.append(String(localized: "running")) }
         if let mark = lap.mark { parts.append(mark == .fastest ? String(localized: "Fastest") : String(localized: "Slowest")) }
         return parts.joined(separator: ", ")
     }

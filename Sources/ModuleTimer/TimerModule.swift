@@ -17,10 +17,12 @@ public final class TimerModule: NotchModule {
 
     /// The page the open notch shows when Timer and Stopwatch aren't side by side.
     var mode: TimerMode = .timer
-    /// The wheels' time before Start.
-    var wheelSeconds: TimeInterval
-    /// Which way the wheels last turned, so their digits roll that way.
-    var wheelDirection: DrumDirection = .up
+    /// The wheels' time before Start. It's the center's, so it stays when the notch closes and Home's copy
+    /// shows the same (TimerWheels.tla, WheelsKeepYourTime).
+    var wheelSeconds: TimeInterval {
+        get { center.customSeconds }
+        set { center.customSeconds = newValue }
+    }
     /// The wheel being typed into, if any: it keeps the notch open.
     var editing: TimerWheelUnit?
     /// Digits typed into the editing wheel so far.
@@ -37,13 +39,17 @@ public final class TimerModule: NotchModule {
     /// Presets shown before the user's own (a practice timer's 10 seconds).
     @ObservationIgnored let extraPresets: [TimerPreset]
     @ObservationIgnored private var displayObservers: [any NSObjectProtocol] = []
+    /// While typing: a click in another app, or switching apps, ends it (TimerWheels.tla, TypingOnlyWithKeys).
+    @ObservationIgnored private var clickAwayMonitor: Any?
+    @ObservationIgnored private var appSwitchObserver: (any NSObjectProtocol)?
+    /// An old observation may already have queued its callback when this copy is reattached.
+    @ObservationIgnored private var observationGeneration = 0
 
     public init(center: TimerCenter, settings: TimerSettings, presents: Bool = true, extraPresets: [TimerPreset] = []) {
         self.center = center
         self.settings = settings
         self.presents = presents
         self.extraPresets = extraPresets
-        wheelSeconds = center.customSeconds
         mode = Self.bestMode(center)
     }
 
@@ -84,7 +90,8 @@ public final class TimerModule: NotchModule {
         let timer = center.timer
         switch timer.phase {
         case .running: return String(localized: "Timer, \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
-        case .paused: return String(localized: "Timer paused, \(TimerText.spoken(timer.remaining(at: now))) left")
+        // Rounded up, as the countdown shows it.
+        case .paused: return String(localized: "Timer paused, \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
         case .done: return String(localized: "Timer done")
         case .idle: break
         }
@@ -95,6 +102,8 @@ public final class TimerModule: NotchModule {
     }
 
     public func attach(to notch: NotchViewModel?) {
+        observationGeneration += 1
+        if self.notch !== notch { endEditing() }
         self.notch = notch
         guard notch != nil else {
             if presents { center.onFinish = nil }
@@ -128,7 +137,6 @@ public final class TimerModule: NotchModule {
 
     public func notchDidOpen() {
         mode = Self.bestMode(center)
-        wheelSeconds = center.customSeconds
         // The Done card is on screen: the finish has been seen.
         if center.timer.isDone, mode == .timer || settings.sideBySide { peekPending = false }
     }
@@ -138,6 +146,11 @@ public final class TimerModule: NotchModule {
     }
 
     public func userSwitchedAway() {
+        endEditing()
+    }
+
+    /// Key presses no longer reach the notch (another window took them): typing ends.
+    public func keyFocusLost() {
         endEditing()
     }
 
@@ -153,13 +166,18 @@ public final class TimerModule: NotchModule {
 
     /// Re-checks the ear whenever the timer, stopwatch or ear setting changes. Observation only.
     private func observe() {
+        let generation = observationGeneration
         withObservationTracking {
             _ = isActive
             _ = settings.earPlacement
             _ = notch?.state
+            _ = center.timer.isIdle
         } onChange: { [weak self] in
             Task { @MainActor in
-                guard let self, self.notch != nil else { return }
+                guard let self, self.notch != nil, self.observationGeneration == generation else { return }
+                // A timer started elsewhere (Home's copy shares the center): the wheels are gone, so typing
+                // ends (TimerWheels.tla, TypingOnlyOnScreen).
+                if !self.center.timer.isIdle { self.endEditing() }
                 self.notch?.activityChanged()
                 self.showPendingPeek()
                 self.observe()
@@ -225,6 +243,8 @@ public final class TimerModule: NotchModule {
         guard self.mode != mode else { return }
         endEditing()
         self.mode = mode
+        // Reopening with nothing running comes back to the page last looked at.
+        center.lastMode = mode
         center.onEvent?(.modeShown(mode))
         if mode == .timer, center.timer.isDone { peekPending = false }
     }
@@ -279,12 +299,13 @@ public final class TimerModule: NotchModule {
 
     // MARK: Wheels
 
-    /// Turns a wheel by `steps` (scroll, drag, arrow keys), wrapping like a real wheel.
+    /// Turns a wheel by `steps` (scroll, drag, arrow keys), wrapping like a real wheel. Turning another
+    /// wheel than the one being typed into ends typing, so the next digit can't land on a wheel the hand left.
     func turn(_ unit: TimerWheelUnit, by steps: Int) {
-        guard steps != 0 else { return }
         notch?.userInteracted()
-        if editing != nil { commitTyping() }
-        wheelDirection = steps > 0 ? .up : .down
+        if editing == unit { commitTyping() } else { endEditing() }
+        // A partial scroll already moved the hand to this wheel, even before it passes a number.
+        guard steps != 0 else { return }
         wheelSeconds = unit.turned(wheelSeconds, by: steps)
     }
 
@@ -295,13 +316,36 @@ public final class TimerModule: NotchModule {
         editing = unit
         typed = ""
         notch?.requestKeyFocus?()
+        watchClicksAway()
     }
 
     func endEditing() {
         guard editing != nil else { return }
         commitTyping()
         editing = nil
+        stopWatchingClicksAway()
         notch?.holdReleased()
+    }
+
+    private func watchClicksAway() {
+        guard clickAwayMonitor == nil else { return }
+        clickAwayMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endEditing() }
+        }
+        appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            MainActor.assumeIsolated { self?.endEditing() }
+        }
+    }
+
+    private func stopWatchingClicksAway() {
+        if let clickAwayMonitor { NSEvent.removeMonitor(clickAwayMonitor) }
+        clickAwayMonitor = nil
+        if let appSwitchObserver { NSWorkspace.shared.notificationCenter.removeObserver(appSwitchObserver) }
+        appSwitchObserver = nil
     }
 
     private func commitTyping() {
@@ -314,13 +358,19 @@ public final class TimerModule: NotchModule {
     }
 
     /// Keys while the notch has the keyboard. Typing into a wheel: digits, Delete, Tab, arrows, Return
-    /// starts, Esc stops typing. Otherwise: Space start/pause, L lap, R reset, Tab Timer ↔ Stopwatch
-    /// (side by side: Space for the timer, S for the stopwatch), Return on the Done card stops it.
-    /// ⌘ shortcuts always pass.
+    /// starts, Esc cancels the digits and stops typing. Otherwise: Space start/pause, L lap, R reset, Tab
+    /// Timer ↔ Stopwatch (side by side: Space for the timer, S for the stopwatch), Return on the Done card
+    /// stops it; a held key counts once. Alerts don't take keyboard focus from another app.
+    /// ⌘, ⌥ and ⌃ shortcuts always pass.
     public func handleKey(_ event: NSEvent) -> Bool {
-        guard !event.modifierFlags.contains(.command) else { return false }
-        if let editing {
+        // ⌘, ⌥ and ⌃ shortcuts aren't the Timer's (⌥L isn't a lap).
+        guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
+        if let editing, center.timer.isIdle {
             return handleEditingKey(event, unit: editing)
+        }
+        // A held key is one press: holding L doesn't fire a lap 30 times a second, nor Space start/stop.
+        if event.isARepeat {
+            return [49, 36, 76, 48].contains(event.keyCode) || ["l", "r", "s"].contains(event.charactersIgnoringModifiers?.lowercased() ?? "")
         }
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         // Side by side, Space is the timer's and S the stopwatch's.
@@ -359,7 +409,8 @@ public final class TimerModule: NotchModule {
     private func handleEditingKey(_ event: NSEvent, unit: TimerWheelUnit) -> Bool {
         let characters = event.charactersIgnoringModifiers ?? ""
         switch event.keyCode {
-        case 53: // Esc
+        case 53: // Esc: cancel the digits being typed, like leaving a text field with Esc
+            typed = ""
             endEditing()
         case 36, 76: // Return
             startWheels()
@@ -393,9 +444,18 @@ public final class TimerModule: NotchModule {
         return editing.setting(wheelSeconds, to: value)
     }
 
+    /// Start starts something: the wheels (with any typed digits) say at least a second.
+    var canStartWheels: Bool { pendingWheelSeconds >= 1 }
+
     /// The typed digits, or nil: the wheel shows them instead of its value while typing.
     func typedValue(for unit: TimerWheelUnit) -> String? {
         editing == unit && !typed.isEmpty ? typed : nil
+    }
+
+    /// The number a wheel shows, typed digits counted in: its neighbours are one less and one more
+    /// (TimerWheels.tla, NeighboursFollowFace).
+    func shownValue(for unit: TimerWheelUnit) -> Int {
+        unit.value(of: pendingWheelSeconds)
     }
 
     /// A click elsewhere in the app window ends typing in a practice notch.
@@ -429,6 +489,9 @@ public final class TimerModule: NotchModule {
         !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true && notch?.state == .compact && notch?.earsAsleep == false
             && (center.timer.isRunning || (center.timer.isIdle && center.stopwatch.isRunning))
     }
+
+    /// Practice and live pages also stop updating when their host window is hidden or covered.
+    var pageTicks: Bool { !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true }
 }
 
 /// A wheel in the timer's custom time: hours, minutes or seconds.
@@ -447,8 +510,12 @@ enum TimerWheelUnit: Int, CaseIterable, Identifiable {
     /// Turns this wheel, wrapping (59 → 0), leaving the others alone.
     func turned(_ total: TimeInterval, by steps: Int) -> TimeInterval {
         let current = value(of: total)
-        let next = ((current + steps) % range + range) % range
-        return total + TimeInterval((next - current) * size)
+        return total + TimeInterval((wrapped(current + steps) - current) * size)
+    }
+
+    /// A value on this wheel, wrapped round: 60 minutes is 0, -1 is 59.
+    func wrapped(_ value: Int) -> Int {
+        (value % range + range) % range
     }
 
     /// Sets this wheel to a typed value, clamped (75 minutes → 59).

@@ -29,6 +29,8 @@ public struct CountdownTimer: Codable, Equatable, Sendable {
 
     /// When it ends, while it runs.
     public var end: Date? { if case .running(let end) = phase { end } else { nil } }
+    /// When it ran out, while it shows Done.
+    public var endedAt: Date? { if case .done(let endedAt) = phase { endedAt } else { nil } }
 
     /// Starts a new timer; ignored while one is running or paused (cancel it first), or for less than a second.
     public mutating func start(_ seconds: TimeInterval, now: Date) {

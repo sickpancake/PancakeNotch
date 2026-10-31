@@ -58,7 +58,8 @@ struct TimerEar: View {
         let center = module.center
         let now = center.now
         if let end = center.timer.end {
-            return end.addingTimeInterval(-(end.timeIntervalSince(now).rounded(.down) + 1))
+            // Past the end (the alarm hasn't run yet), not a start in the future.
+            return end.addingTimeInterval(-(max(0, end.timeIntervalSince(now)).rounded(.down) + 1))
         }
         if center.timer.isIdle, center.stopwatch.isRunning {
             let elapsed = center.stopwatch.elapsed(at: now)
@@ -114,9 +115,9 @@ struct TimerEar: View {
             if content == .ring, !paused {
                 TimerRing(fraction: timer.fractionLeft(at: now), size: 13)
             } else if content == .endTime, let end = timer.end {
-                time(TimerText.shortTime(end), animated: false)
+                fitting(lead: nil, text: TimerText.shortTime(end), animated: false)
             } else {
-                time(text)
+                fitting(lead: nil, text: text)
             }
         case .shared:
             if paused {
@@ -142,7 +143,11 @@ struct TimerEar: View {
         case .companion:
             if stopwatch.isStopped { sign("pause.fill") } else { TimerRing(fraction: sweep, size: 13) }
         case .solo:
-            if ringOnly, stopwatch.isRunning { TimerRing(fraction: sweep, size: 13) } else { time(text, direction: .up) }
+            if ringOnly, stopwatch.isRunning {
+                TimerRing(fraction: sweep, size: 13)
+            } else {
+                fitting(lead: nil, text: text, direction: .up)
+            }
         case .shared:
             if stopwatch.isStopped {
                 fitting(lead: AnyView(sign("pause.fill", size: 7)), text: text, direction: .up)
@@ -171,8 +176,13 @@ struct TimerEar: View {
             }
             time(text, direction: direction, animated: animated)
             time(text, size: 9, direction: direction, animated: animated)
-            time(text, size: 8, direction: direction, animated: false)
+            // The last choice must shrink even a many-hour stopwatch into the available ear.
+            Text(text)
+                .font(.system(size: 8, weight: .semibold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
         }
+        .frame(width: max(0, width - 4))
     }
 
     private func time(_ text: String, size: CGFloat = 10.5, direction: DrumDirection = .down, animated: Bool = true) -> some View {

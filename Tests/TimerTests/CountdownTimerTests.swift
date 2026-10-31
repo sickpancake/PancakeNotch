@@ -165,3 +165,58 @@ struct TimerTextTests {
 private func finish(_ timer: inout CountdownTimer, at now: Date) -> Bool {
     timer.finishIfDue(now: now)
 }
+
+/// The polish pass's stopwatch fixes (ADR-0040).
+struct StopwatchPolishTests {
+    let start = Date(timeIntervalSinceReferenceDate: 900_000_000)
+
+    /// Laps are in the hundredths the screen shows, so they add up to the total shown.
+    @Test func lapsAddUpToTheTotal() {
+        var stopwatch = Stopwatch()
+        stopwatch.start(now: start)
+        stopwatch.lap(now: start + 10.009)
+        stopwatch.lap(now: start + 20.018)
+        stopwatch.stop(now: start + 20.018)
+        let laps = stopwatch.laps(at: start + 20.018)
+        let done = laps.filter { !$0.isCurrent }
+        #expect(done.map { TimerText.precise($0.time) } == ["00:10.01", "00:10.00"])
+        #expect(TimerText.precise(stopwatch.elapsed(at: start + 20.018)) == "00:20.01")
+        #expect(stopwatch.currentLap(at: start + 20.018)?.number == 3)
+    }
+
+    @Test func aLapOfExactHundredthsShowsThem() {
+        #expect(TimerText.precise(0.29) == "00:00.29")
+        #expect(TimerText.precise(Stopwatch.seconds(29)) == "00:00.29")
+    }
+
+    /// VoiceOver says something for under half a second, not "".
+    @Test func zeroIsSpoken() {
+        #expect(!TimerText.spoken(0).isEmpty)
+        #expect(!TimerText.spoken(0.3).isEmpty)
+    }
+}
+
+/// A clock change doesn't move a running stopwatch: TimerCenter measures the jump on the uptime clock.
+@MainActor
+struct StopwatchClockTests {
+    @Test func aClockJumpLeavesTheStopwatchAlone() {
+        var wall = Date(timeIntervalSinceReferenceDate: 900_000_000)
+        var up: TimeInterval = 1_000
+        let center = TimerCenter(now: { wall }, uptime: { up })
+        center.startStopwatch()
+        wall += 50; up += 50
+        // Set five minutes ahead by hand.
+        wall += 300
+        center.timeMayHaveJumped()
+        #expect(abs(center.stopwatch.elapsed(at: wall) - 50) < 0.001)
+        // And back 20 s.
+        wall += 10; up += 10
+        wall -= 20
+        center.timeMayHaveJumped()
+        #expect(abs(center.stopwatch.elapsed(at: wall) - 60) < 0.001)
+        // A wake with no change: nothing moves.
+        wall += 3_600; up += 3_600
+        center.timeMayHaveJumped()
+        #expect(abs(center.stopwatch.elapsed(at: wall) - 3_660) < 0.001)
+    }
+}

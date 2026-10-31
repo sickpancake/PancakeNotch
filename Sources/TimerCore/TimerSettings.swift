@@ -81,7 +81,9 @@ public final class TimerSettings {
         earContent = defaults.string(forKey: Keys.earContent).flatMap(TimerEarContent.init(rawValue:)) ?? .ringAndTime
         digitAnimation = defaults.string(forKey: Keys.digitAnimation).flatMap(TimerDigitAnimation.init(rawValue:)) ?? .drum
         sideBySide = defaults.object(forKey: Keys.sideBySide) as? Bool ?? false
-        sound = defaults.string(forKey: Keys.sound) ?? Self.defaultSound
+        // A chosen sound this Mac no longer has (renamed in a macOS update) would ring silently: Glass then.
+        let savedSound = defaults.string(forKey: Keys.sound) ?? Self.defaultSound
+        sound = savedSound.isEmpty || TimerSound.url(for: savedSound) != nil ? savedSound : Self.defaultSound
         hapticOnDone = defaults.object(forKey: Keys.hapticOnDone) as? Bool ?? true
         fullScreenAlert = defaults.string(forKey: Keys.fullScreenAlert).flatMap(TimerFullScreenAlert.init(rawValue:)) ?? .showNotch
         let saved = defaults.data(forKey: Keys.presets).flatMap { try? JSONDecoder().decode([TimerPreset].self, from: $0) }

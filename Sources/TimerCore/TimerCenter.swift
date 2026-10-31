@@ -27,7 +27,7 @@ public final class TimerCenter {
     public private(set) var stopwatch: Stopwatch
     /// The mode used last; the open notch shows it when neither (or both) run.
     public var lastMode: TimerMode { didSet { defaults?.set(lastMode.rawValue, forKey: Keys.lastMode) } }
-    /// The wheels' time: the last custom time used (5 minutes at first).
+    /// The wheels' time, as last set or started (5 minutes at first).
     public var customSeconds: TimeInterval { didSet { defaults?.set(customSeconds, forKey: Keys.customSeconds) } }
     /// The timer ran out while the app wasn't running (found at launch): it shows Done without ringing.
     public private(set) var finishedWhileAway = false
@@ -39,6 +39,10 @@ public final class TimerCenter {
 
     @ObservationIgnored private let defaults: UserDefaults?
     @ObservationIgnored private let clock: () -> Date
+    @ObservationIgnored private let uptime: () -> TimeInterval
+    /// The wall clock and the uptime clock read together while the stopwatch runs: a clock change shows as
+    /// the two moving apart.
+    @ObservationIgnored private var stopwatchAnchor: (wall: Date, uptime: TimeInterval)?
     @ObservationIgnored private var alarmTask: Task<Void, Never>?
     @ObservationIgnored private var activity: (any NSObjectProtocol)?
     @ObservationIgnored private var observers: [(NotificationCenter, any NSObjectProtocol)] = []
@@ -46,20 +50,25 @@ public final class TimerCenter {
     /// - Parameters:
     ///   - defaults: where to keep it; `nil` keeps it in memory only (practice, tests, snapshots).
     ///   - now: the current time; injectable for tests.
-    public init(defaults: UserDefaults? = nil, now: @escaping () -> Date = Date.init) {
+    ///   - uptime: seconds on a clock that counts through sleep and ignores clock changes; injectable for tests.
+    public init(defaults: UserDefaults? = nil, now: @escaping () -> Date = Date.init,
+                uptime: @escaping () -> TimeInterval = { TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }) {
         self.defaults = defaults
         self.clock = now
+        self.uptime = uptime
         let saved = defaults?.data(forKey: Keys.state).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
         timer = saved?.timer ?? CountdownTimer()
         stopwatch = saved?.stopwatch ?? Stopwatch()
         lastMode = defaults?.string(forKey: Keys.lastMode).flatMap(TimerMode.init(rawValue:)) ?? .timer
-        let custom = defaults?.double(forKey: Keys.customSeconds) ?? 0
-        customSeconds = custom >= 1 ? min(custom, CountdownTimer.longest) : 5 * 60
+        let custom = defaults?.object(forKey: Keys.customSeconds) as? NSNumber
+        let seconds = custom?.doubleValue ?? .nan
+        customSeconds = seconds.isFinite && seconds >= 0 ? min(seconds, CountdownTimer.longest) : 5 * 60
         // Ran out while the app was quit: Done, quietly (it isn't ringing for something long past).
         if timer.finishIfDue(now: now()) {
             finishedWhileAway = true
             save()
         }
+        anchorStopwatch()
         scheduleAlarm()
     }
 
@@ -73,11 +82,15 @@ public final class TimerCenter {
         observers.append((NotificationCenter.default, NotificationCenter.default.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.timeMayHaveJumped() }
         }))
+        // A restored timer was scheduled before these observers existed; now it is the real center
+        // and needs the same App Nap protection as one started in this session.
+        scheduleAlarm()
     }
 
     public func stop() {
         for (center, observer) in observers { center.removeObserver(observer) }
         observers = []
+        endActivity()
     }
 
     public var now: Date { clock() }
@@ -113,16 +126,35 @@ public final class TimerCenter {
 
     // MARK: Stopwatch
 
-    public func startStopwatch() { stopwatch.start(now: now); lastMode = .stopwatch; changed(.stopwatchStarted) }
-    public func stopStopwatch() { stopwatch.stop(now: now); changed(.stopwatchStopped) }
+    public func startStopwatch() { stopwatch.start(now: now); lastMode = .stopwatch; anchorStopwatch(); changed(.stopwatchStarted) }
+    public func stopStopwatch() { stopwatch.stop(now: now); anchorStopwatch(); changed(.stopwatchStopped) }
     public func lap() { stopwatch.lap(now: now); changed(.lapped) }
-    public func resetStopwatch() { stopwatch.reset(); changed(.stopwatchReset) }
+    public func resetStopwatch() { stopwatch.reset(); anchorStopwatch(); changed(.stopwatchReset) }
+
+    private func anchorStopwatch() {
+        stopwatchAnchor = stopwatch.isRunning ? (now, uptime()) : nil
+    }
+
+    /// The wall clock moved (by hand, or network time after a wake): a running stopwatch keeps the time
+    /// the uptime clock measured. Only for jumps seen while running; one made while the app was quit
+    /// can't be told apart.
+    private func correctStopwatch() {
+        guard stopwatch.isRunning else { return }
+        guard let anchor = stopwatchAnchor else { return anchorStopwatch() }
+        let jump = now.timeIntervalSince(anchor.wall) - (uptime() - anchor.uptime)
+        if abs(jump) >= 0.5 {
+            stopwatch.clockJumped(by: jump)
+            save()
+        }
+        anchorStopwatch()
+    }
 
     // MARK: The alarm
 
     /// The Mac woke or the clock changed: a timer that's due finishes now, otherwise the alarm is set
     /// again for the end date on the new clock.
     public func timeMayHaveJumped() {
+        correctStopwatch()
         if !checkFinished() { scheduleAlarm() }
     }
 
@@ -143,18 +175,20 @@ public final class TimerCenter {
         if let event { onEvent?(event) }
     }
 
+    private func endActivity() {
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
+    }
+
     /// One Task sleeps until the end date. Task.sleep's clock counts sleep time, so after a long sleep it
-    /// wakes at once. If the wall clock moved meanwhile, it sleeps again for what's left. While a timer
-    /// runs, App Nap is held off (the notch may be hidden), so the alarm isn't late; nothing else runs.
+    /// wakes at once. If the wall clock moved meanwhile, it sleeps again for what's left. While a real
+    /// timer runs, App Nap is held off (the notch may be hidden), so the alarm isn't late.
     private func scheduleAlarm() {
         alarmTask?.cancel()
         alarmTask = nil
-        guard timer.isRunning else {
-            if let activity { ProcessInfo.processInfo.endActivity(activity) }
-            activity = nil
-            return
-        }
-        if activity == nil {
+        guard timer.isRunning else { return endActivity() }
+        // Only the real center (started): a practice timer is on screen, and it may be dropped mid-run.
+        if activity == nil, !observers.isEmpty {
             activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "A timer is running")
         }
         alarmTask = Task { [weak self] in

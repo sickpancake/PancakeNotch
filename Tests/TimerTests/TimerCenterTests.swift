@@ -150,6 +150,36 @@ struct TimerCenterTests {
         #expect(TimerCenter(defaults: defaults).customSeconds == 90)
     }
 
+    @Test func zeroOnTheWheelsSurvivesRelaunch() {
+        let defaults = scratchDefaults()
+        let center = TimerCenter(defaults: defaults)
+        center.customSeconds = 0
+        #expect(TimerCenter(defaults: defaults).customSeconds == 0)
+    }
+
+    @Test func invalidSavedWheelTimesUseTheDefault() {
+        let defaults = scratchDefaults()
+        for value in [-1.0, .infinity, .nan] {
+            defaults.set(value, forKey: TimerCenter.Keys.customSeconds)
+            #expect(TimerCenter(defaults: defaults).customSeconds == 300)
+        }
+    }
+
+    /// A restored running stopwatch needs its clock anchor before the first clock-change notice.
+    @Test func restoredStopwatchKeepsItsTimeAfterAClockChange() {
+        let defaults = scratchDefaults()
+        var wall = Date(timeIntervalSinceReferenceDate: 900_000_000)
+        var up: TimeInterval = 100
+        let center = TimerCenter(defaults: defaults, now: { wall }, uptime: { up })
+        center.startStopwatch()
+        wall += 10
+        up += 10
+        let restored = TimerCenter(defaults: defaults, now: { wall }, uptime: { up })
+        wall += 3_600
+        restored.timeMayHaveJumped()
+        #expect(restored.stopwatch.elapsed(at: wall) == 10)
+    }
+
     @Test func doneItCanGoAgain() {
         let (center, clock, rings) = makeCenter()
         center.startTimer(seconds: 60)
@@ -332,6 +362,11 @@ struct TimerModuleTests {
         #expect(module.earTicks)
         notch.isOnScreen = false
         #expect(!module.earTicks)
+        #expect(!module.pageTicks)
+        notch.isOnScreen = true
+        #expect(module.pageTicks)
+        module.isSnapshot = true
+        #expect(!module.pageTicks)
     }
 
     /// One typed digit counts: Start is offered for "5" minutes before typing is committed.
@@ -390,6 +425,15 @@ func settle(_ condition: () -> Bool) async throws {
 
 @MainActor
 struct TimerSettingsTests {
+    /// A chosen sound this Mac no longer has falls back to Glass rather than ring silently.
+    @Test func aMissingSoundFallsBack() {
+        let defaults = scratchDefaults()
+        defaults.set("NoSuchSound", forKey: "timer.sound")
+        #expect(TimerSettings(defaults: defaults).sound == TimerSettings.defaultSound)
+        defaults.set("", forKey: "timer.sound")
+        #expect(TimerSettings(defaults: defaults).sound == "")
+    }
+
     @Test func presetsAddRemoveMoveAndReset() {
         let settings = TimerSettings(defaults: scratchDefaults())
         #expect(settings.hasDefaultPresets)

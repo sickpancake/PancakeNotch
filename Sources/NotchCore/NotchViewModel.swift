@@ -423,6 +423,11 @@ public final class NotchViewModel {
         NotificationCenter.default.post(name: Self.dragSettled, object: self)
     }
 
+    /// The panel stopped being the key window: key presses go elsewhere now.
+    public func keyFocusLost() {
+        modules.forEach { $0.keyFocusLost() }
+    }
+
     /// The module stopped holding the notch open (menu dismissed, drag-out ended, prompt answered).
     public func holdReleased() {
         closeIfPointerOutside()

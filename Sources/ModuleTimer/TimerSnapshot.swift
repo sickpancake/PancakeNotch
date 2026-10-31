@@ -85,6 +85,22 @@ public enum TimerSnapshot {
                 clock.advance(5 * 60)
                 center.timeMayHaveJumped()
             }]),
+            // Long times must fit when the module has both ears, too.
+            model(.compact, [module { center, _ in center.startTimer(seconds: CountdownTimer.longest) }]),
+            model(.compact, [module { center, clock in
+                center.startStopwatch()
+                clock.advance(24 * 3_600)
+            }]),
+            // Neighbours follow the typed 4, rather than surrounding the old 31 minutes.
+            model(.expanded, [module { center, _ in center.customSeconds = 31 * 60 + 3 }]) { model in
+                guard let timer = model.selectedModule as? TimerModule else { return }
+                timer.beginEditing(.minutes)
+                timer.typed = "4"
+            },
+            model(.expanded, [module(settings: { settings in
+                settings.sideBySide = true
+                for index in 1...7 { _ = settings.addPreset(seconds: TimeInterval(index * 60), name: "Quick time \(index)") }
+            })]),
         ]
     }
 }

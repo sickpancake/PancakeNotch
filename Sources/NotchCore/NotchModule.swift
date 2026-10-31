@@ -85,6 +85,9 @@ public protocol NotchModule: AnyObject {
     /// A click landed elsewhere in the window hosting a preview of the notch (the app window). The real
     /// notch watches clicks in other apps itself; a preview's window is this app's, so it's told here.
     func clickedOutsidePreview()
+
+    /// The notch lost the keyboard (another window took it): anything typed into the module ends.
+    func keyFocusLost()
 }
 
 public extension NotchModule {
@@ -112,6 +115,7 @@ public extension NotchModule {
     func dragEnded() {}
     func handleKey(_ event: NSEvent) -> Bool { false }
     func clickedOutsidePreview() {}
+    func keyFocusLost() {}
 }
 
 /// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.

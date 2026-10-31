@@ -177,13 +177,13 @@ public final class NotchWindowController {
     }
 
     private func updateVisibility() {
-        model?.isOnScreen = isShowing
         if isShowing {
             panel?.orderFrontRegardless()
         } else {
             model?.reset()
             panel?.orderOut(nil)
         }
+        model?.isOnScreen = isShowing && panel?.occlusionState.contains(.visible) == true
         updateDragWatcher()
     }
 
@@ -237,9 +237,13 @@ public final class NotchWindowController {
         }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
+        panel.onResignKey = { [weak model] in model?.keyFocusLost() }
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
         let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
+        container.onVisibilityChange = { [weak self, weak model] visible in
+            model?.isOnScreen = visible && self?.isShowing == true
+        }
         dropRouter.model = model
         container.dropDelegate = dropRouter
         panel.contentView = container

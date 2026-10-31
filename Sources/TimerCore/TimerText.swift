@@ -15,7 +15,8 @@ public enum TimerText {
 
     /// A stopwatch in the open notch: "00:12.34", "12:05.10", "1:02:03.45".
     public static func precise(_ seconds: TimeInterval) -> String {
-        let hundredths = Int((max(0, seconds) * 100).rounded(.down))
+        // A hair over, so a lap of exactly 0.29 s (28.999… hundredths in binary) still shows 0.29.
+        let hundredths = Int((max(0, seconds) * 100 + 1e-6).rounded(.down))
         let whole = hundredths / 100
         let fraction = String(format: "%02d", hundredths % 100)
         let hours = whole / 3600, minutes = whole / 60 % 60, secs = whole % 60
@@ -43,7 +44,14 @@ public enum TimerText {
         formatter.unitsStyle = .full
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.zeroFormattingBehavior = .dropAll
-        return formatter.string(from: max(0, seconds.rounded())) ?? ""
+        let text = formatter.string(from: max(0, seconds.rounded())) ?? ""
+        // Under half a second the formatter drops every unit and says nothing.
+        if text.isEmpty {
+            formatter.allowedUnits = [.second]
+            formatter.zeroFormattingBehavior = .default
+            return formatter.string(from: 0) ?? ""
+        }
+        return text
     }
 
     /// An end time in the Mac's own 12/24-hour style: "3:42 PM" or "15:42".

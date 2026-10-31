@@ -72,7 +72,7 @@ struct TimerSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "Numbers"),
-                subtitle: String(localized: "How the digits change. With Reduce Motion on, they fade instead.")
+                subtitle: String(localized: "How the digits change. With Reduce Motion on, Roll and Slide fade instead.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "Numbers"),
@@ -86,7 +86,7 @@ struct TimerSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "Timer and Stopwatch side by side"),
-                subtitle: String(localized: "Shows both at once in the open notch, instead of a switch between them.")
+                subtitle: String(localized: "Shows both at once in the open notch, instead of a switch between them. The Timer then has room for the first 6 quick times.")
             ) {
                 Toggle(String(localized: "Timer and Stopwatch side by side"), isOn: $settings.sideBySide)
                     .labelsHidden()

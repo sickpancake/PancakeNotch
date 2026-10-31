@@ -344,6 +344,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else if timerModule != nil {
             timerModule = nil
+            // Switched off, nothing could ring or show Done: a timer stops with it rather than end in
+            // silence. The stopwatch can't ring, so it keeps its time for when the Timer comes back.
+            timers.cancelTimer()
+            timers.stopTimer()
             timers.stop()
         }
         notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule].compactMap { $0 }

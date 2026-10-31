@@ -46,10 +46,16 @@ public struct Stopwatch: Codable, Equatable, Sendable {
     public func elapsed(at now: Date) -> TimeInterval {
         switch phase {
         case .idle: 0
-        // A clock moved backward never makes it count backward, nor below the last lap.
+        // Never below the last lap, even before TimerCenter corrects a clock that moved backward.
         case .running(let since, let banked): max(banked + max(0, now.timeIntervalSince(since)), lapTotals.last ?? 0)
         case .stopped(let elapsed): elapsed
         }
+    }
+
+    /// The wall clock jumped by `seconds` (TimerCenter measured it): a running stopwatch keeps its time.
+    public mutating func clockJumped(by seconds: TimeInterval) {
+        guard case .running(let since, let banked) = phase else { return }
+        phase = .running(since: since + seconds, banked: banked)
     }
 
     public mutating func start(now: Date) {
@@ -76,21 +82,38 @@ public struct Stopwatch: Codable, Equatable, Sendable {
 
     /// The laps, newest first: the one being timed on top (once there are laps), then the done ones.
     /// With `lapsForMarks` done laps, the fastest and slowest are tagged (words, not colors: ADR-0029).
+    /// Times are in the whole hundredths the screen shows, so the laps add up to the total shown.
     public func laps(at now: Date) -> [Lap] {
-        guard !lapTotals.isEmpty else { return [] }
-        let times = lapTotals.enumerated().map { index, total in total - (index == 0 ? 0 : lapTotals[index - 1]) }
+        guard let current = currentLap(at: now) else { return [] }
+        let totals = lapTotals.map(Self.hundredths)
+        let times = totals.enumerated().map { index, total in total - (index == 0 ? 0 : totals[index - 1]) }
         var fastest: Int?
         var slowest: Int?
         if times.count >= Self.lapsForMarks, let low = times.min(), let high = times.max(), low < high {
             fastest = times.firstIndex(of: low)
             slowest = times.firstIndex(of: high)
         }
-        let total = elapsed(at: now)
-        let current = Lap(number: times.count + 1, time: max(0, total - (lapTotals.last ?? 0)), total: total, isCurrent: true, mark: nil)
         let done = times.enumerated().reversed().map { index, time in
-            Lap(number: index + 1, time: time, total: lapTotals[index], isCurrent: false,
+            Lap(number: index + 1, time: Self.seconds(time), total: Self.seconds(totals[index]), isCurrent: false,
                 mark: index == fastest ? .fastest : index == slowest ? .slowest : nil)
         }
         return [current] + done
+    }
+
+    /// The lap being timed (once there are laps): what ticks on screen, without building the whole list.
+    public func currentLap(at now: Date) -> Lap? {
+        guard let last = lapTotals.last else { return nil }
+        let total = Self.hundredths(elapsed(at: now))
+        let time = max(0, total - Self.hundredths(last))
+        return Lap(number: lapTotals.count + 1, time: Self.seconds(time), total: Self.seconds(total), isCurrent: true, mark: nil)
+    }
+
+    /// Whole hundredths, as `TimerText.precise` shows them.
+    static func hundredths(_ seconds: TimeInterval) -> Int {
+        Int((max(0, seconds) * 100 + 1e-6).rounded(.down))
+    }
+
+    static func seconds(_ hundredths: Int) -> TimeInterval {
+        TimeInterval(hundredths) / 100
     }
 }
