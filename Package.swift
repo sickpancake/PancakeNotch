@@ -25,7 +25,7 @@ let package = Package(
             name: "PancakeNotch",
             dependencies: [
                 "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
-                "AgentsCore", "ModuleAgents", "ConvertKit",
+                "AgentsCore", "ModuleAgents", "ConvertKit", "TimerCore", "ModuleTimer",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             swiftSettings: testing
@@ -75,6 +75,12 @@ let package = Package(
             name: "ModuleNowPlaying",
             dependencies: ["NotchCore", "NowPlayingCore"]
         ),
+        // The timer and stopwatch: their state, saving, the alarm, settings and sounds (ADR-0040). No UI.
+        .target(name: "TimerCore"),
+        .target(
+            name: "ModuleTimer",
+            dependencies: ["NotchCore", "TimerCore"]
+        ),
         .testTarget(
             name: "PancakeNotchTests",
             dependencies: ["PancakeNotch"]
@@ -110,6 +116,10 @@ let package = Package(
         .testTarget(
             name: "AgentsCoreTests",
             dependencies: ["AgentsCore"]
+        ),
+        .testTarget(
+            name: "TimerTests",
+            dependencies: ["TimerCore", "ModuleTimer", "NotchCore"]
         ),
         .testTarget(
             name: "ModuleAgentsTests",

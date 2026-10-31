@@ -85,6 +85,7 @@
         <li><a href="#agents">Agents</a></li>
         <li><a href="#agents-connect">Connect a tool</a></li>
         <li><a href="#ai-usage">AI Usage</a></li>
+        <li><a href="#timer">Timer</a></li>
         <li><a href="#updates">Updates</a></li>
         <li><a href="#launch-at-login">Launch at login</a></li>
         <li><a href="#privacy">Privacy</a></li>
@@ -323,6 +324,35 @@
           <li><strong>Codex tokens look low</strong>Older Codex sessions that Codex has compressed (shrunk to save space) aren't counted.</li>
         </ul>
         <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Token history and Claude limits come from files the tools keep on your Mac. For fresh Codex limits, PancakeNotch asks your installed Codex, which checks with OpenAI using its own sign-in. PancakeNotch never reads sign-in tokens or the Keychain. It saves token counts and model names for 90 days, never conversation text.</p></div>
+      </section>
+
+      <section class="topic" id="timer" aria-labelledby="timer-title">
+        <h2 id="timer-title">Timer and Stopwatch <a class="anchor" href="#timer" aria-label="Link to this section">#</a></h2>
+        <p>The <strong>Timer</strong> module is a timer and a stopwatch, like the ones on your phone. One timer and one stopwatch can run at the same time. Turn it on under <strong>Modules</strong>.</p>
+        <h3>The timer</h3>
+        <p>Open the notch on <strong>Timer</strong> and click a quick time (5, 10, 15, 30 or 60 minutes), or set your own on the hours, minutes and seconds wheels: scroll or drag a wheel, or click it and type. Your last custom time is kept for next time. While it runs you can <strong>Pause</strong> or <strong>Cancel</strong>, and the time it ends shows under the countdown.</p>
+        <p>When it ends, a sound plays once and the notch opens on <strong>Done</strong>, with <strong>Stop</strong>, <strong>+1 min</strong> and <strong>Repeat</strong>. Left alone, it closes again after about 10 seconds and the spot beside the notch keeps saying <strong>Done</strong> until you stop it. If the notch is already open on another module, it doesn't switch: a short <strong>Timer done</strong> strip shows when you close it.</p>
+        <h3>The stopwatch</h3>
+        <p>Switch to <strong>Stopwatch</strong> at the top of the Timer page. <strong>Lap</strong> records a lap while it runs, and once there are three laps the fastest and slowest are marked. <strong>Reset</strong> clears it once it's stopped.</p>
+        <h3>Beside the closed notch</h3>
+        <p>While a timer or the stopwatch runs, it shows beside the closed notch: by default a ring that drains and the time left, in the second spot, so your first module (like your music) keeps its place. Hover it or click it to open the Timer. Paused, it shows a pause sign and the time stays still.</p>
+        <h3>Keys in the open notch</h3>
+        <ul>
+          <li><strong>Space</strong> starts, pauses or resumes. Before you start, it starts the time on the wheels. On Done, <strong>Return</strong> stops it.</li>
+          <li><strong>Tab</strong> switches between Timer and Stopwatch.</li>
+          <li><strong>L</strong> records a lap while the stopwatch runs, and <strong>R</strong> resets it once stopped.</li>
+          <li>Side by side, <strong>Space</strong> is for the timer and <strong>S</strong> starts or stops the stopwatch.</li>
+          <li>While typing into a wheel: digits, <strong>Tab</strong> to the next wheel, <strong>Return</strong> to start, <strong>Esc</strong> to stop typing.</li>
+        </ul>
+        <h3>Settings</h3>
+        <p>Under <strong>Modules › Timer</strong> you can choose where it shows (<strong>Second spot</strong>, <strong>By order</strong> or <strong>Don't show</strong>), what it shows (<strong>Ring and time</strong>, <strong>Time</strong>, <strong>Ring</strong> or <strong>End time</strong>), how the numbers change (<strong>Roll</strong>, <strong>Fade</strong> or <strong>Just change</strong>), the Timer and Stopwatch side by side, the sound (any of your Mac's sounds, or none), a tap on the trackpad, and what happens in full screen (<strong>Show the notch</strong> or <strong>Sound only</strong>). You can also add, rename, reorder and remove quick times, up to 12, and reset them to the defaults.</p>
+        <h3>If something's off</h3>
+        <ul class="checks">
+          <li><strong>I didn't hear it</strong>The sound plays at your Mac's alert volume, through the speaker chosen for sound effects. Both are in System Settings › Sound. Also check that a sound is chosen in Timer settings.</li>
+          <li><strong>The Mac was asleep</strong>Time keeps counting while the Mac sleeps and after you quit. A timer that ended meanwhile rings once when the Mac wakes, or shows Done with the time it ended when PancakeNotch opens again.</li>
+          <li><strong>Nothing shows beside the notch</strong>Check that <strong>Beside the notch</strong> isn't set to <strong>Don't show</strong>. A finished timer always shows Done.</li>
+        </ul>
+        <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>With <strong>Reduce Motion</strong> turned on in macOS, the numbers fade instead of rolling.</p></div>
       </section>
 
       <section class="topic" id="updates" aria-labelledby="updates-title">

@@ -68,7 +68,7 @@ struct AIUsageModuleCard: View {
 
 /// One of these modules in one container: its practice notch, what it does with its switch, and a
 /// "Settings" dropdown that's there only while it's on.
-private struct ModuleCard<Settings: View>: View {
+struct ModuleCard<Settings: View>: View {
     let context: AppContext
     let moduleID: String
     let practice: PracticeKind
@@ -136,7 +136,7 @@ private struct ModuleCard<Settings: View>: View {
 }
 
 /// Rows with hairlines between them, under a module card's "Settings" header.
-private struct HairlineRows<Content: View>: View {
+struct HairlineRows<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {

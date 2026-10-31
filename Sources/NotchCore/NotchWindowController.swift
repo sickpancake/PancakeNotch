@@ -9,14 +9,21 @@ public final class NotchWindowController {
     private var container: NotchContainerView?
     public private(set) var model: NotchViewModel?
     private let initialState: NotchState?
+    private let isMissionControlActive: @MainActor () -> Bool
     private var hasGeometry = false
 
     /// - Parameters:
     ///   - initialState: if set, start in this state and pin it (debug/screenshot aid).
     ///   - arrangement: the user's module ranking and navigation settings.
-    public init(initialState: NotchState? = nil, arrangement: ModuleArrangement = ModuleArrangement()) {
+    ///   - isMissionControlActive: whether Mission Control is up; injectable for tests.
+    public init(
+        initialState: NotchState? = nil,
+        arrangement: ModuleArrangement = ModuleArrangement(),
+        isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
+    ) {
         self.initialState = initialState
         self.arrangement = arrangement
+        self.isMissionControlActive = isMissionControlActive
         // Drops on any notch (this one or a preview) and drags out of a module end unseen by the watcher.
         dragSettledObserver = NotificationCenter.default.addObserver(
             forName: NotchViewModel.dragSettled, object: nil, queue: .main
@@ -120,6 +127,21 @@ public final class NotchWindowController {
         if !wasExpanded, model.state != .expanded { hideAfterReveal() }
     }
 
+    /// Opens for a module's alert (ADR-0040) only where the user can see it: not while switched off,
+    /// hidden for a listed app or without a display, and over a full-screen app only when the module asks
+    /// (the Timer's setting). Opening the model behind a hidden window would leave it open, unseen, until
+    /// the window came back. Mission Control refuses the open; then the reveal is undone at once.
+    private func presentAttention(focusing moduleID: String, revealsInFullScreen: Bool) {
+        guard hasGeometry, !isSuppressed, isEnabled, let model, model.state != .expanded else { return }
+        if isHiddenForFullScreen, !isRevealed {
+            guard revealsInFullScreen else { return }
+            isRevealed = true
+            updateVisibility()
+        }
+        model.openForAttention(focusing: moduleID)
+        if model.state != .expanded { hideAfterReveal() }
+    }
+
     /// Back to hidden once the notch the shortcut opened has finished closing (or shrinking: in full
     /// screen nothing stays around the notch).
     private func hideAfterReveal() {
@@ -161,6 +183,7 @@ public final class NotchWindowController {
             model?.reset()
             panel?.orderOut(nil)
         }
+        model?.isOnScreen = isShowing && panel?.occlusionState.contains(.visible) == true
         updateDragWatcher()
     }
 
@@ -201,18 +224,26 @@ public final class NotchWindowController {
     }
 
     private func createPanel(layout: NotchLayout) {
-        let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior, arrangement: arrangement)
+        let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior, arrangement: arrangement,
+                                   isMissionControlActive: isMissionControlActive)
         model.isPinned = initialState != nil
         model.onOpen = onOpen
         model.onModuleShown = onModuleShown
         model.openSettings = openSettings
         model.modules = modules
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
+        model.presentAttention = { [weak self] moduleID, reveals in
+            self?.presentAttention(focusing: moduleID, revealsInFullScreen: reveals)
+        }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
+        panel.onResignKey = { [weak model] in model?.keyFocusLost() }
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
         let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
+        container.onVisibilityChange = { [weak self, weak model] visible in
+            model?.isOnScreen = visible && self?.isShowing == true
+        }
         dropRouter.model = model
         container.dropDelegate = dropRouter
         panel.contentView = container

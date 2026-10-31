@@ -1159,6 +1159,7 @@ private enum StatsFormat {
         case "shelf": String(localized: "Shelf")
         case "agents": String(localized: "Agents")
         case "aiUsage": String(localized: "AI Usage")
+        case "timer": String(localized: "Timer")
         default: id
         }
     }
@@ -1169,6 +1170,7 @@ private enum StatsFormat {
         case "shelf": "tray"
         case "agents": "sparkles"
         case "aiUsage": "gauge.with.dots.needle.50percent"
+        case "timer": "timer"
         default: "square.grid.2x2"
         }
     }

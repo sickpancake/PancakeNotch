@@ -8,6 +8,8 @@ import NotchCore
 import NowPlayingCore
 import os
 import Stats
+import TimerCore
+import ModuleTimer
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -62,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var agentsModule: AgentsModule?
     /// Exists only while AI Usage is switched on.
     private var usageModule: AIUsageModule?
+    private let timerSettings = TimerSettings()
+    /// The timer and stopwatch, saved between launches. Follows wake and clock changes only while the
+    /// Timer is switched on.
+    private lazy var timers = TimerCenter(defaults: .standard)
+    /// Exists only while the Timer is switched on.
+    private var timerModule: TimerModule?
     private var followedAccountFolders: [String] = []
     /// Keeps at most one app-health sample per 10 minutes, taken when the notch or window opens.
     private var healthSampler = HealthSampler()
@@ -90,6 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             agents: agents,
             usage: usage,
             connector: connector,
+            timerSettings: timerSettings,
+            timers: timers,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
@@ -194,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if nowPlayingModule != nil { nowPlaying.stop() }
         agents.stop()
         usage.stop()
+        if timerModule != nil { timers.stop() }
         statistics.waitForWrites()
     }
 
@@ -269,15 +280,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
         if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
+        if timerSettings.isEnabled { modules.append(TimerModule(center: timers, settings: timerSettings, presents: false)) }
         return modules
     }
 
     /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
     /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
     private func observeModules() {
-        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders) = withObservationTracking {
+        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders, timerOn) = withObservationTracking {
             (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled,
-             agentsSettings.usageEnabled, agentsSettings.addedFolders)
+             agentsSettings.usageEnabled, agentsSettings.addedFolders, timerSettings.isEnabled)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
@@ -323,7 +335,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             usageModule = nil
             usage.stop()
         }
-        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule].compactMap { $0 }
+        if timerOn {
+            if timerModule == nil {
+                timerModule = TimerModule(center: timers, settings: timerSettings)
+                timers.start()
+                // Wakes and clock changes missed while it was off.
+                timers.timeMayHaveJumped()
+            }
+        } else if timerModule != nil {
+            timerModule = nil
+            // Switched off, nothing could ring or show Done: a timer stops with it rather than end in
+            // silence. The stopwatch can't ring, so it keeps its time for when the Timer comes back.
+            timers.cancelTimer()
+            timers.stopTimer()
+            timers.stop()
+        }
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule].compactMap { $0 }
     }
 
     /// Counts items put on the Shelf and sent with AirDrop, for the statistics.
@@ -373,7 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
                 NowPlayingSnapshot.models(layout: layout) + Self.moduleSnapshots(layout: layout) + ShelfSnapshot.models(layout: layout)
-                    + AgentsSnapshot.models(layout: layout)
+                    + AgentsSnapshot.models(layout: layout) + TimerSnapshot.models(layout: layout) { NowPlayingSnapshot.module() }
             }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
