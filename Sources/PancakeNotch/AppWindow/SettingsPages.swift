@@ -131,6 +131,7 @@ struct NotchSettingsView: View {
         if context.shelfSettings.isEnabled { kinds.insert(.shelf) }
         if context.agentsSettings.agentsEnabled { kinds.insert(.agents) }
         if context.agentsSettings.usageEnabled { kinds.insert(.aiUsage) }
+        if context.timerSettings.isEnabled { kinds.insert(.timer) }
         return kinds
     }
 

@@ -8,6 +8,7 @@ import NotchCore
 import NowPlayingCore
 import Stats
 import SwiftUI
+import TimerCore
 
 /// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
 /// shows only while it's open, and the window is torn down on close to give its memory back
@@ -118,6 +119,8 @@ extension AppWindowController {
         let agents = AgentsCenter.practice()
         let usage = UsageCenter.practice()
         let connector = AgentConnector.preview([.claude: .connected, .codex: .notConnected, .cursor: .notFound], settings: agentsSettings)
+        let timerSettings = TimerSettings(defaults: defaults)
+        let timers = TimerCenter()
         let context = AppContext(
             preferences: preferences,
             shortcuts: noShortcut,
@@ -134,6 +137,8 @@ extension AppWindowController {
             agents: agents,
             usage: usage,
             connector: connector,
+            timerSettings: timerSettings,
+            timers: timers,
             makeLiveModules: {
                 var modules: [any NotchModule] = []
                 if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
@@ -150,7 +155,8 @@ extension AppWindowController {
                 preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
-                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
+                usage: usage, connector: connector, timerSettings: timerSettings, timers: timers,
+                makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
             pageContext.navigation.section = section
             pageContext.navigation.lesson = lesson
@@ -221,8 +227,9 @@ extension AppWindowController {
         try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 4000))
         try render("learn-agents", section: .learn, lesson: .agents)
         try render("learn-aiusage", section: .learn, lesson: .aiUsage)
+        try render("learn-timer", section: .learn, lesson: .timer)
         try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
-        try render("help-long", section: .help, size: CGSize(width: 1000, height: 2600))
+        try render("help-long", section: .help, size: CGSize(width: 1000, height: 2900))
         // Codex connected too: its /hooks step shows.
         connector.connect(.codex)
         let agentRows = AgentsSettingsRows(settings: agentsSettings, connector: connector)
@@ -236,6 +243,12 @@ extension AppWindowController {
         agentsSettings.agentsEnabled = false
         agentsSettings.usageEnabled = false
 
+        // The Timer's settings open, with a named preset and every choice's row.
+        timerSettings.renamePreset(timerSettings.presets[0].id, to: "Tea")
+        let timerSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["timer"])
+            .background(AppPalette.background)
+        try render("modules-timer-settings", rootView: timerSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 5200))
+
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
             try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(context: context, step: step).appWindowStyle())
@@ -247,7 +260,8 @@ extension AppWindowController {
                 preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
-                usage: usage, connector: connector, makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
+                usage: usage, connector: connector, timerSettings: timerSettings, timers: timers,
+                makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
         }
         let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))

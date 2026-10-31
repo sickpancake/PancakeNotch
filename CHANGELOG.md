@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Timer and Stopwatch.** A timer and a stopwatch with laps, like the ones on your phone, right in the notch. Start a quick time or set your own on the wheels; the time left shows beside the notch with a ring that drains. When it ends, a sound plays and the notch opens on Done. It keeps time while your Mac sleeps or the app is closed.
 - **Convert files.** Drop files on the new Convert area while you drag them to the notch, and turn them into another format in one click: pictures to JPEG, PNG, HEIC, TIFF or PDF, PDFs to pictures or text, sound to M4A, WAV and more, videos to MP4, MOV, their sound or a short GIF, and text to PDF. Several pictures and PDFs can become one PDF. It stays light: anything too big for the memory limit says so instead.
 
 ## 0.2.0 — beta

@@ -104,10 +104,20 @@ public final class NotchViewModel {
     private var briefModuleID: String?
     @ObservationIgnored private var briefTask: Task<Void, Never>?
     @ObservationIgnored private var peekTask: Task<Void, Never>?
+    /// Closes a notch a module's alert opened, if nobody touched it (`openForAttention`). Anything the user
+    /// does, and every open, close and reset, cancels it, so it never closes a notch someone is using.
+    @ObservationIgnored private var attentionTask: Task<Void, Never>?
+    /// How long an alert's open notch (the Timer's Done card) waits untouched before it closes.
+    @ObservationIgnored public var attentionCloseDelay: Duration = .seconds(10)
+    /// Set by the window controller: opens for a module's alert only where the notch can show (not
+    /// switched off or hidden), over a full-screen app only when asked. `nil` in previews.
+    @ObservationIgnored public var presentAttention: ((_ moduleID: String, _ revealsInFullScreen: Bool) -> Void)?
     @ObservationIgnored private var transitionID = 0
     /// Settled in Closed: the ears (faded out under the notch) aren't built, about 1 MiB less while the
     /// notch rests (measured). Every way out of Closed wakes them before it animates.
     public private(set) var earsAsleep = false
+    /// The window is on screen (set by the window controller): hidden, nothing in it needs to tick.
+    public var isOnScreen = true
     @ObservationIgnored private var swipe = NotchSwipeTracker()
 
     public init(
@@ -165,6 +175,7 @@ public final class NotchViewModel {
     /// picks the module itself (`open`).
     public func select(_ moduleID: String) {
         guard let target = modules.first(where: { $0.moduleID == moduleID }) else { return }
+        cancelAttentionClose()
         let previous = selectedModule
         let wasMenu = showsMenu
         if let previous, previous !== target {
@@ -186,6 +197,7 @@ public final class NotchViewModel {
     /// Opens or closes the Module Menu in the open notch.
     public func toggleMenu() {
         guard state == .expanded, modules.count > 1, !isHeld else { return }
+        cancelAttentionClose()
         let opening = !showsMenu
         withAnimation(Self.switchAnimation) { showsMenu = opening }
         if opening { selectedModule?.notchDidClose() } else { selectedModule?.notchDidOpen() }
@@ -260,27 +272,53 @@ public final class NotchViewModel {
     /// One compact ear's content, with an ID so a change of owner can animate.
     public struct EarSlot {
         public let id: String
+        public let moduleID: String
         public let view: AnyView
     }
 
     /// What the compact ears show: the top two active modules by ranking, #1's main view on the left
-    /// and #2's on the right (or swapped). A module alone fills both ears if it has an extra view. With
-    /// nothing active (the short shrink after a click), the current module shows.
+    /// and #2's on the right (or swapped). A module that asks for the second ear (the Timer), or one
+    /// shown briefly (the Shelf's after-drop count), takes #2 and leaves #1 to the best-ranked other one.
+    /// A module alone fills both ears if it has an extra view. With nothing active (the short shrink after
+    /// a click), the current module shows.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
         if shown.isEmpty, let selected = selectedModule { shown = [selected] }
         // Only modules that have ears take a side.
-        let withEars = Array(shown.lazy.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }.prefix(2))
+        let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
+        var picked = Array(withEars.prefix(2))
+        if withEars.count > 1, let second = withEars.firstIndex(where: { takesSecondEar($0.0) }),
+           let first = withEars.indices.first(where: { $0 != second }) {
+            picked = [withEars[first], withEars[second]]
+        }
         var slots: [EarSlot?] = []
-        for (module, ears) in withEars {
-            slots.append(EarSlot(id: module.moduleID + ".main", view: ears.main))
-            if withEars.count == 1, let extra = ears.extra {
-                slots.append(EarSlot(id: module.moduleID + ".extra", view: extra))
-            }
+        if picked.count == 1, let (module, ears) = picked.first {
+            let main = EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.extra == nil ? ears.main : ears.soloMain ?? ears.main)
+            let extra = ears.extra.map { EarSlot(id: module.moduleID + ".extra", moduleID: module.moduleID, view: $0) }
+            slots = module.prefersSecondEar ? [extra, main] : [main, extra]
+        } else {
+            slots = picked.map { module, ears in EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.main) }
         }
         let first = slots.first ?? nil
         let second = slots.count > 1 ? slots[1] : nil
         return arrangement.swapsEarSides ? (second, first) : (first, second)
+    }
+
+    /// Asks for #2: the Timer while it runs, or a module shown briefly that isn't active on its own.
+    private func takesSecondEar(_ module: any NotchModule) -> Bool {
+        module.prefersSecondEar || (module.moduleID == briefModuleID && !module.isActive)
+    }
+
+    /// The module whose compact ear the pointer is over, if it opens from its ear (the Timer).
+    func earModuleUnderPointer() -> String? {
+        guard state == .compact else { return nil }
+        let point = pointerLocation()
+        let notch = layout.geometry.notchRect
+        guard layout.outline(for: .compact, contains: point), point.x < notch.minX || point.x >= notch.maxX else { return nil }
+        let ears = ears(layout: layout)
+        guard let slot = point.x < notch.minX ? ears.left : ears.right,
+              let module = modules.first(where: { $0.moduleID == slot.moduleID }), module.opensFromEar else { return nil }
+        return module.moduleID
     }
 
     /// The peek strip's view while a module is peeking.
@@ -298,11 +336,12 @@ public final class NotchViewModel {
         // keeps the click's "don't reopen" in place.
         if !isHovering, layout.outline(for: state, contains: pointerLocation()) { return }
         hoverTask?.cancel()
+        cancelAttentionClose()
         guard !isPinned else { return }
         if isHovering {
             guard state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
-                model.open(fromHover: true)
+                model.open(focusing: model.earModuleUnderPointer(), fromHover: true)
                 if model.state == .expanded, model.behavior.hapticOnOpen {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
@@ -402,6 +441,7 @@ public final class NotchViewModel {
     /// A key press while the notch has keyboard focus: the module first, then Escape leaves the Menu
     /// or closes.
     public func handleKey(_ event: NSEvent) -> Bool {
+        cancelAttentionClose()
         if !showsMenu, selectedModule?.handleKey(event) == true { return true }
         if event.keyCode == 53 { // Escape: leave the Menu, else close all the way
             if showsMenu {
@@ -440,8 +480,9 @@ public final class NotchViewModel {
         Self.logger.debug("Tap in \(self.state.rawValue, privacy: .public)")
         isHandlingClick = true
         defer { isHandlingClick = false }
+        cancelAttentionClose()
         guard state == .expanded else {
-            open()
+            open(focusing: earModuleUnderPointer())
             return
         }
         guard !isHeld else { return }
@@ -473,6 +514,7 @@ public final class NotchViewModel {
     /// steal its clicks.
     public func open(focusing moduleID: String? = nil, fromHover: Bool = false) {
         hoverTask?.cancel()
+        cancelAttentionClose()
         guard !isMissionControlActive() else {
             Self.logger.info("Not opening: Mission Control is up")
             return
@@ -489,12 +531,52 @@ public final class NotchViewModel {
 
     public func close() {
         hoverTask?.cancel()
+        cancelAttentionClose()
         waitsForPointerToLeave = false
         if let brief = briefCompactOnClose {
             briefCompactOnClose = nil
             showBriefly(for: brief.duration, moduleID: brief.moduleID)
         }
         transition(to: restingTarget)
+    }
+
+    /// A module's alert (a timer that finished) wants to be seen: opens where the notch can show, through
+    /// the window controller (`presentAttention`), or right here in a preview.
+    public func requestAttention(from module: any NotchModule, revealsInFullScreen: Bool) {
+        guard modules.contains(where: { $0 === module }) else { return }
+        if let presentAttention {
+            presentAttention(module.moduleID, revealsInFullScreen)
+        } else {
+            openForAttention(focusing: module.moduleID)
+        }
+    }
+
+    /// Opens on `moduleID` for an alert. Left untouched for `attentionCloseDelay` with the pointer away,
+    /// it closes again; the module's ear keeps showing what happened. Does nothing while already open.
+    public func openForAttention(focusing moduleID: String) {
+        guard !isPinned, state != .expanded else { return }
+        open(focusing: moduleID)
+        guard state == .expanded else { return }
+        let delay = attentionCloseDelay
+        attentionTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.attentionTask = nil
+            guard self.state == .expanded, !self.isHeld,
+                  !self.layout.outline(for: self.state, contains: self.pointerLocation()) else { return }
+            self.close()
+        }
+    }
+
+    /// A module's own control was used (a click, or VoiceOver with the pointer elsewhere): the notch is in
+    /// use, so the alert's close is off.
+    public func userInteracted() {
+        cancelAttentionClose()
+    }
+
+    private func cancelAttentionClose() {
+        attentionTask?.cancel()
+        attentionTask = nil
     }
 
     /// The next close goes through Compact and stays there for `duration` (e.g. the Shelf confirming a
@@ -552,6 +634,13 @@ public final class NotchViewModel {
     public func peekForSnapshot(_ module: any NotchModule) {
         peekModuleID = module.moduleID
         layout.isPeeking = true
+    }
+
+    /// Ends `module`'s peek strip early: what it told is no longer true (a finished timer was stopped
+    /// in the app window).
+    public func endPeek(of module: any NotchModule) {
+        guard peekModuleID == module.moduleID else { return }
+        endPeek(animated: true)
     }
 
     private func endPeek(animated: Bool) {
@@ -633,6 +722,7 @@ public final class NotchViewModel {
     /// Returns to the resting state without animating (e.g. the display went away).
     public func reset() {
         hoverTask?.cancel()
+        cancelAttentionClose()
         briefTask?.cancel()
         peekTask?.cancel()
         isShowingBriefly = false

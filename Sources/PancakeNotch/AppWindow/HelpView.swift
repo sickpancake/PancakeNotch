@@ -24,6 +24,7 @@ struct HelpView: View {
             agentsCard
             connectCard
             aiUsageCard
+            timerCard
             shortcutCard
             updatesCard
             startOverCard
@@ -292,6 +293,54 @@ struct HelpView: View {
         }
     }
 
+    // MARK: Timer
+
+    @ViewBuilder
+    private var timerCard: some View {
+        let settings = context.timerSettings
+        SettingsCard(header: String(localized: "Timer")) {
+            if !settings.isEnabled {
+                SettingsRow(
+                    title: String(localized: "Timer is switched off"),
+                    subtitle: String(localized: "Turn it on for a timer and a stopwatch in the notch.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.isEnabled = true }
+                }
+            } else {
+                if settings.sound.isEmpty {
+                    SettingsRow(
+                        title: String(localized: "No sound is chosen"),
+                        subtitle: String(localized: "A timer that ends opens the notch, but stays silent. Pick a sound in Timer settings.")
+                    ) {
+                        Button(String(localized: "Open Modules")) { navigation.section = .modules }
+                    }
+                } else {
+                    SettingsRow(
+                        title: String(localized: "Didn't hear it?"),
+                        subtitle: String(localized: "The sound plays at your Mac's alert volume, through the speaker chosen for sound effects. Both are in System Settings › Sound.")
+                    ) {
+                        EmptyView()
+                    }
+                }
+                if settings.earPlacement == .off {
+                    SettingsRow(
+                        title: String(localized: "A running timer doesn't show beside the notch"),
+                        subtitle: String(localized: "Beside the notch is set to Don't show. A finished timer still shows Done.")
+                    ) {
+                        Button(String(localized: "Show It")) { settings.earPlacement = .second }
+                    }
+                }
+                SettingsRow(
+                    title: String(localized: "It keeps time while the Mac sleeps"),
+                    subtitle: String(localized: "And after you quit. A timer that ended meanwhile shows Done, with the time it ended, as soon as the Mac wakes or PancakeNotch opens.")
+                ) {
+                    EmptyView()
+                }
+            }
+            MoreOnlineRow(topic: .timer)
+        }
+    }
+
     // MARK: Keyboard shortcut
 
     @ViewBuilder
@@ -334,7 +383,7 @@ struct HelpView: View {
             }
             SettingsRow(
                 title: String(localized: "Practice in Learn"),
-                subtitle: String(localized: "Hands-on lessons for the notch, the Shelf, Now Playing, Agents and AI Usage.")
+                subtitle: String(localized: "Hands-on lessons for the notch, the Shelf, Now Playing, Agents, AI Usage and the Timer.")
             ) {
                 Button(String(localized: "Open Learn")) { navigation.section = .learn }
             }
