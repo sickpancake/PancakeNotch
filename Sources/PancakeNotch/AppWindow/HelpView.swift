@@ -310,7 +310,7 @@ struct HelpView: View {
                 if settings.sound.isEmpty {
                     SettingsRow(
                         title: String(localized: "No sound is chosen"),
-                        subtitle: String(localized: "A timer that ends opens the notch, but stays silent. Pick a sound in Timer settings.")
+                        subtitle: String(localized: "A timer that ends shows Done, but stays silent. Pick a sound in Timer settings.")
                     ) {
                         Button(String(localized: "Open Modules")) { navigation.section = .modules }
                     }

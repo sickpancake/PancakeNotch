@@ -6,7 +6,8 @@ import TimerCore
 
 /// The Timer in the notch (ADR-0040): a timer and a stopwatch, like a phone's. While one runs or waits it
 /// takes the second ear with a draining ring and the time; a timer that ends plays a sound and opens the
-/// notch on its Done card, and its ear says Done until it's stopped.
+/// notch on its Done card (or, by setting, only slides a small strip out), and its ear says Done until it's
+/// stopped.
 @MainActor
 @Observable
 public final class TimerModule: NotchModule {
@@ -202,7 +203,8 @@ public final class TimerModule: NotchModule {
 
     /// The timer just ran out (once per finish): sound, a tap, VoiceOver, and the Done card where it can
     /// be seen (TimerAlarm.tla). Open on this module: it shows in place. Open on another: a peek when it
-    /// closes. Closed: it opens, over a full-screen app only if the setting says so.
+    /// closes. Closed: it opens, or only shows the strip (the "When a timer ends" setting), over a
+    /// full-screen app only if the setting says so.
     private func timerFinished() {
         TimerSound.play(settings.sound)
         if settings.hapticOnDone {
@@ -222,10 +224,17 @@ public final class TimerModule: NotchModule {
             } else {
                 peekPending = true
             }
+        } else if settings.doneAlert == .strip {
+            notch.requestPeek(from: self, for: stripTime, revealsInFullScreen: settings.fullScreenAlert == .showNotch)
         } else {
             notch.requestAttention(from: self, revealsInFullScreen: settings.fullScreenAlert == .showNotch)
         }
     }
+
+    /// How long the "Timer done" strip waits under the notch when a finish only shows the strip
+    /// ("When a timer ends: Show a strip"). The same 10 seconds the open Done card waits untouched: long
+    /// enough to catch a glance, short enough not to hang there; the ear keeps saying Done after that.
+    @ObservationIgnored var stripTime: Duration = .seconds(10)
 
     // MARK: Actions
 

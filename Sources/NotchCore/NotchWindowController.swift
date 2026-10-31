@@ -142,10 +142,25 @@ public final class NotchWindowController {
         if model.state != .expanded { hideAfterReveal() }
     }
 
+    /// The strip version of `presentAttention`: a module's strip slides out under the notch for `duration`
+    /// instead of the notch opening. The same places can show it; over a full-screen app the window shows
+    /// just for the strip and hides again once it has slid away (`hideAfterReveal`).
+    private func presentPeek(of moduleID: String, for duration: Duration, revealsInFullScreen: Bool) {
+        guard hasGeometry, !isSuppressed, isEnabled, let model, model.state != .expanded,
+              let module = model.modules.first(where: { $0.moduleID == moduleID }) else { return }
+        if isHiddenForFullScreen, !isRevealed {
+            guard revealsInFullScreen else { return }
+            isRevealed = true
+            updateVisibility()
+        }
+        model.peek(module, for: duration)
+        if !model.layout.isPeeking { hideAfterReveal() }
+    }
+
     /// Back to hidden once the notch the shortcut opened has finished closing (or shrinking: in full
     /// screen nothing stays around the notch).
     private func hideAfterReveal() {
-        guard isRevealed, let model, model.state != .expanded else { return }
+        guard isRevealed, let model, model.state != .expanded, !model.layout.isPeeking else { return }
         isRevealed = false
         updateVisibility()
     }
@@ -234,6 +249,9 @@ public final class NotchWindowController {
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
         model.presentAttention = { [weak self] moduleID, reveals in
             self?.presentAttention(focusing: moduleID, revealsInFullScreen: reveals)
+        }
+        model.presentPeek = { [weak self] moduleID, duration, reveals in
+            self?.presentPeek(of: moduleID, for: duration, revealsInFullScreen: reveals)
         }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
