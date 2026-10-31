@@ -211,13 +211,14 @@ struct ResetInteractionRetryTests {
         notch.reset()
     }
 
-    @Test func applicationSwitchNotificationRetriesTheBlockedReset() async throws {
+    @Test func aSpaceChangeRetriesTheBlockedReset() async throws {
         let (module, notch, missionControl) = fixture()
         defer { notch.modules = []; module.center.stop() }
         #expect(module.center.pendingResets.count == 1)
         missionControl.active = false
-        // This is a process-local notification, not a real application activation.
-        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        // A space change, not an app switch: other suites running at the same time (the Shelf's convert
+        // row and menus) close on any app switch, so posting one here would end their tests' work.
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
         for _ in 0..<100 where notch.peekModuleID == nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(notch.peekModuleID == "aiUsage")
         #expect(module.center.pendingResets.isEmpty)

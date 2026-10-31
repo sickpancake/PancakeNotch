@@ -46,10 +46,8 @@ struct ShelfConvertTests {
         return (module, notch)
     }
 
-    /// Waits for `condition`, failing only if it never comes (a hang), not if a busy CI machine is slow.
     func waitUntil(_ condition: () -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(60)
-        while !condition(), Date() < deadline {
+        for _ in 0..<300 where !condition() {
             try await Task.sleep(for: .milliseconds(10))
         }
         try #require(condition())
