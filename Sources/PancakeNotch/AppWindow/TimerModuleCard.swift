@@ -128,20 +128,24 @@ private struct SoundRow: View {
             subtitle: String(localized: "Plays once, at your Mac's alert volume (Sound settings).")
         ) {
             HStack(spacing: 8) {
-                Picker(String(localized: "Sound when a timer ends"), selection: $settings.sound) {
-                    Text("No sound").tag("")
-                    Divider()
-                    ForEach(choices, id: \.self) { Text($0).tag($0) }
-                }
-                .labelsHidden()
-                .frame(width: 150)
+                MonochromeDropdown(
+                    title: String(localized: "Sound when a timer ends"),
+                    sections: [
+                        [DropdownOption(value: "", label: String(localized: "No sound"))],
+                        choices.map { DropdownOption(value: $0, label: $0) },
+                    ].filter { !$0.isEmpty },
+                    selection: $settings.sound,
+                    onChoose: TimerSound.play
+                )
                 Button {
                     TimerSound.play(settings.sound)
                 } label: {
                     Label(String(localized: "Play"), systemImage: "play.fill")
                 }
+                .buttonStyle(PillButtonStyle())
                 .disabled(settings.sound.isEmpty)
                 .accessibilityLabel(Text("Play the sound"))
+                .accessibilityHint(Text(settings.sound.isEmpty ? "Choose a sound first." : "Plays \(settings.sound) once."))
             }
         }
     }
