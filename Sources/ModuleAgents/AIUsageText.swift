@@ -73,8 +73,21 @@ enum AIUsageText {
     static func peek(_ near: NearLimit, now: Date) -> (subject: String, detail: String) {
         let account = near.account
         let name = EmailPrivacy.masked(account.name)
-        let subject = account.name == account.tool.shortName ? name : "\(account.tool.shortName) · \(name)"
+        let subject = account.isDefaultName || account.name == account.tool.shortName ? name : "\(account.tool.shortName) · \(name)"
         return (subject, detail(near.limit, now: now))
+    }
+
+    static func resetPeek(_ notice: LimitResetNotice) -> (subject: String, detail: String) {
+        guard notice.accounts.count == 1, let account = notice.accounts.first else {
+            return (String(localized: "\(notice.limitCount) limits reset"),
+                    String(localized: "\(notice.accounts.count) accounts"))
+        }
+        let name = EmailPrivacy.masked(account.name)
+        let subject = account.isDefaultName || account.name == account.tool.shortName ? name : "\(account.tool.shortName) · \(name)"
+        let labels = notice.items.map { $0.reset.kind.label }
+        let limits = ListFormatter.localizedString(byJoining: labels)
+        let reset = String(localized: "\(limits) reset", comment: "Usage limits restored, e.g. Session and Weekly reset")
+        return (subject, [account.isDefaultName ? nil : account.plan, reset].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
     }
 
     /// Read while the notch is compact: "Work is nearly out of Claude Code: 8% left", or when it always

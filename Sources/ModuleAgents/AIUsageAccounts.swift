@@ -203,7 +203,7 @@ private struct AccountMenuRow: View {
         let limits = module.center.limits[account.id]
         let session = limits?.limits.first { $0.kind == .session }
         let weekly = limits?.limits.first { $0.kind == .weekly }
-        let spoken = [EmailPrivacy.masked(account.name), account.email.map(EmailPrivacy.masked), account.plan,
+        let spoken = [EmailPrivacy.masked(account.name), account.email.map(EmailPrivacy.masked), account.isDefaultName ? nil : account.plan,
                       session.map { "\($0.label) \(AIUsageText.left($0, now: .now))" },
                       weekly.map { "\($0.label) \(AIUsageText.left($0, now: .now))" }]
             .compactMap { $0 }.joined(separator: ", ")
@@ -217,7 +217,7 @@ private struct AccountMenuRow: View {
                         .font(.system(size: 11.5, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(namedByEmail ? .middle : .tail)
-                    if let plan = account.plan, !namedByEmail {
+                    if let plan = account.plan, !namedByEmail, !account.isDefaultName {
                         Text(plan)
                             .font(.system(size: 10.5))
                             .foregroundStyle(.white.opacity(0.6))

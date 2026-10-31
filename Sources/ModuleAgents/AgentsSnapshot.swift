@@ -61,6 +61,15 @@ public enum AgentsSnapshot {
         let low = usage()
         low.peekNear = low.center.earReading
         row(.compact, low) { $0.peekForSnapshot(low) }
+        let reset = usage()
+        reset.peekReset = reset.center.exampleResetNotice()
+        row(.compact, reset) { $0.peekForSnapshot(reset) }
+        let summary = usage()
+        let sampleAccounts = summary.center.accounts
+        summary.peekReset = LimitResetNotice(items: sampleAccounts.prefix(2).map { account in
+            .init(account: account, reset: LimitReset(accountID: account.id, kind: .weekly, endedAt: .now, leftBefore: 8))
+        })
+        row(.compact, summary) { $0.peekForSnapshot(summary) }
         row(.expanded, usage(UsageCenter(settings: emptySettings, stats: nil)))
         return rows
     }

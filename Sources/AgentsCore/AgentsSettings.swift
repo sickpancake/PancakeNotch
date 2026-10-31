@@ -9,7 +9,12 @@ public final class AgentsSettings {
     /// The Agents module. Off until the user turns it on (ADR-0037).
     public var agentsEnabled: Bool { didSet { defaults.set(agentsEnabled, forKey: Keys.agentsEnabled) } }
     /// The AI Usage module. Off until the user turns it on.
-    public var usageEnabled: Bool { didSet { defaults.set(usageEnabled, forKey: Keys.usageEnabled) } }
+    public var usageEnabled: Bool {
+        didSet {
+            defaults.set(usageEnabled, forKey: Keys.usageEnabled)
+            if usageEnabled != oldValue { resetPreferenceChanged(wasAllowed: oldValue && peeksOnReset) }
+        }
+    }
     /// Pop up under the notch when a thread needs you.
     public var peeksOnNeedsYou: Bool { didSet { defaults.set(peeksOnNeedsYou, forKey: Keys.peeksOnNeedsYou) } }
     /// Pop up when a thread finishes after 30 seconds or more of work.
@@ -30,6 +35,23 @@ public final class AgentsSettings {
     public var showsSteps: Bool { didSet { defaults.set(showsSteps, forKey: Keys.showsSteps) } }
     /// AI Usage peeks once when an account drops under 10% left.
     public var warnsNearLimit: Bool { didSet { defaults.set(warnsNearLimit, forKey: Keys.warnsNearLimit) } }
+    /// AI Usage peeks when a limit the account had used some of resets (on unless turned off).
+    public var peeksOnReset: Bool {
+        didSet {
+            defaults.set(peeksOnReset, forKey: Keys.peeksOnReset)
+            if peeksOnReset != oldValue { resetPreferenceChanged(wasAllowed: oldValue && usageEnabled) }
+        }
+    }
+    @ObservationIgnored var onResetPreferenceChange: (@MainActor (Bool) -> Void)?
+    /// A late first file read cannot revive a reset from before notices were turned back on.
+    /// Keep this boundary through relaunch and clock rollback.
+    @ObservationIgnored private(set) var resetNoticesEnabledAfter: Date? {
+        didSet { defaults.set(resetNoticesEnabledAfter, forKey: Keys.resetNoticesEnabledAfter) }
+    }
+    /// Tracked windows and pending notices saved together, so quitting through a reset doesn't lose it.
+    @ObservationIgnored var resetWindows: Data? {
+        didSet { defaults.set(resetWindows, forKey: Keys.resetWindows) }
+    }
     /// The user dismissed the "We found Claude Code…" offer on Home and Modules.
     public var offerDismissed: Bool { didSet { defaults.set(offerDismissed, forKey: Keys.offerDismissed) } }
 
@@ -63,13 +85,18 @@ public final class AgentsSettings {
     public var nicknames: [String: String] { didSet { defaults.set(nicknames, forKey: Keys.nicknames) } }
     /// Account folders the user added ("Add account folder…"), as paths.
     public var addedFolders: [String] { didSet { defaults.set(addedFolders, forKey: Keys.addedFolders) } }
+    /// The reset time already announced (or ignored) for each limit ("<account>|<limit>"), as seconds since
+    /// 1970, so a reset is never announced twice, also after the app was quit and opened again.
+    @ObservationIgnored public var handledResets: [String: Double] { didSet { defaults.set(handledResets, forKey: Keys.handledResets) } }
     /// Ignore older requests even if a tool later moves a cleared log into its archive.
     public var historyClearedAt: Date? { didSet { defaults.set(historyClearedAt, forKey: Keys.historyClearedAt) } }
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let now: @MainActor () -> Date
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, now: @escaping @MainActor () -> Date = { Date() }) {
         self.defaults = defaults
+        self.now = now
         agentsEnabled = defaults.bool(forKey: Keys.agentsEnabled)
         usageEnabled = defaults.bool(forKey: Keys.usageEnabled)
         peeksOnNeedsYou = defaults.object(forKey: Keys.peeksOnNeedsYou) as? Bool ?? true
@@ -81,6 +108,7 @@ public final class AgentsSettings {
         showsSubagents = defaults.object(forKey: Keys.showsSubagents) as? Bool ?? true
         showsSteps = defaults.object(forKey: Keys.showsSteps) as? Bool ?? true
         warnsNearLimit = defaults.object(forKey: Keys.warnsNearLimit) as? Bool ?? true
+        peeksOnReset = defaults.object(forKey: Keys.peeksOnReset) as? Bool ?? true
         offerDismissed = defaults.bool(forKey: Keys.offerDismissed)
         let stored = defaults.string(forKey: Keys.selection)
         selection = stored == nil || stored == Keys.allAccounts ? .all : .account(stored!)
@@ -94,6 +122,16 @@ public final class AgentsSettings {
         nicknames = defaults.dictionary(forKey: Keys.nicknames) as? [String: String] ?? [:]
         addedFolders = defaults.stringArray(forKey: Keys.addedFolders) ?? []
         historyClearedAt = defaults.object(forKey: Keys.historyClearedAt) as? Date
+        handledResets = defaults.dictionary(forKey: Keys.handledResets) as? [String: Double] ?? [:]
+        resetWindows = defaults.data(forKey: Keys.resetWindows)
+        resetNoticesEnabledAfter = defaults.object(forKey: Keys.resetNoticesEnabledAfter) as? Date
+    }
+
+    private func resetPreferenceChanged(wasAllowed: Bool) {
+        if usageEnabled && peeksOnReset && !wasAllowed {
+            resetNoticesEnabledAfter = max(resetNoticesEnabledAfter ?? .distantPast, now())
+        }
+        onResetPreferenceChange?(wasAllowed)
     }
 
     /// Sets or clears (empty text) an account's nickname.
@@ -117,6 +155,10 @@ public final class AgentsSettings {
         static let earAccount = "aiUsage.earAccount"
         static let earLimit = "aiUsage.earLimit"
         static let warnsNearLimit = "aiUsage.warnsNearLimit"
+        static let peeksOnReset = "aiUsage.peeksOnReset"
+        static let handledResets = "aiUsage.handledResets"
+        static let resetWindows = "aiUsage.resetWindows"
+        static let resetNoticesEnabledAfter = "aiUsage.resetNoticesEnabledAfter"
         static let offerDismissed = "agents.offerDismissed"
         static let selection = "aiUsage.selection"
         static let range = "aiUsage.range"
