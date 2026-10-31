@@ -25,7 +25,7 @@ struct AgentsModuleCard: View {
             summary: String(localized: "Every AI agent thread in one list: working, needs you or done. Answer a request right from the notch."),
             points: points,
             inactiveHint: String(localized: "Turn on Agents to try it here."),
-            activeHint: String(localized: "These agents are pretend. Hover the notch and try Allow once."),
+            activeHint: String(localized: "These agents are pretend. Hover or click the notch and try Allow once."),
             learnHint: String(localized: "Opens a hands-on Agents lesson on the Learn page."),
             showsSettings: $showsSettings,
             learn: learn
@@ -56,7 +56,7 @@ struct AIUsageModuleCard: View {
             summary: String(localized: "How much of your AI plans you've used, and what your tokens would cost pay-per-use."),
             points: points,
             inactiveHint: String(localized: "Turn on AI Usage to try it here."),
-            activeHint: String(localized: "These accounts are pretend. Hover the notch and pick one."),
+            activeHint: String(localized: "These accounts are pretend. Hover or click the notch and pick one."),
             learnHint: String(localized: "Opens a hands-on AI Usage lesson on the Learn page."),
             showsSettings: $showsSettings,
             learn: learn

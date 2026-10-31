@@ -153,7 +153,14 @@ struct NotchSettingsView: View {
                         ))
                 }
 
-            SettingsCard(header: String(localized: "Hover")) {
+            SettingsCard(header: String(localized: "Opening and closing")) {
+                SettingsRow(
+                    title: String(localized: "Open on click only"),
+                    subtitle: String(localized: "Hovering won't open the notch. Click to open it. Your shortcut and file drags still work.")
+                ) {
+                    Toggle(String(localized: "Open on click only"), isOn: $preferences.openOnClickOnly)
+                        .labelsHidden()
+                }
                 DelayRow(
                     title: String(localized: "Open after hovering for"),
                     subtitle: String(localized: "How long the pointer rests on the notch before it opens."),
@@ -161,6 +168,8 @@ struct NotchSettingsView: View {
                     range: 0...1000,
                     recommended: Preferences.defaultOpenDelay
                 )
+                .disabled(preferences.openOnClickOnly)
+                .opacity(preferences.openOnClickOnly ? 0.4 : 1)
                 DelayRow(
                     title: String(localized: "Close after leaving for"),
                     subtitle: String(localized: "How long the notch stays open after the pointer leaves."),

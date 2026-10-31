@@ -389,7 +389,7 @@ private struct NowPlayingModuleCard: View {
                 // The pretend song plays only while Now Playing is on: nothing animates under the dimmed stage.
                 practice: settings.isEnabled ? [.nowPlaying] : [],
                 inactiveHint: String(localized: "Turn on Now Playing to try it here."),
-                activeHint: String(localized: "A pretend song is playing. Hover the notch and try the buttons."),
+                activeHint: String(localized: "A pretend song is playing. Hover or click the notch and try the buttons."),
                 badge: .practice
             )
             .background(Color.black)
@@ -890,7 +890,7 @@ private struct ShelfModuleCard: View {
                 // The example Shelf (files written to a temporary folder) only while the Shelf is on.
                 practice: settings.isEnabled ? [.shelf] : [],
                 inactiveHint: String(localized: "Turn on the Shelf to try it here."),
-                activeHint: String(localized: "Hover the notch, then click an item to open it. These are example items."),
+                activeHint: String(localized: "Hover or click the notch, then click an item to open it. These are example items."),
                 badge: .practice
             )
             .background(Color.black)
