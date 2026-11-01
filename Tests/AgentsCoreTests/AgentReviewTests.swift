@@ -47,6 +47,25 @@ struct AgentReviewTests {
         #expect(review("mcp__github__create_issue", ["title": "x"]) == nil)
     }
 
+    @Test func theReadAloudTextKeepsRealLineBreaksAndNotTheScreensCuts() throws {
+        let columns = AgentReview.columns
+        // Real line breaks stay (so "build" and "npm" aren't read as one word), blank lines too.
+        #expect(review("Bash", ["command": "rm -rf build\nnpm run build"])?.text == "rm -rf build\nnpm run build")
+        #expect(review("Bash", ["command": "echo a\n\necho b"])?.text == "echo a\n\necho b")
+        // A long line cut to fit the screen is read as written, with no break or space where it was cut.
+        let long = String(repeating: "ab ", count: columns / 3) + "tail-of-a-long-path/file.txt"
+        let cut = try #require(review("Bash", ["command": long]))
+        guard case .command(let lines) = cut.content else { Issue.record("not a command"); return }
+        #expect(lines.count == 2)
+        #expect(cut.text == long)
+        // A line exactly as wide as the screen, then a real break, is still two lines of text.
+        let full = String(repeating: "x", count: columns)
+        #expect(review("Bash", ["command": full + "\nnext"])?.text == full + "\nnext")
+        // A file's place is one piece of text; a change has its own screen and reads nothing here.
+        #expect(AgentReview(content: .read(lines: ["Sources/Long", "Name.swift"])).text == "Sources/LongName.swift")
+        #expect(AgentReview(content: .command(lines: ["a", "b"])).text == "a\nb")
+    }
+
     @Test func anEditShowsWhereTheFileReallyIsAndTheWholeChange() throws {
         let (project, outside) = try project()
         defer { try? FileManager.default.removeItem(atPath: (project as NSString).deletingLastPathComponent) }
