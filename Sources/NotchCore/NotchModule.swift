@@ -37,6 +37,13 @@ public protocol NotchModule: AnyObject {
     /// wins; otherwise the notch opens on the one used last (ADR-0010).
     var wantsFocus: Bool { get }
 
+    /// Takes the second ear (#2: right, or left with Swap sides) while active, whatever its rank, so the
+    /// first module keeps its place (the Timer, ADR-0040). Alone it keeps to #2, or fills both ears with an
+    /// `extra`.
+    var prefersSecondEar: Bool { get }
+    /// Hovering or clicking this module's compact ear opens the notch on it (the Timer).
+    var opensFromEar: Bool { get }
+
     /// Read by VoiceOver while the notch is closed or compact (e.g. "Shelf is full").
     var accessibilityStatus: String? { get }
 
@@ -79,6 +86,9 @@ public protocol NotchModule: AnyObject {
     /// A click landed elsewhere in the window hosting a preview of the notch (the app window). The real
     /// notch watches clicks in other apps itself; a preview's window is this app's, so it's told here.
     func clickedOutsidePreview()
+
+    /// The notch lost the keyboard (another window took it): anything typed into the module ends.
+    func keyFocusLost()
 }
 
 public extension NotchModule {
@@ -90,6 +100,8 @@ public extension NotchModule {
     func peekView(layout: NotchLayout) -> AnyView? { nil }
     var isActive: Bool { false }
     var wantsFocus: Bool { false }
+    var prefersSecondEar: Bool { false }
+    var opensFromEar: Bool { false }
     var holdsOpen: Bool { false }
     var accessibilityStatus: String? { nil }
     func notchDidOpen() {}
@@ -104,6 +116,7 @@ public extension NotchModule {
     func dragEnded() {}
     func handleKey(_ event: NSEvent) -> Bool { false }
     func clickedOutsidePreview() {}
+    func keyFocusLost() {}
 }
 
 /// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.

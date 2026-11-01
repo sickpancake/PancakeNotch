@@ -32,6 +32,14 @@ final class NotchPanel: NSPanel {
 
     override var canBecomeKey: Bool { allowsKey }
 
+    /// Called when another window takes the keyboard.
+    var onResignKey: (@MainActor () -> Void)?
+
+    override func resignKey() {
+        super.resignKey()
+        onResignKey?()
+    }
+
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, keyHandler?(event) == true { return }
         super.sendEvent(event)

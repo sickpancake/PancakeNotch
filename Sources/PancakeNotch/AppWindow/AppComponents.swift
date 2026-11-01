@@ -358,8 +358,11 @@ struct MonochromeSlider: View {
 
 /// A quiet glass capsule with a hairline border, for secondary actions.
 struct PillButtonStyle: ButtonStyle {
+    /// Keeps the hovered look, for a button whose menu or list is open.
+    var isHeld = false
+
     func makeBody(configuration: Configuration) -> some View {
-        PillButton(configuration: configuration, isProminent: false)
+        PillButton(configuration: configuration, isProminent: false, isHeld: isHeld)
     }
 }
 
@@ -373,6 +376,7 @@ struct ProminentPillButtonStyle: ButtonStyle {
 private struct PillButton: View {
     let configuration: ButtonStyleConfiguration
     let isProminent: Bool
+    var isHeld = false
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -400,7 +404,7 @@ private struct PillButton: View {
             return .white.opacity(configuration.isPressed ? 0.78 : isHovered ? 0.9 : 1)
         }
         if configuration.isPressed { return AppPalette.pressed }
-        return isHovered ? AppPalette.selection : AppPalette.hover
+        return isHovered || isHeld ? AppPalette.selection : AppPalette.hover
     }
 }
 
@@ -502,5 +506,178 @@ struct MonochromeSegmented<Value: Hashable>: View {
                 ForEach(options, id: \.value) { Text($0.label).tag($0.value) }
             }
         }
+    }
+}
+
+/// One choice in a `MonochromeDropdown`.
+struct DropdownOption<Value: Hashable> {
+    let value: Value
+    let label: String
+}
+
+/// A drop-down in the app's own style, in place of the stock macOS pop-up button: a capsule showing
+/// the current choice, and a dark list under it that scrolls when long and opens at the chosen row.
+/// `sections` are drawn with a hairline between them. VoiceOver reads it as a standard pop-up button.
+struct MonochromeDropdown<Value: Hashable>: View {
+    let title: String
+    let sections: [[DropdownOption<Value>]]
+    @Binding var selection: Value
+    /// Runs when the person picks a row (also from VoiceOver), after `selection` changes. A sound picker
+    /// plays the sound here.
+    var onChoose: ((Value) -> Void)?
+    var width: CGFloat = 170
+    @State private var isOpen = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            HStack(spacing: 6) {
+                Text(currentLabel)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down")
+                    .font(.app(size: 10, weight: .bold))
+                    .foregroundStyle(AppPalette.secondaryText)
+            }
+            .frame(width: width - 28)
+        }
+        .buttonStyle(PillButtonStyle(isHeld: isOpen))
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            DropdownList(sections: sections, selection: selection, width: width) { value in
+                isOpen = false
+                choose(value)
+            }
+        }
+        .accessibilityRepresentation {
+            Picker(title, selection: Binding(get: { selection }, set: { choose($0) })) {
+                ForEach(sections.flatMap { $0 }, id: \.value) { Text($0.label).tag($0.value) }
+            }
+        }
+    }
+
+    private var currentLabel: String {
+        sections.lazy.flatMap { $0 }.first { $0.value == selection }?.label ?? ""
+    }
+
+    private func choose(_ value: Value) {
+        selection = value
+        onChoose?(value)
+    }
+}
+
+/// The open list of a `MonochromeDropdown`: rows with a tick on the chosen one. Arrow keys move the
+/// highlight, Return chooses, Esc and a click outside close it (the popover does that).
+struct DropdownList<Value: Hashable>: View {
+    let sections: [[DropdownOption<Value>]]
+    let selection: Value
+    var width: CGFloat = 170
+    let onChoose: (Value) -> Void
+    @State private var highlighted: Value?
+    @FocusState private var hasFocus: Bool
+
+    static var rowHeight: CGFloat { 26 }
+    static var inset: CGFloat { 6 }
+    static var dividerHeight: CGFloat { 9 }
+    static var tallest: CGFloat { 260 }
+
+    private var all: [DropdownOption<Value>] { sections.flatMap { $0 } }
+
+    /// The list's height: every row and divider plus the padding, up to `tallest`, then it scrolls.
+    var height: CGFloat {
+        let rows = CGFloat(all.count) * Self.rowHeight
+        let dividers = CGFloat(max(sections.count - 1, 0)) * Self.dividerHeight
+        return min(rows + dividers + Self.inset * 2, Self.tallest)
+    }
+
+    init(sections: [[DropdownOption<Value>]], selection: Value, width: CGFloat = 170, onChoose: @escaping (Value) -> Void) {
+        self.sections = sections
+        self.selection = selection
+        self.width = width
+        self.onChoose = onChoose
+        _highlighted = State(initialValue: selection)
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                content
+            }
+            .scrollIndicators(.never)
+            .onAppear {
+                proxy.scrollTo(selection, anchor: .center)
+                hasFocus = true
+            }
+            .focusable()
+            .focusEffectDisabled()
+            .focused($hasFocus)
+            .onKeyPress(.downArrow) { move(1, proxy); return .handled }
+            .onKeyPress(.upArrow) { move(-1, proxy); return .handled }
+            .onKeyPress(.return) {
+                if let highlighted { onChoose(highlighted) }
+                return .handled
+            }
+        }
+        .frame(width: width, height: height)
+        .background(Color(white: 0.07))
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The rows and dividers, without the scroll view (also what off-screen renders draw).
+    var content: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(sections.enumerated()), id: \.offset) { index, section in
+                if index > 0 {
+                    AppPalette.hairline
+                        .frame(height: 1)
+                        .padding(.horizontal, 6)
+                        .frame(height: Self.dividerHeight)
+                }
+                ForEach(section, id: \.value) { option in
+                    row(option)
+                }
+            }
+        }
+        .padding(Self.inset)
+    }
+
+    private func row(_ option: DropdownOption<Value>) -> some View {
+        let isChosen = option.value == selection
+        return Button { onChoose(option.value) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.app(size: 10, weight: .bold))
+                    .frame(width: 12)
+                    .opacity(isChosen ? 1 : 0)
+                    .accessibilityHidden(true)
+                Text(option.label)
+                    .font(.app(size: 13, weight: .medium))
+                    .foregroundStyle(AppPalette.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: Self.rowHeight)
+            .background(highlighted == option.value ? AppPalette.selection : .clear, in: .rect(cornerRadius: 7, style: .continuous))
+            .contentShape(.rect(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .id(option.value)
+        .onHover { inside in
+            if inside { highlighted = option.value }
+        }
+        .accessibilityLabel(Text(option.label))
+        .accessibilityAddTraits(isChosen ? .isSelected : [])
+    }
+
+    private func move(_ step: Int, _ proxy: ScrollViewProxy) {
+        let values = all.map(\.value)
+        guard !values.isEmpty else { return }
+        let current = highlighted.flatMap { values.firstIndex(of: $0) }
+        let next = current.map { min(max($0 + step, 0), values.count - 1) } ?? (step > 0 ? 0 : values.count - 1)
+        highlighted = values[next]
+        proxy.scrollTo(values[next])
     }
 }

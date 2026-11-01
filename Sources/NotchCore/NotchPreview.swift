@@ -101,6 +101,7 @@ final class NotchPreviewHost {
             isMissionControlActive: { false }
         )
         reference.host = self
+        model.isOnScreen = false
         router.model = model
         model.fitWindow = { [weak self] state in self?.fit(state) }
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
@@ -214,6 +215,7 @@ private struct NotchPreviewRepresentable: NSViewRepresentable {
         let container = NotchContainerView(content: hosting, contentSize: host.model.layout.largestWindowSize)
         container.dropDelegate = host.router
         container.acceptsKeyFocus = true
+        container.onVisibilityChange = { [weak host] visible in host?.model.isOnScreen = visible }
         // Draws only inside the preview, like the real notch window clips to its frame.
         container.clipsToBounds = true
         container.onWindowChange = { [weak host, weak container] in
@@ -230,6 +232,8 @@ private struct NotchPreviewRepresentable: NSViewRepresentable {
 
     static func dismantleNSView(_ view: NotchContainerView, coordinator: NotchPreviewHost) {
         view.onWindowChange = nil
+        view.onVisibilityChange = nil
+        coordinator.model.isOnScreen = false
         coordinator.removeMonitors()
     }
 }

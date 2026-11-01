@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Timer and Stopwatch.** A timer and a stopwatch with laps, like the ones on your phone, right in the notch. Start a quick time or set your own on the wheels; the time left shows beside the notch with a ring that drains. When it ends, a sound plays and the notch opens on Done (or, if you prefer, just a small strip slides out under it). It keeps time while your Mac sleeps or the app is closed.
 - **Your AI limits, ready again.** AI Usage can briefly show the account, plan and limit that reset under the notch, with a small ring that fills back up. It is on by default, with a switch and a practice example in the module settings.
 
 - **Convert files.** Drop files on the new Convert area while you drag them to the notch, and turn them into another format in one click: pictures to JPEG, PNG, HEIC, TIFF or PDF, PDFs to pictures or text, sound to M4A, WAV and more, videos to MP4, MOV, their sound or a short GIF, and text to PDF. Several pictures and PDFs can become one PDF. It stays light: anything too big for the memory limit says so instead.

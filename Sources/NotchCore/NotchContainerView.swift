@@ -28,6 +28,8 @@ final class NotchContainerView: NSView {
 
     /// Called when the view joins or leaves a window (previews watch clicks and keys in their window).
     var onWindowChange: (() -> Void)?
+    /// Whether the host window can be seen; animated modules stop while it is hidden or covered.
+    var onVisibilityChange: ((Bool) -> Void)?
 
     init(content: NSView, contentSize: CGSize) {
         self.content = content
@@ -49,7 +51,17 @@ final class NotchContainerView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
+        if let window {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowVisibilityChanged),
+                name: NSWindow.didChangeOcclusionStateNotification, object: window)
+        }
+        windowVisibilityChanged()
         onWindowChange?()
+    }
+
+    @objc private func windowVisibilityChanged() {
+        onVisibilityChange?(window?.occlusionState.contains(.visible) == true)
     }
 
     override func layout() {

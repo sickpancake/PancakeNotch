@@ -6,6 +6,7 @@ import NotchCore
 import NowPlayingCore
 import Observation
 import Stats
+import TimerCore
 
 /// Which page the app window shows, and the lesson open on Learn. Lives with the app so menus and
 /// the notch can open the window on a particular page.
@@ -49,6 +50,9 @@ final class AppContext {
     let usage: UsageCenter
     /// Connect and Disconnect for the tools' hooks.
     let connector: AgentConnector
+    /// The Timer's options, and its timer and stopwatch shared with the real notch.
+    let timerSettings: TimerSettings
+    let timers: TimerCenter
     let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
@@ -71,6 +75,8 @@ final class AppContext {
         agents: AgentsCenter,
         usage: UsageCenter,
         connector: AgentConnector,
+        timerSettings: TimerSettings,
+        timers: TimerCenter,
         makeLiveModules: @escaping () -> [any NotchModule],
         detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() }
     ) {
@@ -89,6 +95,8 @@ final class AppContext {
         self.agents = agents
         self.usage = usage
         self.connector = connector
+        self.timerSettings = timerSettings
+        self.timers = timers
         self.makeLiveModules = makeLiveModules
         self.detectTools = detectTools
     }
@@ -100,6 +108,7 @@ final class AppContext {
         case "shelf": shelfSettings.isEnabled
         case "agents": agentsSettings.agentsEnabled
         case "aiUsage": agentsSettings.usageEnabled
+        case "timer": timerSettings.isEnabled
         default: false
         }
     }
@@ -110,6 +119,7 @@ final class AppContext {
         case "shelf": shelfSettings.isEnabled = enabled
         case "agents": agentsSettings.agentsEnabled = enabled
         case "aiUsage": agentsSettings.usageEnabled = enabled
+        case "timer": timerSettings.isEnabled = enabled
         default: break
         }
     }
@@ -121,6 +131,7 @@ final class AppContext {
         case "shelf": (String(localized: "Shelf", comment: "Module name"), "tray")
         case "agents": (String(localized: "Agents", comment: "Module name"), "sparkles")
         case "aiUsage": (String(localized: "AI Usage", comment: "Module name"), "gauge.with.dots.needle.50percent")
+        case "timer": (String(localized: "Timer", comment: "Module name"), "timer")
         default: (moduleID, "square")
         }
     }

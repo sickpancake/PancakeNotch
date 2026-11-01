@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, nowPlaying, shelf, agents, aiUsage
+    case basics, nowPlaying, shelf, agents, aiUsage, timer
 
     public var id: Self { self }
 }
@@ -15,7 +15,8 @@ public enum LessonSignal: Hashable, Sendable {
          musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
          moduleSwitched,
          agentAllowed, agentOpened, agentsCleared,
-         usageAccountsOpened, usageAccountChosen, usageRangeChosen
+         usageAccountsOpened, usageAccountChosen, usageRangeChosen,
+         timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -59,7 +60,7 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage] }
+    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage, timer] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
@@ -68,6 +69,7 @@ public struct Lesson: Identifiable, Sendable {
         case .shelf: shelf
         case .agents: agents
         case .aiUsage: aiUsage
+        case .timer: timer
         }
     }
 
@@ -293,6 +295,51 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Switch between Today, 7 days and 30 days to see more or less history.", comment: "Lesson step detail"),
                 symbol: "calendar",
                 signal: .usageRangeChosen
+            ),
+        ]
+    )
+
+    /// A quick timer to Done, pausing on the way, your own time on the wheels, and a stopwatch lap.
+    public static let timer = Lesson(
+        id: .timer,
+        title: String(localized: "Timer", comment: "Lesson title"),
+        summary: String(localized: "Time things from the notch: a timer and a stopwatch.", comment: "Lesson summary"),
+        symbol: "timer",
+        steps: [
+            LessonStep(
+                id: "timer.start",
+                title: String(localized: "Start a quick timer", comment: "Lesson step title"),
+                detail: String(localized: "Hover the notch to open it, then click the 10-second button at the top left.", comment: "Lesson step detail"),
+                symbol: "play.fill",
+                signal: .timerStarted
+            ),
+            LessonStep(
+                id: "timer.pause",
+                title: String(localized: "Pause it and carry on", comment: "Lesson step title"),
+                detail: String(localized: "Click the pause button, then the play button. The time beside the notch stops while it's paused.", comment: "Lesson step detail"),
+                symbol: "pause.fill",
+                signal: .timerPausedAndResumed
+            ),
+            LessonStep(
+                id: "timer.done",
+                title: String(localized: "Stop it when it's done", comment: "Lesson step title"),
+                detail: String(localized: "When the time is up you hear a sound and the notch opens on Done. Click Stop. Beside the notch it says Done until you do.", comment: "Lesson step detail"),
+                symbol: "bell.fill",
+                signal: .timerStopped
+            ),
+            LessonStep(
+                id: "timer.custom",
+                title: String(localized: "Set your own time", comment: "Lesson step title"),
+                detail: String(localized: "Scroll or drag a wheel, or click it and type, then click Start.", comment: "Lesson step detail"),
+                symbol: "dial.medium",
+                signal: .timerCustomStarted
+            ),
+            LessonStep(
+                id: "timer.lap",
+                title: String(localized: "Time a lap", comment: "Lesson step title"),
+                detail: String(localized: "Click Stopwatch at the top right, start it, then click the flag to mark a lap.", comment: "Lesson step detail"),
+                symbol: "flag.fill",
+                signal: .stopwatchLapped
             ),
         ]
     )

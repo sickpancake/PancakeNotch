@@ -3,6 +3,8 @@ import Learn
 import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
+import ModuleTimer
+import TimerCore
 import NotchCore
 import SwiftUI
 
@@ -125,6 +127,8 @@ struct LessonPlayer: View {
     /// Pretend agent threads (the Agents lesson) or accounts (the AI Usage lesson), on their own.
     @State private var agents: AgentsModule?
     @State private var usage: AIUsageModule?
+    /// A practice timer and stopwatch (the Timer lesson).
+    @State private var timer: TimerModule?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -152,11 +156,12 @@ struct LessonPlayer: View {
     private var usesNowPlaying: Bool { lesson.id == .nowPlaying }
     private var usesAgents: Bool { lesson.id == .agents }
     private var usesUsage: Bool { lesson.id == .aiUsage }
+    private var usesTimer: Bool { lesson.id == .timer }
 
     /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf;
     /// the Agents and AI Usage lessons have only their own.
     private var practiceModules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage, timer].compactMap { $0 }
     }
 
     private var hint: String? {
@@ -164,6 +169,7 @@ struct LessonPlayer: View {
         if usesNowPlaying { return String(localized: "A practice player: the songs are made up and silent, and your music isn't touched.") }
         if usesAgents { return String(localized: "Practice agents: they're made up, and your real ones aren't touched.") }
         if usesUsage { return String(localized: "Practice accounts: they're made up, and nothing is read from your Mac.") }
+        if usesTimer { return String(localized: "A practice timer: your real timer and stopwatch aren't touched.") }
         return nil
     }
 
@@ -302,6 +308,8 @@ struct LessonPlayer: View {
         agents = nil
         usage?.center.onPracticeEvent = nil
         usage = nil
+        timer?.center.onEvent = nil
+        timer = nil
     }
 
     private func restart() {
@@ -312,6 +320,13 @@ struct LessonPlayer: View {
 
     /// Fresh pretend threads or accounts each time the lesson starts.
     private func makePractice() {
+        if usesTimer {
+            let module = TimerModule.practice()
+            let signals = TimerLessonSignals(runner: runner)
+            module.center.onEvent = { event in signals.handle(event) }
+            timer = module
+            return
+        }
         if usesAgents || usesUsage {
             let signals = AgentsLessonSignals(runner: runner)
             if usesAgents {
@@ -374,6 +389,18 @@ struct LessonPlayer: View {
             }
             if !doable { center.reset() }
         }
+        // "Pause it and carry on" and "Stop it" need a timer to act on (say a step was skipped).
+        if let center = timer?.center {
+            switch step.signal {
+            case .timerPausedAndResumed where center.timer.isIdle || center.timer.isDone:
+                center.stopTimer()
+                center.startTimer(seconds: 30)
+            case .timerStopped where center.timer.isIdle:
+                center.startTimer(seconds: 10)
+            default:
+                break
+            }
+        }
         guard usesShelf, let practice else { return }
         let needed = switch step.signal {
         case .shelfSeveralSelected: 2
@@ -409,6 +436,31 @@ private final class NowPlayingSignals {
         case .shuffleChanged, .repeatChanged: runner.receive(.musicModeChanged)
         case .artworkClicked: runner.receive(.musicArtworkClicked)
         case .switchedAway: runner.receive(.moduleSwitched)
+        }
+    }
+}
+
+/// Turns what happens in the practice timer into lesson signals: a pause counts once it's resumed.
+/// A class the center's callback holds, so it doesn't keep the page alive.
+@MainActor
+private final class TimerLessonSignals {
+    private weak var runner: LessonRunner?
+    private var paused = false
+
+    init(runner: LessonRunner) {
+        self.runner = runner
+    }
+
+    func handle(_ event: TimerEvent) {
+        guard let runner else { return }
+        switch event {
+        case .started: runner.receive(.timerStarted)
+        case .paused: paused = true
+        case .resumed: if paused { runner.receive(.timerPausedAndResumed) }
+        case .stopped: runner.receive(.timerStopped)
+        case .customStarted: runner.receive(.timerCustomStarted)
+        case .lapped: runner.receive(.stopwatchLapped)
+        default: break
         }
     }
 }
