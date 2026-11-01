@@ -25,7 +25,7 @@ struct AgentsModuleCard: View {
             summary: String(localized: "Every AI agent thread in one list: working, needs you or done. Answer a request right from the notch."),
             points: points,
             inactiveHint: String(localized: "Turn on Agents to try it here."),
-            activeHint: String(localized: "These agents are pretend. Hover the notch and try Allow once."),
+            activeHint: String(localized: "These agents are pretend. Hover or click the notch and try Allow once."),
             learnHint: String(localized: "Opens a hands-on Agents lesson on the Learn page."),
             showsSettings: $showsSettings,
             learn: learn
@@ -37,6 +37,7 @@ struct AgentsModuleCard: View {
 
 /// AI Usage on the Modules page, built the same way as Agents.
 struct AIUsageModuleCard: View {
+    @State private var resetExampleRequest = 0
     let context: AppContext
     @Binding var showsSettings: Bool
     let learn: () -> Void
@@ -53,15 +54,17 @@ struct AIUsageModuleCard: View {
             context: context,
             moduleID: "aiUsage",
             practice: .aiUsage,
+            resetExampleRequest: resetExampleRequest,
             summary: String(localized: "How much of your AI plans you've used, and what your tokens would cost pay-per-use."),
             points: points,
             inactiveHint: String(localized: "Turn on AI Usage to try it here."),
-            activeHint: String(localized: "These accounts are pretend. Hover the notch and pick one."),
+            activeHint: String(localized: "These accounts are pretend. Hover or click the notch and pick one."),
             learnHint: String(localized: "Opens a hands-on AI Usage lesson on the Learn page."),
             showsSettings: $showsSettings,
             learn: learn
         ) {
-            AIUsageSettingsRows(settings: context.agentsSettings, usage: context.usage, connector: context.connector)
+            AIUsageSettingsRows(settings: context.agentsSettings, usage: context.usage, connector: context.connector,
+                                showResetExample: { resetExampleRequest += 1 })
         }
     }
 }
@@ -72,6 +75,7 @@ struct ModuleCard<Settings: View>: View {
     let context: AppContext
     let moduleID: String
     let practice: PracticeKind
+    var resetExampleRequest = 0
     let summary: String
     let points: [String]
     let inactiveHint: String
@@ -94,7 +98,8 @@ struct ModuleCard<Settings: View>: View {
                 practice: isOn ? [practice] : [],
                 inactiveHint: inactiveHint,
                 activeHint: activeHint,
-                badge: .practice
+                badge: .practice,
+                resetExampleRequest: resetExampleRequest
             )
             .background(Color.black)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous))
@@ -339,6 +344,7 @@ struct AIUsageSettingsRows: View {
     @Bindable var settings: AgentsSettings
     let usage: UsageCenter
     let connector: AgentConnector
+    var showResetExample: (() -> Void)?
     /// Why the last folder wasn't added.
     @State private var addProblem: String?
 
@@ -372,7 +378,7 @@ struct AIUsageSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "Account"),
-                subtitle: String(localized: "Which account the closed notch and the pop-up follow.")
+                subtitle: String(localized: "Which account the closed notch and the close-to-limit pop-up follow.")
             ) {
                 Menu {
                     Button(String(localized: "Closest to its limit")) { settings.earAccount = .all }
@@ -405,6 +411,21 @@ struct AIUsageSettingsRows: View {
                 Toggle(String(localized: "Pop up when an account is close to its limit"), isOn: $settings.warnsNearLimit)
                     .labelsHidden()
             }
+            SettingsRow(
+                title: String(localized: "Pop up when a limit resets"),
+                subtitle: String(localized: "For any account and limit you used. A short strip shows the account, plan and what reset, even over full-screen apps. Recent resets catch up within 30 minutes.")
+            ) {
+                HStack(spacing: 12) {
+                    if let showResetExample {
+                        Button(String(localized: "Show example"), action: showResetExample)
+                            .buttonStyle(PillButtonStyle())
+                            .disabled(!settings.usageEnabled)
+                            .help(String(localized: "Play a pretend reset in the practice notch above."))
+                    }
+                    Toggle(String(localized: "Pop up when a limit resets"), isOn: $settings.peeksOnReset)
+                        .labelsHidden()
+                }
+            }
             Label(String(localized: "Everything stays on this Mac. PancakeNotch saves token counts and model names, never what you or the agent wrote."), systemImage: "lock")
                 .font(.app(size: 12.5))
                 .foregroundStyle(AppPalette.secondaryText)
@@ -424,7 +445,7 @@ struct AIUsageSettingsRows: View {
 
     /// "Claude · Work", with emails half hidden.
     private func accountLabel(_ account: AgentAccount) -> String {
-        "\(account.tool.shortName) · \(EmailPrivacy.masked(account.name))"
+        account.isDefaultName ? account.name : "\(account.tool.shortName) · \(EmailPrivacy.masked(account.name))"
     }
 
     private var earAccountLabel: String {
@@ -519,9 +540,9 @@ private struct AccountRow: View {
                     HStack(spacing: 0) {
                         if let email = account.email, email != account.name {
                             PrivateText(email, revealed: revealsEmail) { revealsEmail.toggle() }
-                            Text(verbatim: " · ")
+                            if !account.isDefaultName { Text(verbatim: " · ") }
                         }
-                        Text(details)
+                        if !account.isDefaultName { Text(details) }
                     }
                     .font(.app(size: 12.5))
                     .foregroundStyle(AppPalette.secondaryText)
@@ -555,10 +576,10 @@ private struct AccountRow: View {
             .joined(separator: " · ")
     }
 
-    /// Empty text goes back to the email.
+    /// Empty text restores the provider, tier and optional account number.
     private func save() {
         guard let draft else { return }
-        rename(draft)
+        if draft != account.name { rename(draft) }
         self.draft = nil
     }
 }

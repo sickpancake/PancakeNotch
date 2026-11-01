@@ -190,6 +190,10 @@ extension AppWindowController {
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
         try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
         try render("notch-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = true
+        try render("notch-click-only", section: .notch)
+        try render("notch-click-only-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = false
         preferences.fullScreenHiding = .always
         try render("notch-long-always", section: .notch, size: CGSize(width: 1000, height: 2000))
         preferences.fullScreenHiding = .whileWatching
@@ -225,6 +229,11 @@ extension AppWindowController {
         let modulesWithSettings = ModulesView(context: context, openLesson: { _ in }, openSettings: ["agents", "aiUsage"])
             .background(AppPalette.background)
         try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 4000))
+        let usageCard = AIUsageModuleCard(context: context, showsSettings: .constant(true), learn: {})
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppPalette.background)
+        try render("aiusage-card", rootView: usageCard.appWindowStyle(), size: CGSize(width: 1000, height: 1500))
         try render("learn-agents", section: .learn, lesson: .agents)
         try render("learn-aiusage", section: .learn, lesson: .aiUsage)
         try render("learn-timer", section: .learn, lesson: .timer)

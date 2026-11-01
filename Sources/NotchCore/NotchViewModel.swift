@@ -48,6 +48,11 @@ public final class NotchViewModel {
     public private(set) var switchedForward = true
     /// The module whose strip shows under the compact notch right now (see `peek`).
     public private(set) var peekModuleID: String?
+    @ObservationIgnored private var peekGeneration = 0
+
+    /// Window availability for automatic strips; full screen can be temporarily revealed.
+    public var automaticPeeksAvailable = true
+    @ObservationIgnored var prepareAutomaticPeek: ((Bool) -> Bool)?
 
     /// Modules by ranking, #1 first.
     public var rankedModules: [any NotchModule] {
@@ -83,7 +88,15 @@ public final class NotchViewModel {
     @ObservationIgnored private var isHandlingClick = false
 
     /// Hover delays and haptics from Settings.
-    @ObservationIgnored public var behavior: NotchBehavior
+    @ObservationIgnored public var behavior: NotchBehavior {
+        didSet {
+            // Cancel a queued hover-open, including if the user switches back before its delay ends.
+            // An expanded notch may have a queued close: keep that close when the setting changes.
+            if behavior.openOnClickOnly, !oldValue.openOnClickOnly, state != .expanded {
+                hoverTask?.cancel()
+            }
+        }
+    }
     /// Current pointer position in screen coordinates; injectable for tests.
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     /// Whether Mission Control is up; injectable for tests.
@@ -342,7 +355,7 @@ public final class NotchViewModel {
         cancelAttentionClose()
         guard !isPinned else { return }
         if isHovering {
-            guard state != .expanded, !waitsForPointerToLeave else { return }
+            guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
                 model.open(focusing: model.earModuleUnderPointer(), fromHover: true)
                 if model.state == .expanded, model.behavior.hapticOnOpen {
@@ -627,9 +640,14 @@ public final class NotchViewModel {
 
     /// Shows `module`'s peek strip under the compact notch for `duration` (the new song's title), then
     /// goes back. Ignored while the notch is open.
-    public func peek(_ module: any NotchModule, for duration: Duration) {
-        guard state != .expanded, !isPinned, modules.contains(where: { $0 === module }),
-              module.peekView(layout: layout) != nil else { return }
+    @discardableResult
+    public func peek(_ module: any NotchModule, for duration: Duration,
+                     revealOverFullScreen: Bool = false, waitingForOtherPeeks: Bool = false) -> Bool {
+        guard state != .expanded, !isPinned, !isMissionControlActive(),
+              !waitingForOtherPeeks || peekModuleID == nil,
+              modules.contains(where: { $0 === module }), module.peekView(layout: layout) != nil,
+              automaticPeeksAvailable, prepareAutomaticPeek?(revealOverFullScreen) != false else { return false }
+        peekGeneration += 1
         peekTask?.cancel()
         peekModuleID = module.moduleID
         if !layout.isPeeking {
@@ -648,10 +666,18 @@ public final class NotchViewModel {
             guard !Task.isCancelled else { return }
             self?.endPeek(animated: true)
         }
+        return true
+    }
+
+    /// Cancels only this module's strip (e.g. its notification preference was switched off).
+    public func cancelPeek(for module: any NotchModule) {
+        guard peekModuleID == module.moduleID else { return }
+        endPeek(animated: true)
     }
 
     /// Shows `module`'s peek strip without timing it out (off-screen snapshots).
     public func peekForSnapshot(_ module: any NotchModule) {
+        peekGeneration += 1
         peekModuleID = module.moduleID
         layout.isPeeking = true
     }
@@ -664,6 +690,8 @@ public final class NotchViewModel {
     }
 
     private func endPeek(animated: Bool) {
+        peekGeneration += 1
+        let generation = peekGeneration
         peekTask?.cancel()
         peekTask = nil
         guard layout.isPeeking else {
@@ -676,13 +704,13 @@ public final class NotchViewModel {
             return
         }
         transitionID += 1
-        let id = transitionID
         withAnimation(Self.animation(opening: false)) {
             layout.isPeeking = false
             if state == .compact { state = restingTarget }
         } completion: { [weak self] in
             // A new peek may have started while this one slid away: it keeps its strip.
-            guard let self, self.transitionID == id, !self.layout.isPeeking else { return }
+            // An unrelated ear/state transition mustn't leave the strip permanently busy.
+            guard let self, self.peekGeneration == generation, !self.layout.isPeeking else { return }
             self.peekModuleID = nil
             self.fitWindow?(self.state)
             if self.state == .closed { self.earsAsleep = true }
@@ -741,6 +769,7 @@ public final class NotchViewModel {
 
     /// Returns to the resting state without animating (e.g. the display went away).
     public func reset() {
+        peekGeneration += 1
         hoverTask?.cancel()
         cancelAttentionClose()
         briefTask?.cancel()

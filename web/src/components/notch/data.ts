@@ -94,7 +94,7 @@ export const ACCOUNTS: Account[] = [
     ],
   },
   {
-    id: 'work', tool: 'Claude Code', name: 'Work', email: 'sam@example.org', plan: 'Max 5×', initials: 'W', shade: 0.34,
+    id: 'work', tool: 'Claude Code', name: 'Work', email: 'sam@example.org', plan: 'Max', initials: 'W', shade: 0.34,
     limits: [
       { name: 'Session', left: 8, resetsIn: 41, window: SESSION, reset: 'resets in 41m' },
       { name: 'Weekly', left: 42, resetsIn: 2880, window: WEEK, reset: 'resets Wed 09:00' },

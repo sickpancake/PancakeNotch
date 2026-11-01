@@ -1,16 +1,15 @@
 import Foundation
 
-/// AI Usage's pretend accounts for the practice notches: two Claude accounts (Personal on Pro, Work on
-/// Max) and a Codex one, with believable limits and totals. Nothing real is read.
+/// AI Usage's pretend accounts for the practice notches: two Claude accounts (Pro and Max) and a Codex one, with believable limits and totals. Nothing real is read.
 enum PracticeUsage {
-    static let accounts: [AgentAccount] = [
+    static let accounts: [AgentAccount] = AgentAccount.named([
         AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/practice/.claude"), email: "sam@example.com",
-                     plan: "Pro", billing: .plan, name: String(localized: "Personal", comment: "Practice account name")),
+                     plan: "Pro", billing: .plan),
         AgentAccount(tool: .claude, folder: URL(fileURLWithPath: "/practice/.claude-work"), email: "sam@example.org",
-                     plan: "Max 5×", billing: .plan, name: String(localized: "Work", comment: "Practice account name")),
+                     plan: "Max", billing: .plan),
         AgentAccount(tool: .codex, folder: URL(fileURLWithPath: "/practice/.codex"), email: "sam@example.com",
                      plan: "Plus", billing: .plan),
-    ]
+    ])
 
     static func limits(now: Date) -> [String: AccountLimits] {
         func limits(session: Double, sessionIn: TimeInterval, weekly: Double, weeklyIn: TimeInterval) -> AccountLimits {

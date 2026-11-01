@@ -20,6 +20,8 @@ public enum NotchState: String, Sendable, CaseIterable, Comparable {
 
 /// User-adjustable notch behavior (Settings).
 public struct NotchBehavior: Equatable, Sendable {
+    /// Require a click instead of hovering to open; shortcuts and file drags still work.
+    public var openOnClickOnly: Bool
     /// How long the pointer must rest on the notch before it opens.
     public var openDelay: Duration
     /// How long after the pointer leaves before the notch closes.
@@ -27,7 +29,8 @@ public struct NotchBehavior: Equatable, Sendable {
     /// Tap the trackpad lightly when the notch opens on hover.
     public var hapticOnOpen: Bool
 
-    public init(openDelay: Duration = .milliseconds(150), closeDelay: Duration = .milliseconds(300), hapticOnOpen: Bool = false) {
+    public init(openDelay: Duration = .milliseconds(150), closeDelay: Duration = .milliseconds(300), hapticOnOpen: Bool = false, openOnClickOnly: Bool = false) {
+        self.openOnClickOnly = openOnClickOnly
         self.openDelay = openDelay
         self.closeDelay = closeDelay
         self.hapticOnOpen = hapticOnOpen

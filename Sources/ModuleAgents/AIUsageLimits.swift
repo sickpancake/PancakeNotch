@@ -114,10 +114,17 @@ private struct AccountSummaryRow: View {
                     .font(.system(size: 12.5, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text([account.tool.shortName, account.plan].compactMap { $0 }.joined(separator: " · "))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
+                if account.isDefaultName, let email = account.email {
+                    PrivateText(email, revealed: module.revealsEmails, toggle: module.toggleEmails)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                } else if !account.isDefaultName {
+                    Text([account.tool.shortName, account.plan].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             trailing

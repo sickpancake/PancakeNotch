@@ -210,7 +210,9 @@ private struct NotchHero: View {
                 arrangement: context.arrangement,
                 isActive: isOn,
                 modules: liveModules,
-                activeHint: String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too."),
+                activeHint: context.preferences.openOnClickOnly
+                    ? String(localized: "This is your real notch: click to open it. What you do here happens in your notch too.")
+                    : String(localized: "This is your real notch: hover to open it. What you do here happens in your notch too."),
                 badge: .live
             )
             .onAppear { liveModules = context.makeLiveModules() }
@@ -468,10 +470,13 @@ private struct TipsCard: View {
              String(localized: "Pick one at the top left of the open notch, or swipe sideways there with two fingers.")),
         ] : []
         return [
-            ("cursorarrow.rays", String(localized: "Hover to open"),
-             String(localized: "Rest the pointer on the notch and it slides open.")),
+            preferences.openOnClickOnly
+                ? ("hand.tap", String(localized: "Click to open"),
+                   String(localized: "Hovering is off. Click the notch to open it."))
+                : ("cursorarrow.rays", String(localized: "Hover to open"),
+                   String(localized: "Rest the pointer on the notch and it slides open.")),
             ("hand.tap", String(localized: "Click to keep it small"),
-             String(localized: "Click the open notch and it stays small: hover to open it, click again to close it fully.")),
+             String(localized: "Click the open notch and it stays small: hover or click to open it, then click again to close it fully.")),
         ] + nowPlaying + shelf + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
