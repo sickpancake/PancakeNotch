@@ -46,9 +46,11 @@ public final class AgentsCenter {
         return storage.values.filter { !hidden.contains($0.tool) && ($0.status.needsYou || !isUnderParent($0)) }
     }
 
-    /// A host app's helper whose main conversation is in the list.
+    /// A host app's helper that shows under a conversation in the list: one of its ancestors is a thread
+    /// of a tool not hidden (a hidden parent doesn't take its helpers off the list with it).
     private func isUnderParent(_ thread: AgentThread) -> Bool {
-        thread.parentID.map { storage[$0] != nil } ?? false
+        let hidden = settings.hiddenTools
+        return ancestors(of: thread.id).contains { storage[$0].map { !hidden.contains($0.tool) } ?? false }
     }
 
     /// Told about needs-you and finishes worth a peek (smart rules applied).
@@ -367,7 +369,8 @@ public final class AgentsCenter {
         shown.byline = thread.byline(settings.detailStyle, name: shown.title)
         if !settings.showsSteps { shown.step = nil }
         if settings.showsSubagents {
-            let helpers = storage.values.filter { ancestors(of: $0.id).contains(thread.id) && !$0.status.needsYou }.map { helper in
+            let hidden = settings.hiddenTools
+            let helpers = storage.values.filter { !hidden.contains($0.tool) && !$0.status.needsYou && ancestors(of: $0.id).contains(thread.id) }.map { helper in
                 AgentSubagent(id: helper.id, title: helper.helperTitle ?? helper.name(settings.nameStyle),
                               status: helper.status, statusSince: helper.statusSince)
             }
