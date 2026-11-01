@@ -2,17 +2,10 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
-/// Where an ear view goes: sharing the ears with another module (`shared`, one ear), or alone with both:
-/// the time in its own ear (`solo`) and the ring or a sign in the other (`companion`).
-enum TimerEarRole {
-    case shared, solo, companion
-}
-
-/// The Timer's compact ear. Shows the timer while it isn't idle, else the stopwatch. Ticks once a second
+/// The Timer's compact ear: one ear, also when nothing else is active. Shows the timer while it isn't idle, else the stopwatch. Ticks once a second
 /// only while it's on screen and counting (`TimerModule.earTicks`, AGENTS.md rule 2).
 struct TimerEar: View {
     let module: TimerModule
-    let role: TimerEarRole
     let width: CGFloat
     let height: CGFloat
 
@@ -57,7 +50,7 @@ struct TimerEar: View {
             timerFace(timer, now: now)
         } else if !center.stopwatch.isIdle {
             stopwatchFace(center.stopwatch, now: now)
-        } else if role != .companion {
+        } else {
             // The short shrink after a click while nothing runs.
             Image(systemName: module.symbol)
                 .font(.system(size: 12, weight: .medium))
@@ -67,7 +60,7 @@ struct TimerEar: View {
 
     @ViewBuilder
     private var done: some View {
-        if role == .companion || (role == .shared && module.settings.earContent == .ring) {
+        if module.settings.earContent == .ring {
             sign("bell.fill")
         } else {
             Text("Done", comment: "Timer ear: the timer finished")
@@ -85,31 +78,14 @@ struct TimerEar: View {
         // The widest the countdown will be: the layout is chosen for that, so it doesn't change size
         // when 10:00 becomes 9:59.
         let widest = TimerText.countdown(timer.total)
-        switch role {
-        case .companion:
-            if paused { sign("pause.fill") } else if content == .ringAndTime || content == .ring {
-                TimerRing(module: module, size: 13)
-            } else {
-                sign(module.symbol)
-            }
-        case .solo:
-            if content == .ring, !paused {
-                TimerRing(module: module, size: 13)
-            } else if content == .endTime, let end = timer.end {
-                fitting(lead: nil, text: TimerText.shortTime(end), animated: false)
-            } else {
-                fitting(lead: nil, text: text, widest: widest)
-            }
-        case .shared:
-            if paused {
-                fitting(lead: .pause, text: text, widest: widest)
-            } else {
-                switch content {
-                case .ringAndTime: fitting(lead: .ring, text: text, widest: widest)
-                case .time: fitting(lead: nil, text: text, widest: widest)
-                case .ring: TimerRing(module: module, size: 12)
-                case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false)
-                }
+        if paused {
+            fitting(lead: .pause, text: text, widest: widest)
+        } else {
+            switch content {
+            case .ringAndTime: fitting(lead: .ring, text: text, widest: widest)
+            case .time: fitting(lead: nil, text: text, widest: widest)
+            case .ring: TimerRing(module: module, size: 12)
+            case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false)
             }
         }
     }
@@ -121,17 +97,10 @@ struct TimerEar: View {
         let text = TimerText.elapsed(stopwatch.elapsed(at: now))
         // Sized for "00:00", so the size holds from 0:00 to 59:59 (a longer time is sized for itself).
         let widest = "00:00"
-        switch role {
-        case .companion:
-            sign(stopwatch.isStopped ? "pause.fill" : "stopwatch")
-        case .solo:
-            fitting(lead: nil, text: text, widest: widest, direction: .up)
-        case .shared:
-            if stopwatch.isStopped {
-                fitting(lead: .pause, text: text, widest: widest, direction: .up)
-            } else {
-                fitting(lead: module.settings.earContent == .time ? nil : .stopwatch, text: text, widest: widest, direction: .up)
-            }
+        if stopwatch.isStopped {
+            fitting(lead: .pause, text: text, widest: widest, direction: .up)
+        } else {
+            fitting(lead: module.settings.earContent == .time ? nil : .stopwatch, text: text, widest: widest, direction: .up)
         }
     }
 

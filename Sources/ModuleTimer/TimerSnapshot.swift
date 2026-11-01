@@ -85,7 +85,7 @@ public enum TimerSnapshot {
                 clock.advance(5 * 60)
                 center.timeMayHaveJumped()
             }]),
-            // Long times must fit when the module has both ears, too.
+            // Long times must fit the one ear, too.
             model(.compact, [module { center, _ in center.startTimer(seconds: CountdownTimer.longest) }]),
             model(.compact, [module { center, clock in
                 center.startStopwatch()

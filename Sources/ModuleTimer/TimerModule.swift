@@ -125,11 +125,8 @@ public final class TimerModule: NotchModule {
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         let height = layout.geometry.compactHeight
         let width = layout.compactEarWidth
-        return CompactEars(
-            main: AnyView(TimerEar(module: self, role: .shared, width: width, height: height)),
-            extra: AnyView(TimerEar(module: self, role: .companion, width: width, height: height)),
-            soloMain: AnyView(TimerEar(module: self, role: .solo, width: width, height: height))
-        )
+        // One ear, also when nothing else is active: the other stays free (ADR-0040).
+        return CompactEars(main: AnyView(TimerEar(module: self, width: width, height: height)))
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {

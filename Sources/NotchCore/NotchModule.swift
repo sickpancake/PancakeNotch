@@ -38,7 +38,8 @@ public protocol NotchModule: AnyObject {
     var wantsFocus: Bool { get }
 
     /// Takes the second ear (#2: right, or left with Swap sides) while active, whatever its rank, so the
-    /// first module keeps its place (the Timer, ADR-0040). Alone it fills both ears with `main` in #2.
+    /// first module keeps its place (the Timer, ADR-0040). Alone it keeps to #2, or fills both ears with an
+    /// `extra`.
     var prefersSecondEar: Bool { get }
     /// Hovering or clicking this module's compact ear opens the notch on it (the Timer).
     var opensFromEar: Bool { get }
@@ -121,17 +122,14 @@ public extension NotchModule {
 /// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.
 ///
 /// `main` goes in the ear the module's ranking gives it (#1 left, #2 right, or swapped). `extra` fills
-/// the other ear only while the module is the one active module (Now Playing: art + sound bars), and
-/// `soloMain`, when given, replaces `main` then (the Timer's ring moves to the other ear).
+/// the other ear only while the module is the one active module (Now Playing: art + sound bars).
 public struct CompactEars {
     public var main: AnyView
     public var extra: AnyView?
-    public var soloMain: AnyView?
 
-    public init(main: AnyView, extra: AnyView? = nil, soloMain: AnyView? = nil) {
+    public init(main: AnyView, extra: AnyView? = nil) {
         self.main = main
         self.extra = extra
-        self.soloMain = soloMain
     }
 }
 

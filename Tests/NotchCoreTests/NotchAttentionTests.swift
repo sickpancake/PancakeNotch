@@ -20,7 +20,7 @@ final class SecondEarModule: NotchModule {
     func peekView(layout: NotchLayout) -> AnyView? { hasStrip ? AnyView(EmptyView()) : nil }
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
     func compactEars(layout: NotchLayout) -> CompactEars? {
-        CompactEars(main: AnyView(EmptyView()), extra: AnyView(EmptyView()), soloMain: AnyView(EmptyView()))
+        CompactEars(main: AnyView(EmptyView()))
     }
 }
 
@@ -65,10 +65,11 @@ struct SecondEarTests {
         #expect(ears.right?.id == "timer.main")
     }
 
-    @Test func aloneItsTimeIsInTheSecondEar() {
+    /// Alone it still takes only its one ear; the other stays empty.
+    @Test func aloneItTakesOnlyOneEar() {
         let (model, _, _) = makeModel()
         let ears = model.ears(layout: layout)
-        #expect(ears.left?.id == "timer.extra")
+        #expect(ears.left == nil)
         #expect(ears.right?.id == "timer.main")
     }
 

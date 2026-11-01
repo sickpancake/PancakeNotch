@@ -296,7 +296,7 @@ public final class NotchViewModel {
         }
         var slots: [EarSlot?] = []
         if picked.count == 1, let (module, ears) = picked.first {
-            let main = EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.extra == nil ? ears.main : ears.soloMain ?? ears.main)
+            let main = EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.main)
             let extra = ears.extra.map { EarSlot(id: module.moduleID + ".extra", moduleID: module.moduleID, view: $0) }
             slots = module.prefersSecondEar ? [extra, main] : [main, extra]
         } else {
