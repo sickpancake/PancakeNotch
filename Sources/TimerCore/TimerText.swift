@@ -13,15 +13,15 @@ public enum TimerText {
         clock(Int(max(0, seconds).rounded(.down)))
     }
 
-    /// A stopwatch in the open notch: "00:12.34", "12:05.10", "1:02:03.45".
+    /// A stopwatch in the open notch: always "HH:MM:SS.hh" ("00:12.34" is "00:00:12.34", an hour and a bit is
+    /// "01:02:03.45"), so the readout is as wide at the first second as at the last hour and never jumps.
+    /// Hundredths are cut, not rounded, so the display never runs ahead of the clock.
     public static func precise(_ seconds: TimeInterval) -> String {
         // A hair over, so a lap of exactly 0.29 s (28.999… hundredths in binary) still shows 0.29.
         let hundredths = Int((max(0, seconds) * 100 + 1e-6).rounded(.down))
         let whole = hundredths / 100
-        let fraction = String(format: "%02d", hundredths % 100)
         let hours = whole / 3600, minutes = whole / 60 % 60, secs = whole % 60
-        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, secs) + ".\(fraction)" }
-        return String(format: "%02d:%02d", minutes, secs) + ".\(fraction)"
+        return String(format: "%02d:%02d:%02d.%02d", hours, minutes, secs, hundredths % 100)
     }
 
     static func clock(_ total: Int) -> String {

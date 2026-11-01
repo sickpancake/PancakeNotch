@@ -155,9 +155,30 @@ struct TimerTextTests {
     }
 
     @Test func stopwatchToTheHundredth() {
-        #expect(TimerText.precise(12.345) == "00:12.34")
-        #expect(TimerText.precise(3723.45) == "1:02:03.45")
+        #expect(TimerText.precise(12.345) == "00:00:12.34")
+        #expect(TimerText.precise(3723.45) == "01:02:03.45")
         #expect(TimerText.elapsed(59.99) == "0:59")
+    }
+
+    /// The stopwatch always has an hour column, so its width never changes (not at 59:59.99, not at 10 hours).
+    @Test func stopwatchAlwaysShowsHours() {
+        #expect(TimerText.precise(0) == "00:00:00.00")
+        #expect(TimerText.precise(-5) == "00:00:00.00")
+        #expect(TimerText.precise(59.999) == "00:00:59.99")
+        #expect(TimerText.precise(3599.99) == "00:59:59.99")
+        #expect(TimerText.precise(3600) == "01:00:00.00")
+        #expect(TimerText.precise(5025.67) == "01:23:45.67")
+        #expect(TimerText.precise(10 * 3600 + 0.5) == "10:00:00.50")
+        #expect(TimerText.precise(24 * 3600) == "24:00:00.00")
+        let lengths = Set([0, 0.01, 9.99, 59.99, 600, 3599.99, 3600, 36_000, 86_399.99].map { TimerText.precise($0).count })
+        #expect(lengths == [11])
+    }
+
+    /// Hundredths are cut, never rounded up, so the display doesn't run ahead of the clock.
+    @Test func hundredthsAreCutNotRounded() {
+        #expect(TimerText.precise(1.999) == "00:00:01.99")
+        #expect(TimerText.precise(1.9999999) == "00:00:01.99")
+        #expect(TimerText.precise(0.005) == "00:00:00.00")
     }
 }
 
@@ -179,14 +200,14 @@ struct StopwatchPolishTests {
         stopwatch.stop(now: start + 20.018)
         let laps = stopwatch.laps(at: start + 20.018)
         let done = laps.filter { !$0.isCurrent }
-        #expect(done.map { TimerText.precise($0.time) } == ["00:10.01", "00:10.00"])
-        #expect(TimerText.precise(stopwatch.elapsed(at: start + 20.018)) == "00:20.01")
+        #expect(done.map { TimerText.precise($0.time) } == ["00:00:10.01", "00:00:10.00"])
+        #expect(TimerText.precise(stopwatch.elapsed(at: start + 20.018)) == "00:00:20.01")
         #expect(stopwatch.currentLap(at: start + 20.018)?.number == 3)
     }
 
     @Test func aLapOfExactHundredthsShowsThem() {
-        #expect(TimerText.precise(0.29) == "00:00.29")
-        #expect(TimerText.precise(Stopwatch.seconds(29)) == "00:00.29")
+        #expect(TimerText.precise(0.29) == "00:00:00.29")
+        #expect(TimerText.precise(Stopwatch.seconds(29)) == "00:00:00.29")
     }
 
     /// VoiceOver says something for under half a second, not "".

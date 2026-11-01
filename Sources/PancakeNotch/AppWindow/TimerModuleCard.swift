@@ -56,7 +56,7 @@ struct TimerSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "What it shows"),
-                subtitle: String(localized: "The ring drains as the time runs out. The end time changes only when you start or pause.")
+                subtitle: String(localized: "The ring drains as the time runs out (the stopwatch shows a stopwatch sign instead). The end time changes only when you start or pause.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "What it shows"),

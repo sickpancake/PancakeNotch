@@ -2,27 +2,6 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
-/// A ring that drains as the timer runs (a stopwatch's sweeps once a minute). White on a faint track:
-/// monochrome like everything else (ADR-0029). It moves in steps with the time, never animating on its own.
-struct TimerRing: View {
-    /// 0…1.
-    let fraction: Double
-    let size: CGFloat
-    var lineWidth: CGFloat = 2
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(.white.opacity(0.25), lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: max(0, min(1, fraction)))
-                .stroke(.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
-}
-
 /// Where an ear view goes: sharing the ears with another module (`shared`, one ear), or alone with both:
 /// the time in its own ear (`solo`) and the ring or a sign in the other (`companion`).
 enum TimerEarRole {
@@ -103,89 +82,92 @@ struct TimerEar: View {
         let paused = timer.isPaused
         let content = module.settings.earContent
         let text = TimerText.countdown(timer.remaining(at: now))
-        let ring = TimerRing(fraction: timer.fractionLeft(at: now), size: 10)
+        // The widest the countdown will be: the layout is chosen for that, so it doesn't change size
+        // when 10:00 becomes 9:59.
+        let widest = TimerText.countdown(timer.total)
         switch role {
         case .companion:
             if paused { sign("pause.fill") } else if content == .ringAndTime || content == .ring {
-                TimerRing(fraction: timer.fractionLeft(at: now), size: 13)
+                TimerRing(module: module, size: 13)
             } else {
                 sign(module.symbol)
             }
         case .solo:
             if content == .ring, !paused {
-                TimerRing(fraction: timer.fractionLeft(at: now), size: 13)
+                TimerRing(module: module, size: 13)
             } else if content == .endTime, let end = timer.end {
                 fitting(lead: nil, text: TimerText.shortTime(end), animated: false)
             } else {
-                fitting(lead: nil, text: text)
+                fitting(lead: nil, text: text, widest: widest)
             }
         case .shared:
             if paused {
-                fitting(lead: AnyView(sign("pause.fill", size: 7)), text: text)
+                fitting(lead: .pause, text: text, widest: widest)
             } else {
                 switch content {
-                case .ringAndTime: fitting(lead: AnyView(ring), text: text)
-                case .time: fitting(lead: nil, text: text)
-                case .ring: TimerRing(fraction: timer.fractionLeft(at: now), size: 12)
+                case .ringAndTime: fitting(lead: .ring, text: text, widest: widest)
+                case .time: fitting(lead: nil, text: text, widest: widest)
+                case .ring: TimerRing(module: module, size: 12)
                 case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false)
                 }
             }
         }
     }
 
+    /// The stopwatch has no ring (nothing to fill up): a stopwatch sign where the timer has its ring, a pause
+    /// sign while it's stopped. "Ring only" has nothing to show for it, so it shows the sign and the time.
     @ViewBuilder
     private func stopwatchFace(_ stopwatch: Stopwatch, now: Date) -> some View {
-        let elapsed = stopwatch.elapsed(at: now)
-        let text = TimerText.elapsed(elapsed)
-        let sweep = (elapsed.truncatingRemainder(dividingBy: 60)) / 60
-        let ringOnly = module.settings.earContent == .ring
+        let text = TimerText.elapsed(stopwatch.elapsed(at: now))
+        // Sized for "00:00", so the size holds from 0:00 to 59:59 (a longer time is sized for itself).
+        let widest = "00:00"
         switch role {
         case .companion:
-            if stopwatch.isStopped { sign("pause.fill") } else { TimerRing(fraction: sweep, size: 13) }
+            sign(stopwatch.isStopped ? "pause.fill" : "stopwatch")
         case .solo:
-            if ringOnly, stopwatch.isRunning {
-                TimerRing(fraction: sweep, size: 13)
-            } else {
-                fitting(lead: nil, text: text, direction: .up)
-            }
+            fitting(lead: nil, text: text, widest: widest, direction: .up)
         case .shared:
             if stopwatch.isStopped {
-                fitting(lead: AnyView(sign("pause.fill", size: 7)), text: text, direction: .up)
-            } else if ringOnly {
-                TimerRing(fraction: sweep, size: 12)
+                fitting(lead: .pause, text: text, widest: widest, direction: .up)
             } else {
-                fitting(lead: module.settings.earContent == .time ? nil : AnyView(TimerRing(fraction: sweep, size: 10)), text: text, direction: .up)
+                fitting(lead: module.settings.earContent == .time ? nil : .stopwatch, text: text, widest: widest, direction: .up)
             }
         }
     }
 
-    /// The sign and the time if they fit in one ear, else the time alone, smaller for long times.
-    private func fitting(lead: AnyView?, text: String, direction: DrumDirection = .down, animated: Bool = true) -> some View {
-        ViewThatFits(in: .horizontal) {
-            if let lead {
-                HStack(spacing: 2) {
-                    lead
-                    time(text, direction: direction, animated: animated)
-                }
-                ForEach([9.5, 8.5] as [CGFloat], id: \.self) { size in
-                    HStack(spacing: 1.5) {
-                        lead.scaleEffect(0.8).frame(width: 8, height: 8)
-                        time(text, size: size, direction: direction, animated: animated)
-                    }
-                }
+    /// What can go in front of the time when the ear is shared.
+    private enum Lead {
+        case ring, pause, stopwatch
+    }
+
+    /// The sign and the time if they fit in one ear, else the time alone, smaller for long times. What fits is
+    /// worked out from `widest` (the longest the time will be), never from the time shown, so the size
+    /// doesn't jump when the time gets a digit shorter or longer.
+    private func fitting(lead: Lead?, text: String, widest: String? = nil, direction: DrumDirection = .down, animated: Bool = true) -> some View {
+        let fit = EarFit.choose(
+            widest: widest.map { $0.count > text.count ? $0 : text } ?? text,
+            hasLead: lead != nil,
+            available: width - 4
+        )
+        return HStack(spacing: fit.spacing) {
+            if let lead, fit.showsLead {
+                leadView(lead).scaleEffect(fit.leadSide / EarFit.leadSide).frame(width: fit.leadSide, height: fit.leadSide)
             }
-            time(text, direction: direction, animated: animated)
-            time(text, size: 9, direction: direction, animated: animated)
-            // The last choice must shrink even a many-hour stopwatch into the available ear.
-            Text(text)
-                .font(.system(size: 8, weight: .semibold).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+            time(text, size: fit.size, direction: direction, animated: animated)
         }
         .frame(width: max(0, width - 4))
     }
 
-    private func time(_ text: String, size: CGFloat = 10.5, direction: DrumDirection = .down, animated: Bool = true) -> some View {
+    @ViewBuilder
+    private func leadView(_ lead: Lead) -> some View {
+        switch lead {
+        case .ring: TimerRing(module: module, size: 10)
+        case .pause: sign("pause.fill", size: 7)
+        case .stopwatch: sign("stopwatch", size: 9)
+        }
+    }
+
+    private func time(_ text: String, size: CGFloat, direction: DrumDirection, animated: Bool) -> some View {
         DrumText(
             text: text,
             size: size,
@@ -193,8 +175,6 @@ struct TimerEar: View {
             style: animated ? module.settings.digitAnimation : .off,
             direction: direction
         )
-        .lineLimit(1)
-        .fixedSize()
     }
 
     private func sign(_ symbol: String, size: CGFloat = 11) -> some View {
@@ -239,5 +219,47 @@ enum TimerDoneText {
         guard case .done(let endedAt) = center.timer.phase,
               center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return length }
         return length + " · " + String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")
+    }
+}
+
+/// How the time fits in one ear, with or without a sign in front. Pure: it measures the text in the font it's
+/// drawn in and picks the biggest size that fits, so it can be checked without drawing.
+enum EarFit {
+    struct Choice: Equatable {
+        var size: CGFloat
+        var showsLead: Bool
+        var leadSide: CGFloat
+        var spacing: CGFloat
+    }
+
+    /// The sign's full size, and the smaller one used when space is short.
+    static let leadSide: CGFloat = 10
+    static let smallLeadSide: CGFloat = 8
+
+    /// - Parameters:
+    ///   - widest: the longest the text will be.
+    ///   - hasLead: a sign could go before it.
+    ///   - available: the width of the ear.
+    ///   - measure: how wide the text is at a size (the real font by default).
+    static func choose(
+        widest: String,
+        hasLead: Bool,
+        available: CGFloat,
+        measure: (String, CGFloat) -> CGFloat = { DrumMetrics.width(of: $0, size: $1, weight: .semibold) }
+    ) -> Choice {
+        if hasLead {
+            for (size, side, spacing) in [(10.5, leadSide, 2.0), (9.5, smallLeadSide, 1.5), (8.5, smallLeadSide, 1.5)] as [(CGFloat, CGFloat, CGFloat)]
+            where side + spacing + measure(widest, size) <= available {
+                return Choice(size: size, showsLead: true, leadSide: side, spacing: spacing)
+            }
+        }
+        for size in [10.5, 9] as [CGFloat] where measure(widest, size) <= available {
+            return Choice(size: size, showsLead: false, leadSide: leadSide, spacing: 0)
+        }
+        // Even a many-hour stopwatch has to fit: shrink from 8 until it does (widths don't scale evenly
+        // with the size, as the font's spacing changes with it).
+        var size: CGFloat = 8
+        while size > 4, measure(widest, size) > available { size -= 0.25 }
+        return Choice(size: size, showsLead: false, leadSide: leadSide, spacing: 0)
     }
 }
