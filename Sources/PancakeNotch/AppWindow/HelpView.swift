@@ -48,7 +48,9 @@ struct HelpView: View {
             } else {
                 SettingsRow(
                     title: String(localized: "The notch is switched on"),
-                    subtitle: String(localized: "Rest the pointer on the notch at the top of the screen to open it.")
+                    subtitle: preferences.openOnClickOnly
+                        ? String(localized: "Hovering is off. Click the notch to open it.")
+                        : String(localized: "Rest the pointer on the notch at the top of the screen to open it.")
                 ) {
                     StatusCheck()
                 }

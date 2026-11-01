@@ -190,7 +190,9 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             heading(
                 String(localized: "Now try the real one"),
-                String(localized: "Move the pointer up to the notch at the top of your screen and rest it there.")
+                preferences.openOnClickOnly
+                    ? String(localized: "Hovering is off. Click the notch to open it.")
+                    : String(localized: "Move the pointer up to the notch at the top of your screen and rest it there.")
             )
             VStack(spacing: 14) {
                 Image(systemName: realNotchOpened ? "checkmark" : "cursorarrow.rays")
@@ -282,6 +284,10 @@ struct OnboardingView: View {
                 hint(String(localized: "macOS isn't sharing what other apps play. Trying again often fixes it."))
                 HStack(spacing: 8) {
                     Button(String(localized: "Try Again")) { nowPlaying.retryConnection() }
+                    // The Music/Spotify fallback is where a denied Automation prompt shows up.
+                    if nowPlaying.needsAutomationPermission {
+                        Button(String(localized: "Allow Control…")) { HelpLinks.openAutomationSettings() }
+                    }
                     helpButton(.musicNotDetected)
                 }
             case .unavailable:
