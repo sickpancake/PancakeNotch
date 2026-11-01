@@ -238,7 +238,7 @@ struct DelegatedHelpersTests {
         // A hidden parent doesn't swallow a visible helper: it shows on its own, as a main thread would.
         center.settings.hiddenTools = [.claude]
         #expect(center.threads.map(\.id) == ["codex:helper"])
-        #expect(center.threads.first?.subagents.map(\.id) == ["claude:nested"])
+        #expect(center.threads.first?.subagents.isEmpty == true)
         #expect(center.attention == .working(count: 1))
         // Hidden all the way up, the helper is its own row.
         center.settings.hiddenTools = [.codex]
