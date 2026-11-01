@@ -227,7 +227,9 @@ private struct NotchHero: View {
                         .kerning(-0.3)
                         .contentTransition(.opacity)
                     Text(isOn
-                        ? String(localized: "Move the pointer to the top of your screen and the notch opens.")
+                        ? (preferences.openOnClickOnly
+                            ? String(localized: "Hovering is off. Click the notch to open it.")
+                            : String(localized: "Move the pointer to the top of your screen and the notch opens."))
                         : String(localized: "The notch is hidden, but PancakeNotch keeps running. Turn it back on any time."))
                         .font(.app(size: 13))
                         .foregroundStyle(AppPalette.secondaryText)

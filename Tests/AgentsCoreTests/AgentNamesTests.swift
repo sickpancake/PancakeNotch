@@ -218,4 +218,38 @@ struct DelegatedHelpersTests {
         center.forget("claude:main")
         #expect(center.threads.map(\.id) == ["codex:helper"])
     }
+
+    @Test func helpersFollowTheToolFilterWhateverTheirParentsAre() {
+        let center = AgentsCenter(settings: AgentsSettings(defaults: UserDefaults(suiteName: "DelegatedHelpersTests.\(UUID().uuidString)")!))
+        let now = Date()
+        center.apply(.init(id: "claude:main", tool: .claude, at: now, title: "Main", status: .working))
+        center.apply(.init(id: "codex:helper", tool: .codex, at: now, title: "Helper", status: .working))
+        center.apply(.init(id: "claude:nested", tool: .claude, at: now, title: "Nested", status: .working))
+        center.setParent(of: "codex:helper", to: "claude:main", title: "Helper")
+        center.setParent(of: "claude:nested", to: "codex:helper", title: "Nested")
+        // Nothing hidden: one row, both helpers under it.
+        #expect(center.threads.map(\.id) == ["claude:main"])
+        #expect(Set(center.threads.first?.subagents.map(\.id) ?? []) == ["codex:helper", "claude:nested"])
+        // Its tool hidden, a helper of another tool leaves the row (and the ear) with it.
+        center.settings.hiddenTools = [.codex]
+        #expect(center.threads.map(\.id) == ["claude:main"])
+        #expect(center.threads.first?.subagents.map(\.id) == ["claude:nested"])
+        #expect(center.attention == .working(count: 1))
+        // A hidden parent doesn't swallow a visible helper: it shows on its own, as a main thread would.
+        center.settings.hiddenTools = [.claude]
+        #expect(center.threads.map(\.id) == ["codex:helper"])
+        #expect(center.threads.first?.subagents.isEmpty == true)
+        #expect(center.attention == .working(count: 1))
+        // Hidden all the way up, the helper is its own row.
+        center.settings.hiddenTools = [.codex]
+        center.forget("claude:main")
+        #expect(center.threads.map(\.id) == ["claude:nested"])
+        // Hidden helper that asks stays hidden; a visible one asks even though its parent is hidden.
+        center.settings.hiddenTools = [.claude]
+        center.apply(.init(id: "codex:helper", tool: .codex, at: now, status: .needsYou(.permission), request: .some("Run a command")))
+        #expect(center.threads.map(\.id) == ["codex:helper"])
+        #expect(center.attention == .needsYou(count: 1))
+        center.settings.hiddenTools = [.codex]
+        #expect(center.attention == .working(count: 1))
+    }
 }

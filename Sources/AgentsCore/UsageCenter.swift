@@ -119,6 +119,8 @@ public final class UsageCenter {
     @ObservationIgnored private let stats: StatsStore?
     /// How many views showing the history are on screen (AI Usage and Statistics can both be).
     @ObservationIgnored private var viewers = 0
+    /// The day (its start) the shown totals were last asked for; once the day is another, they're old.
+    @ObservationIgnored private var totalsDay: Date?
 
     public init(settings: AgentsSettings, stats: StatsStore?) {
         self.settings = settings
@@ -261,12 +263,19 @@ public final class UsageCenter {
         for account in accounts { checkNearLimit(account.id) }
         scheduleReset()
         onResetsPending?()
+        // "Today" (and every other range) starts from a new day: ask again while the history is on screen;
+        // otherwise showing it again does.
+        if viewers > 0, totalsDay != Calendar.current.startOfDay(for: now) {
+            historyChanged()
+            refreshTotals(now: now)
+        }
     }
 
     private func watchClock() {
         guard clockObservers.isEmpty else { return }
         for (center, name) in [
             (NSWorkspace.shared.notificationCenter, NSWorkspace.didWakeNotification),
+            (NotificationCenter.default, Notification.Name.NSCalendarDayChanged),
             (NotificationCenter.default, Notification.Name.NSSystemClockDidChange),
             (NotificationCenter.default, Notification.Name.NSSystemTimeZoneDidChange)
         ] {
@@ -362,11 +371,12 @@ public final class UsageCenter {
     }
 
     /// Asks for the selected range's totals again (selection, range or history changed).
-    func refreshTotals() {
+    func refreshTotals(now: Date = .now) {
         if isPractice {
             totals = PracticeUsage.totals(for: selection, range: range)
             return
         }
+        totalsDay = Calendar.current.startOfDay(for: now)
         live?.refreshTotals(accountIDs: shownAccounts.map(\.id), days: range.days)
     }
 

@@ -1,4 +1,4 @@
-import AgentsCore
+@testable import AgentsCore
 import Foundation
 import Testing
 @testable import ModuleAgents
@@ -63,5 +63,13 @@ struct AgentsTextTests {
         #expect(AgentsAttention.failed(count: 1).status == .failed)
         #expect(AgentsText.spoken(.needsYou(count: 1)) == "An agent needs you")
         #expect(AgentsText.spoken(.working(count: 3)) == "3 agents are working")
+    }
+
+    @Test(arguments: ["echo one\necho two", "echo one\n\necho two", "echo " + String(repeating: "x", count: 90)])
+    func approvalSpeechPreservesCommands(_ command: String) throws {
+        let review = try #require(AgentReview.make(tool: "Bash", input: ["command": command], cwd: nil, home: "/tmp"))
+        var pending = thread(.needsYou(.permission))
+        pending.approval = PendingApproval(requestID: 1, review: review)
+        #expect(AgentsText.spoken(pending, now: now).contains(", " + command + ", "))
     }
 }

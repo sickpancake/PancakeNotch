@@ -328,3 +328,33 @@ struct ResetEnableBoundaryTests {
         #expect(rolledBack.nextResetNotice(now: clock.now) == nil)
     }
 }
+
+@MainActor
+struct UsageDayRolloverTests {
+    private func center() -> UsageCenter {
+        UsageCenter(settings: AgentsSettings(defaults: UserDefaults(suiteName: "DayRollover.\(UUID().uuidString)")!), stats: nil)
+    }
+
+    @Test func aVisibleHistoryReloadsOnceWhenTheDayChanges() {
+        let usage = center()
+        usage.viewShown()
+        usage.refreshTotals()
+        let before = usage.historyRevision
+        let tomorrow = Date().addingTimeInterval(36 * 3600)
+        // The same day again: nothing to reload.
+        usage.timeMayHaveChanged()
+        #expect(usage.historyRevision == before)
+        // Past midnight (a wake, a clock or time zone change, or the day change itself): reloaded, once.
+        usage.timeMayHaveChanged(now: tomorrow)
+        #expect(usage.historyRevision == before + 1)
+        usage.timeMayHaveChanged(now: tomorrow)
+        #expect(usage.historyRevision == before + 1)
+    }
+
+    @Test func aHiddenHistoryWaitsForItsNextShowing() {
+        let usage = center()
+        usage.refreshTotals()
+        usage.timeMayHaveChanged(now: Date().addingTimeInterval(36 * 3600))
+        #expect(usage.historyRevision == 0)
+    }
+}

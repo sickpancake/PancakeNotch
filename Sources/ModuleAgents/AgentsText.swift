@@ -120,7 +120,7 @@ enum AgentsText {
     /// For VoiceOver, one row: "Fix the login redirect, Claude Code, web-app · Running tests, Working · 4m,
     /// 2 subagents".
     static func spoken(_ thread: AgentThread, now: Date) -> String {
-        [thread.title, thread.tool.name, subtitle(thread), rowLines(thread.approval?.review).joined(),
+        [thread.title, thread.tool.name, subtitle(thread), thread.approval?.review.text ?? "",
          statusLine(thread.status, since: thread.statusSince, now: now),
          thread.subagents.isEmpty ? "" : subagents(thread.subagents.count)]
             .filter { !$0.isEmpty }.joined(separator: ", ")

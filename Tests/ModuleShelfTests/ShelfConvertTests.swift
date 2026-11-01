@@ -246,4 +246,188 @@ struct ShelfConvertTests {
         module.dragEnded()
         #expect(module.convertZone == nil)
     }
+
+    // MARK: A full Shelf
+
+    func failedMessage(_ module: ShelfModule) -> String? {
+        if case .failed(let message) = module.conversion?.phase { return message }
+        return nil
+    }
+
+    func converted(_ module: ShelfModule, _ sources: [URL], as format: ConvertFormat = .png) async throws {
+        module.startConversion(sources)
+        try await waitUntil { isChoosing(module) }
+        module.chooseConvertFormat(format)
+        try await waitUntil { done(module) != nil || failedMessage(module) != nil }
+    }
+
+    /// Saved beside the original, the Shelf full: the card must not claim it was added, the full card
+    /// still waits for Done, and answering it never touches the saved file or the old items.
+    @Test func aResultThatDoesNotFitIsSavedAndSaysSo() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer(try fixture.files(ShelfStore.capacity))
+        let before = module.store.items.map(\.id)
+
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        let result = try #require(done(module))
+        let saved = fixture.root.appending(path: "Docs/Photo.png")
+        #expect(result.files == [saved])
+        #expect(result.notOnShelf == 1)
+        #expect(result.notKept == 0)
+        #expect(module.store.items.map(\.id) == before) // nothing of the user's was pushed out
+        guard case .full(let waiting) = module.prompt else { Issue.record("expected the full card"); return }
+        #expect(waiting == [.file(saved, owned: false)])
+
+        // Done reveals the full card; dismissing it leaves the saved file alone.
+        module.endConversion()
+        #expect(module.visibleConversion == nil)
+        module.dismissPrompt()
+        #expect(FileManager.default.fileExists(atPath: saved.path))
+        #expect(module.store.items.map(\.id) == before)
+    }
+
+    @Test func partlyFittingResultsAreCountedAndKept() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer(try fixture.files(ShelfStore.capacity - 1))
+        let before = module.store.items.map(\.id)
+
+        try await converted(module, [try fixture.file("A.jpg"), try fixture.file("B.jpg")])
+        let result = try #require(done(module))
+        #expect(result.files.count == 2)
+        #expect(result.notOnShelf == 1)
+        #expect(module.store.items.count == ShelfStore.capacity)
+        #expect(Array(module.store.items.map(\.id).suffix(before.count)) == before)
+        module.notchDidClose() // the card closes with the notch
+        #expect(result.files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    @Test func aResultOnlyTheShelfCanKeepNeedsRoomOnIt() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.keepsConvertedFiles = true // no folder to save to: the Shelf's own storage is all there is
+        module.offer(try fixture.files(ShelfStore.capacity))
+        let before = module.store.items.map(\.id)
+
+        // Said before the work starts; nothing is made or deleted, and another format can't help.
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        #expect(failedMessage(module) == ShelfModule.noRoomText)
+        #expect(module.conversion?.canPickAnother == false)
+        #expect(module.store.items.map(\.id) == before)
+        let stored = (try? FileManager.default.contentsOfDirectory(atPath: fixture.shelfDirectory.appending(path: "Files").path)) ?? []
+        #expect(stored.isEmpty)
+
+        // With room it is kept, and closing the notch keeps it.
+        module.endConversion()
+        module.remove([before[0]])
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        let result = try #require(done(module))
+        #expect(result.notOnShelf == 0)
+        module.notchDidClose()
+        #expect(result.files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        #expect(module.store.items.contains { $0.isOwnedFile && $0.path == result.files[0].resolvingSymlinksInPath().path })
+    }
+
+    /// The Shelf filled up while it converted: the result that only it could keep is told as not kept,
+    /// instead of waiting on a card that deletes it.
+    @Test func aShelfFilledMeanwhileReportsThatTheResultCouldNotBeKept() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture, runner: FakeRunner(delay: .milliseconds(150)))
+        module.keepsConvertedFiles = true
+        let photo = try fixture.file("Photo.jpg")
+        module.startConversion([photo])
+        try await waitUntil { isChoosing(module) }
+        module.chooseConvertFormat(.png)
+        module.offer(try fixture.files(ShelfStore.capacity))
+        try await waitUntil { failedMessage(module) != nil }
+        #expect(failedMessage(module) == ShelfModule.noRoomText)
+        #expect(module.prompt == nil)
+        #expect(module.store.items.count == ShelfStore.capacity)
+        module.notchDidClose()
+        #expect(FileManager.default.fileExists(atPath: photo.path))
+    }
+
+    // MARK: Keyboard
+
+    @Test func tabReachesTheButtonsAndReturnPressesOnlyThatOne() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.startConversion([try fixture.file("Photo.jpg")])
+        try await waitUntil { isChoosing(module) }
+        let session = try #require(module.conversion)
+
+        // The row has the keyboard first; Tab goes on to the back button, ⇧Tab back to the row.
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.tab)))
+        #expect(session.control == .back)
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.tab, shift: true)))
+        #expect(session.control == .tiles)
+        // The arrows give it back to the row.
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.right))
+        #expect(session.control == nil)
+
+        // Return on the back button goes back; it doesn't convert the format the row was on.
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.return)))
+        #expect(module.conversion == nil)
+        #expect(module.store.items.isEmpty)
+    }
+
+    @Test func tabFocusSurvivesTheProbeFinishing() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.startConversion([try fixture.file("Photo.jpg")])
+        let session = try #require(module.conversion)
+        #expect(session.phase == .looking)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(session.control == .back)
+        try await waitUntil { isChoosing(module) }
+        #expect(session.control == .back)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.return))
+        #expect(module.conversion == nil)
+        #expect(module.store.items.isEmpty)
+    }
+
+    @Test func theResultCardsTakeTheKeyboardToo() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        let session = try #require(module.conversion)
+        #expect(done(module) != nil)
+
+        // Nothing is on a button until Tab; ⇧Tab starts from the end. Space presses Done.
+        #expect(session.control == nil)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(session.control == .open)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(session.control == .done)
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.space)))
+        #expect(module.conversion == nil)
+    }
+
+    @Test func returnPressesTheFailedCardsMainButtonOnce() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture, runner: FakeRunner(fails: true))
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        let session = try #require(module.conversion)
+        #expect(failedMessage(module) != nil)
+
+        // A key still held down from choosing the format doesn't press the card's button.
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.return, isRepeat: true)))
+        #expect(failedMessage(module) != nil)
+        // Tab to the second button; Return goes back to the Shelf.
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(session.control == .backToShelf)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.return))
+        #expect(module.conversion == nil)
+
+        // The main button is "Choose another format".
+        try await converted(module, [try fixture.file("Photo.jpg")])
+        #expect(module.handleKey(try ShelfKey.event(ShelfKey.return)))
+        #expect(module.conversion?.phase == .choosing)
+    }
+
 }

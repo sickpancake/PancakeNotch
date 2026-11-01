@@ -52,6 +52,22 @@ public struct AgentReview: Equatable, Sendable {
     }
 
     public let content: Content
+    /// A command or a file's place as one piece of text, for VoiceOver: only the command's real line breaks,
+    /// none from cutting it to fit the screen (`content`'s lines can't tell the two apart). Empty for a change.
+    public let text: String
+
+    init(content: Content, text: String? = nil) {
+        self.content = content
+        if let text {
+            self.text = text
+        } else {
+            self.text = switch content {
+            case .command(let lines): lines.joined(separator: "\n")
+            case .read(let lines): lines.joined()
+            case .edit: ""
+            }
+        }
+    }
 
     /// Screen lines are cut at this many columns (a non-ASCII character counts as two).
     public static let columns = 72
@@ -93,7 +109,7 @@ public struct AgentReview: Equatable, Sendable {
         guard !trimmed.isEmpty, trimmed.unicodeScalars.allSatisfy({ $0 == "\n" || (0x20...0x7E).contains($0.value) }),
               !trimmed.hasPrefix("*** Begin Patch"),
               let lines = wrapped(trimmed.components(separatedBy: "\n"), plain: true), lines.count <= rowLines else { return nil }
-        return AgentReview(content: .command(lines: lines))
+        return AgentReview(content: .command(lines: lines), text: trimmed)
     }
 
     // MARK: Edits
