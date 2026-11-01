@@ -95,8 +95,8 @@ struct TimerCenterTests {
         var rings = 0
         center.onFinish = { rings += 1 }
         center.startTimer(seconds: 1)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while rings == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        // Allows a busy CI machine: a 1-second alarm once took over 5 seconds to come with all the tests running.
+        try await settle { rings > 0 }
         #expect(rings == 1)
         #expect(center.timer.isDone)
     }
