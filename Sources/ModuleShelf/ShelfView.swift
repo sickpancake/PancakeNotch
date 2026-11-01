@@ -137,9 +137,18 @@ private struct ShelfDragAllHandle: View {
     }
 }
 
+/// A white ring just outside a button the keyboard is on (Tab), for the monochrome look's focus.
+extension View {
+    func keyFocusRing(_ isOn: Bool, in shape: some Shape) -> some View {
+        overlay { if isOn { shape.stroke(.white.opacity(0.9), lineWidth: 1.5).padding(-3) } }
+    }
+}
+
 struct ShelfPillButton: View {
     let title: String
     var prominent = false
+    /// The keyboard (Tab) is on this button.
+    var isKeyFocused = false
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
@@ -154,6 +163,7 @@ struct ShelfPillButton: View {
                 .frame(height: 22)
                 .background(.white.opacity(prominent ? (isHovered && isEnabled ? 0.88 : 1) : (isHovered && isEnabled ? 0.2 : 0.14)), in: Capsule())
                 .opacity(isEnabled ? 1 : 0.4)
+                .keyFocusRing(isKeyFocused, in: Capsule())
                 .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(.plain)
@@ -165,13 +175,25 @@ struct ShelfPillButton: View {
 
 private struct ShelfTileRow: View {
     let module: ShelfModule
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if module.isSnapshot {
             // Off-screen renders can't scroll: show what fits.
             tiles(limit: 7).frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            ScrollView(.horizontal, showsIndicators: false) { tiles(lazy: true) }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) { tiles(lazy: true) }
+                    // The arrow keys move the selection (or the ring) along a row that may run past the edge.
+                    .onChange(of: module.selectionCursor) { _, id in
+                        guard let id else { return }
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+                    }
+                    // Back from an item that was open: the row starts at the left again.
+                    .onAppear {
+                        if let id = module.selectionCursor, module.selection.contains(id) { proxy.scrollTo(id) }
+                    }
+            }
         }
     }
 
@@ -195,8 +217,10 @@ private struct ShelfTileRow: View {
                 thumbnail: module.thumbnails.images[item.id],
                 isSelected: module.selection.contains(item.id),
                 isChoosing: module.isChoosing,
+                isCursor: module.selectionCursor == item.id,
                 isCopied: module.copiedID == item.id
             )
+            .id(item.id)
             .onAppear { module.thumbnails.load(CollectionOfOne(item), scale: 2) }
         }
     }
@@ -208,6 +232,8 @@ struct ShelfTile: View {
     let thumbnail: NSImage?
     let isSelected: Bool
     let isChoosing: Bool
+    /// The keyboard's tile: ringed while choosing, when nothing else shows where Space would tick.
+    let isCursor: Bool
     let isCopied: Bool
 
     var body: some View {
@@ -251,6 +277,11 @@ struct ShelfTile: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(.white.opacity(isSelected ? 0.16 : 0))
         )
+        .overlay {
+            if isChoosing && isCursor {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.85), lineWidth: 1.5)
+            }
+        }
         .overlay {
             if !module.isSnapshot {
                 ShelfTileInteraction(module: module, itemID: item.id).accessibilityHidden(true)

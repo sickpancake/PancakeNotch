@@ -36,6 +36,7 @@ struct ShelfConvertView: View {
                         .font(.system(size: 11, weight: .bold))
                         .frame(width: 24, height: 22)
                         .background(.white.opacity(0.14), in: Capsule())
+                        .keyFocusRing(session.control == .back, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .help(String(localized: "Back to the Shelf"))
@@ -73,7 +74,7 @@ struct ShelfConvertView: View {
             ShelfConvertRow(module: module, session: session)
                 .transition(.opacity)
         case .done(let done):
-            ShelfConvertDoneCard(module: module, done: done)
+            ShelfConvertDoneCard(module: module, session: session, done: done)
                 .transition(.opacity)
         case .failed(let message):
             ShelfConvertFailedCard(module: module, session: session, message: message)
@@ -120,7 +121,8 @@ private struct ShelfConvertRow: View {
                     option: option,
                     state: state(of: option),
                     progress: session.progress,
-                    isFocused: session.focus == option.format,
+                    isFocused: session.focus == option.format && (session.control ?? .tiles) == .tiles,
+                    stopIsFocused: session.control == .stop,
                     choose: { module.chooseConvertFormat(option.format) },
                     stop: { module.stopConverting() }
                 )
@@ -168,6 +170,8 @@ struct ShelfConvertTile: View {
     let state: State
     let progress: Double
     let isFocused: Bool
+    /// Tab is on this tile's stop button.
+    var stopIsFocused = false
     let choose: () -> Void
     let stop: () -> Void
     @SwiftUI.State private var isHovered = false
@@ -217,6 +221,7 @@ struct ShelfConvertTile: View {
                         .font(.system(size: 9, weight: .bold))
                         .frame(width: 20, height: 20)
                         .background(.white.opacity(0.18), in: Circle())
+                        .keyFocusRing(stopIsFocused, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .padding(6)
@@ -299,6 +304,7 @@ struct ShelfConvertTile: View {
 
 private struct ShelfConvertDoneCard: View {
     let module: ShelfModule
+    let session: ShelfConversion
     let done: ShelfConversion.Done
 
     var body: some View {
@@ -323,13 +329,13 @@ private struct ShelfConvertDoneCard: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    ShelfPillButton(title: String(localized: "Open"), prominent: true) {
-                        for file in done.files.prefix(10) { NSWorkspace.shared.open(file) }
+                    ShelfPillButton(title: String(localized: "Open"), prominent: true, isKeyFocused: session.control == .open) {
+                        module.openConverted(done)
                     }
-                    ShelfPillButton(title: String(localized: "Show in Finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting(done.files)
+                    ShelfPillButton(title: String(localized: "Show in Finder"), isKeyFocused: session.control == .showInFinder) {
+                        module.revealConverted(done)
                     }
-                    ShelfPillButton(title: String(localized: "Done")) { module.endConversion() }
+                    ShelfPillButton(title: String(localized: "Done"), isKeyFocused: session.control == .done) { module.endConversion() }
                 }
                 .padding(.top, 6)
             }
@@ -347,7 +353,7 @@ private struct ShelfConvertDoneCard: View {
 
     /// The new file, ready to drag out (it's on the Shelf too, so it drags like a tile).
     private var preview: some View {
-        let item = done.files.first.flatMap { file in module.store.items.first { $0.path == file.path } }
+        let item = done.files.first.flatMap { file in module.store.items.first { $0.path == file.resolvingSymlinksInPath().path } }
         return Image(nsImage: NSWorkspace.shared.icon(forFile: done.files[0].path))
             .resizable()
             .aspectRatio(contentMode: .fit)
@@ -356,18 +362,23 @@ private struct ShelfConvertDoneCard: View {
                     ShelfTileInteraction(module: module, itemID: item.id).accessibilityHidden(true)
                 }
             }
-            .help(String(localized: "Drag to use it"))
+            .help(item == nil ? "" : String(localized: "Drag to use it"))
             .accessibilityHidden(true)
     }
 
     private var whereText: String {
         var lines: [String] = []
-        if module.keepsConvertedFiles {
+        if done.notOnShelf > 0 {
+            lines.append(String(localized: "Saved, but the Shelf is full: \(done.notOnShelf) not added. Press Done to make room.", comment: "Convert finished; the Shelf has no room for the new files"))
+        } else if module.keepsConvertedFiles {
             lines.append(String(localized: "Added to this practice Shelf.", comment: "Convert in the app window's practice Shelf"))
         } else if done.keptInShelf {
             lines.append(String(localized: "Kept in the Shelf: the folder can't be written to.", comment: "Convert: saved to the Shelf's own storage"))
         } else {
             lines.append(String(localized: "Saved, and added to the Shelf.", comment: "Convert finished"))
+        }
+        if done.notKept > 0 {
+            lines.append(String(localized: "\(done.notKept) couldn't be kept: the Shelf is full.", comment: "Convert: results with no room on the Shelf"))
         }
         if done.failed > 0 {
             lines.append(done.failed == 1
@@ -397,12 +408,12 @@ private struct ShelfConvertFailedCard: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    if session.options.contains(where: \.isAvailable) {
-                        ShelfPillButton(title: String(localized: "Choose another format"), prominent: true) {
+                    if session.canPickAnother {
+                        ShelfPillButton(title: String(localized: "Choose another format"), prominent: true, isKeyFocused: session.control == .anotherFormat) {
                             session.phase = .choosing
                         }
                     }
-                    ShelfPillButton(title: String(localized: "Back to the Shelf")) { module.endConversion() }
+                    ShelfPillButton(title: String(localized: "Back to the Shelf"), isKeyFocused: session.control == .backToShelf) { module.endConversion() }
                 }
                 .padding(.top, 6)
             }

@@ -4,6 +4,19 @@ import NotchCore
 import Testing
 @testable import ModuleShelf
 
+/// Key presses for the keyboard tests (the Shelf's panel hands them to `handleKey`).
+enum ShelfKey {
+    static let left: UInt16 = 123, right: UInt16 = 124, space: UInt16 = 49, `return`: UInt16 = 36
+    static let tab: UInt16 = 48, delete: UInt16 = 51, escape: UInt16 = 53
+
+    static func event(_ code: UInt16, shift: Bool = false, isRepeat: Bool = false) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: shift ? [.shift] : [], timestamp: 0, windowNumber: 0,
+            context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: isRepeat, keyCode: code
+        ))
+    }
+}
+
 @MainActor
 struct ShelfModuleTests {
     func makeModule(_ fixture: ShelfFixture, policy: ShelfSettings.DuplicatePolicy = .ask) -> (ShelfModule, NotchViewModel) {
@@ -261,4 +274,94 @@ struct ShelfModuleReviewTests {
         module.offer([.text("a")])
         #expect(notch.state == .expanded)
     }
+
+    // MARK: Keyboard cursor
+
+    /// The arrow keys move a cursor the tile row scrolls to, so the selected tile never sits off screen.
+    @Test func theCursorFollowsTheArrowKeys() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer(try fixture.files(12))
+        let ids = module.store.items.map(\.id)
+
+        func press(_ code: UInt16, shift: Bool = false) throws { #expect(module.handleKey(try ShelfKey.event(code, shift: shift))) }
+        for _ in 0..<8 { try press(ShelfKey.right) }
+        #expect(module.selectionCursor == ids[7])
+        #expect(module.selection == [ids[7]])
+
+        // ⇧ extends from where the selection started; the cursor is the far end.
+        try press(ShelfKey.right, shift: true)
+        try press(ShelfKey.right, shift: true)
+        #expect(module.selection == Set(ids[7...9]))
+        #expect(module.selectionCursor == ids[9])
+        try press(ShelfKey.left, shift: true)
+        #expect(module.selection == Set(ids[7...8]))
+        #expect(module.selectionCursor == ids[8])
+
+        // A click moves it too, and the end of the row stops it.
+        module.click(ids[2], modifiers: [])
+        #expect(module.selectionCursor == ids[2])
+        for _ in 0..<20 { try press(ShelfKey.right) }
+        #expect(module.selectionCursor == ids[11])
+
+        // A removed tile can't be the cursor.
+        module.remove([ids[11]])
+        #expect(module.selectionCursor == nil)
+    }
+
+    /// Choosing what to remove from the keyboard: arrows move a ring, Space or Return ticks, Delete removes.
+    @Test func choosingWorksFromTheKeyboard() throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.offer(try fixture.files(ShelfStore.capacity + 3))
+        guard case .full(let waiting) = module.prompt else { Issue.record("expected the full card"); return }
+        #expect(waiting.count == 3)
+        let ids = module.store.items.map(\.id)
+
+        module.startChoosing()
+        #expect(module.isChoosing)
+        #expect(module.selectionCursor == ids[0])
+
+        func press(_ code: UInt16, isRepeat: Bool = false) throws {
+            #expect(module.handleKey(try ShelfKey.event(code, isRepeat: isRepeat)))
+        }
+        try press(ShelfKey.right)
+        try press(ShelfKey.right)
+        #expect(module.selectionCursor == ids[2])
+        #expect(module.selection.isEmpty) // moving the ring doesn't tick
+
+        try press(ShelfKey.space)
+        #expect(module.selection == [ids[2]])
+        try press(ShelfKey.space, isRepeat: true) // a held key doesn't tick and untick
+        #expect(module.selection == [ids[2]])
+        try press(ShelfKey.right)
+        try press(ShelfKey.return)
+        #expect(module.selection == [ids[2], ids[3]]) // ticking adds: several can be chosen
+        try press(ShelfKey.left)
+        try press(ShelfKey.space)
+        #expect(module.selection == [ids[3]])
+
+        // The mouse still works and moves the ring with it.
+        module.click(ids[9], modifiers: [])
+        #expect(module.selection == [ids[3], ids[9]])
+        #expect(module.selectionCursor == ids[9])
+        #expect(module.isChoosing)
+
+        // Delete removes what's ticked; the waiting items take the room, and what still waits stays a choice.
+        try press(ShelfKey.delete)
+        #expect(!module.store.items.contains { ids[3] == $0.id || ids[9] == $0.id })
+        #expect(module.store.items.count == ShelfStore.capacity)
+        guard case .choosing(let rest) = module.prompt else { Issue.record("expected to keep choosing"); return }
+        #expect(rest.count == 1)
+        // Delete with nothing ticked removes nothing.
+        module.selection = []
+        let count = module.store.items.count
+        try press(ShelfKey.delete)
+        #expect(module.store.items.count == count)
+
+        // Esc goes back to the full card, as before.
+        try press(ShelfKey.escape)
+        #expect(module.prompt == .full(pending: rest))
+    }
+
 }

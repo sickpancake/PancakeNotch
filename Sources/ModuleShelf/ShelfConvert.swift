@@ -27,13 +27,29 @@ final class ShelfConversion {
         var failed: Int
         /// Kept in the Shelf's own storage, because where it would have gone can't be written to.
         var keptInShelf: Bool
+        /// Saved files the Shelf has no room for (its card waits for an answer). They're safe where they are.
+        var notOnShelf = 0
+        /// Results that could only have stayed in the Shelf, which had no room: not kept.
+        var notKept = 0
+    }
+
+    /// A button the keyboard reaches: Tab moves along them, Return and Space press the one it's on.
+    enum Control: Equatable {
+        /// The row of formats (the arrow keys choose among them).
+        case tiles, stop, open, showInFinder, done, anotherFormat, backToShelf, back
     }
 
     var sources: [URL]
     var options: [ConvertOption] = []
     /// The tile the arrow keys are on.
     var focus: ConvertFormat?
-    var phase: Phase
+    /// The button Tab last moved to; nil until it does (Return then presses the card's main button).
+    var control: Control?
+    var phase: Phase {
+        didSet { control = nil }
+    }
+    /// Another format can't help: the result has no room on the Shelf.
+    var roomIsShort = false
     var progress = 0.0
     /// The notch closed while it converted: it carries on, and says so in a strip under the notch.
     var isDetached = false
@@ -59,6 +75,30 @@ final class ShelfConversion {
     }
 
     var focusedOption: ConvertOption? { options.first { $0.format == focus } }
+
+    /// "Choose another format" has something to offer.
+    var canPickAnother: Bool { !roomIsShort && options.contains(where: \.isAvailable) }
+
+    /// The buttons on screen now, in Tab order.
+    var controls: [Control] {
+        switch phase {
+        case .receiving: [.back]
+        case .looking, .choosing: [.tiles, .back]
+        case .converting: [.stop, .back]
+        case .done: [.open, .showInFinder, .done, .back]
+        case .failed: (canPickAnother ? [.anotherFormat] : []) + [.backToShelf, .back]
+        }
+    }
+
+    /// What Return presses before Tab has picked anything: the picked format, or the card's main button.
+    var mainControl: Control? {
+        switch phase {
+        case .looking, .choosing: .tiles
+        case .done: .open
+        case .failed: controls.first
+        case .receiving, .converting: nil
+        }
+    }
 }
 
 extension ShelfModule {
@@ -174,8 +214,13 @@ extension ShelfModule {
     /// A tile was picked (click, Return): convert every file to it.
     func chooseConvertFormat(_ format: ConvertFormat) {
         guard let session = visibleConversion, session.phase == .choosing, let runner = convertRunner,
-              session.options.contains(where: { $0.format == format && $0.isAvailable }),
-              let output = try? ShelfSharing.makeTemporaryFolder() else { return }
+              session.options.contains(where: { $0.format == format && $0.isAvailable }) else { return }
+        guard canKeepResults(of: session, as: format) else {
+            session.roomIsShort = true
+            session.phase = .failed(Self.noRoomText)
+            return
+        }
+        guard let output = try? ShelfSharing.makeTemporaryFolder() else { return }
         session.focus = format
         session.progress = 0
         session.phase = .converting(format)
@@ -215,12 +260,29 @@ extension ShelfModule {
         session.progress = 0
     }
 
+    /// Results with no folder to go to stay in the Shelf's own storage, so they need room on the Shelf
+    /// (and no card waiting: closing it deletes what waits). Checked before converting, not after.
+    private func canKeepResults(of session: ShelfConversion, as format: ConvertFormat) -> Bool {
+        let sources = format == .combinedPDF ? Array(session.sources.prefix(1)) : session.sources
+        let needed = sources.filter { convertDestination(for: $0) == nil }.count
+        return needed == 0 || (prompt == nil && needed <= ShelfStore.capacity - store.items.count)
+    }
+
+    static var noRoomText: String {
+        String(localized: "The Shelf is full and this result can only be kept there. Make room on the Shelf, then convert again.", comment: "Convert: nowhere to save the result")
+    }
+
     /// Moves what the helper made to where it goes, never over an existing file, and adds it to the Shelf.
     private func finish(_ session: ShelfConversion, format: ConvertFormat, message: ConvertMessage, output: URL) {
         defer { try? FileManager.default.removeItem(at: output) }
         var files: [URL] = []
-        var inputs: [ShelfInput] = []
+        // What only the Shelf keeps goes first: it must get its place, and the Shelf deletes it if it waits.
+        var kept: [ShelfInput] = []
+        var beside: [ShelfInput] = []
         var keptInShelf = false
+        var notKept = 0
+        var couldntMove = 0
+        var room = prompt == nil ? max(0, ShelfStore.capacity - store.items.count) : 0
         for made in message.outputs ?? [] {
             let produced = URL(fileURLWithPath: made.path)
             let source = made.source.flatMap { session.sources.indices.contains($0) ? session.sources[$0] : nil } ?? session.sources.first
@@ -239,28 +301,45 @@ extension ShelfModule {
                 let target = ConvertNaming.uniqueURL(in: folder, base: base, ext: ext)
                 if (try? FileManager.default.moveItem(at: produced, to: target)) != nil {
                     files.append(target)
-                    inputs.append(.file(target, owned: false))
+                    beside.append(.file(target, owned: false))
                     continue
                 }
             }
-            // The usual place can't be written to: the Shelf keeps it.
-            guard let folder = try? store.newFilesFolder() else { continue }
+            // The usual place can't be written to: the Shelf keeps it, if it has room.
+            guard room > 0 else {
+                notKept += 1
+                continue
+            }
+            guard let folder = try? store.newFilesFolder() else {
+                couldntMove += 1
+                continue
+            }
             let target = ConvertNaming.uniqueURL(in: folder, base: base, ext: ext)
             if (try? FileManager.default.moveItem(at: produced, to: target)) != nil {
                 files.append(target)
-                inputs.append(.file(target, owned: true))
+                kept.append(.file(target, owned: true))
                 keptInShelf = true
+                room -= 1
+            } else {
+                couldntMove += 1
             }
         }
         let failures = message.errors ?? []
         guard !files.isEmpty else {
-            session.phase = .failed((failures.first?.failure ?? .failed).message)
+            session.roomIsShort = notKept > 0
+            session.phase = .failed(notKept > 0 ? Self.noRoomText : (failures.first?.failure ?? .failed).message)
             AccessibilityNotification.Announcement(String(localized: "Couldn't convert", comment: "VoiceOver; Convert failed")).post()
             return
         }
-        session.phase = .done(ShelfConversion.Done(format: format, files: files, failed: failures.count, keptInShelf: keptInShelf))
+        offer(kept + beside)
+        // Anything the Shelf couldn't take now waits on its card: the card says so.
+        let onShelf = Set(store.items.compactMap(\.path))
+        let notOnShelf = files.filter { !onShelf.contains($0.resolvingSymlinksInPath().path) }.count
+        session.phase = .done(ShelfConversion.Done(
+            format: format, files: files, failed: failures.count + couldntMove, keptInShelf: keptInShelf,
+            notOnShelf: notOnShelf, notKept: notKept
+        ))
         AccessibilityNotification.Announcement(Self.doneText(files: files)).post()
-        offer(inputs)
     }
 
     /// Where a converted file goes: the chosen folder, or beside the original. Nil: the Shelf keeps it
@@ -339,12 +418,14 @@ extension ShelfModule {
 
     // MARK: Keys and clicks
 
-    /// Arrows move along the row, Return converts, Esc stops or goes back.
+    /// Arrows move along the row, Tab moves along the buttons, Return and Space press the one it's on,
+    /// Esc stops or goes back.
     func handleConvertKey(_ event: NSEvent) -> Bool {
         guard let session = visibleConversion else { return false }
         switch event.keyCode {
         case 123, 124: // ← →
             guard session.phase == .choosing || session.phase == .looking else { return true }
+            session.control = nil
             let formats = session.options.map(\.format)
             guard let current = session.focus.flatMap(formats.firstIndex(of:)) else {
                 session.focus = formats.first
@@ -352,8 +433,21 @@ extension ShelfModule {
             }
             session.focus = formats[min(max(current + (event.keyCode == 123 ? -1 : 1), 0), formats.count - 1)]
             return true
+        case 48: // Tab, ⇧Tab
+            if event.modifierFlags.contains(.command) { return false }
+            let controls = session.controls
+            // The row is where the keyboard starts while it shows; a card has nothing picked until Tab.
+            let start = session.control ?? (session.mainControl == .tiles ? .tiles : nil)
+            let step = event.modifierFlags.contains(.shift) ? -1 : 1
+            if let index = start.flatMap(controls.firstIndex(of:)) {
+                session.control = controls[(index + step + controls.count) % controls.count]
+            } else {
+                session.control = step > 0 ? controls.first : controls.last
+            }
+            return true
         case 36, 76, 49: // Return, Enter, Space
-            if session.phase == .choosing, let focus = session.focus { chooseConvertFormat(focus) }
+            // A held key mustn't press the next card's button too.
+            if !event.isARepeat, let control = session.control ?? session.mainControl { press(control, in: session) }
             return true
         case 53: // Esc
             if session.isConverting { stopConverting() } else { endConversion() }
@@ -362,6 +456,27 @@ extension ShelfModule {
             // ⌘ shortcuts (⌘Q…) still go through.
             return !event.modifierFlags.contains(.command)
         }
+    }
+
+    /// One button, from the keyboard (the views call the same actions for a click).
+    private func press(_ control: ShelfConversion.Control, in session: ShelfConversion) {
+        switch control {
+        case .tiles:
+            if session.phase == .choosing, let focus = session.focus { chooseConvertFormat(focus) }
+        case .stop: stopConverting()
+        case .open: if case .done(let done) = session.phase { openConverted(done) }
+        case .showInFinder: if case .done(let done) = session.phase { revealConverted(done) }
+        case .anotherFormat: session.phase = .choosing
+        case .done, .backToShelf, .back: endConversion()
+        }
+    }
+
+    func openConverted(_ done: ShelfConversion.Done) {
+        for file in done.files.prefix(10) { NSWorkspace.shared.open(file) }
+    }
+
+    func revealConverted(_ done: ShelfConversion.Done) {
+        NSWorkspace.shared.activateFileViewerSelecting(done.files)
     }
 
     /// While the row shows, a click in another app (or switching apps) puts it away, like an open item.

@@ -67,8 +67,9 @@ public final class ShelfModule: NotchModule {
         didSet { if selection.count != oldValue.count { onEvent?(.selectionChanged(count: selection.count)) } }
     }
     @ObservationIgnored private var selectionAnchor: UUID?
-    /// The far end of a keyboard-extended selection.
-    @ObservationIgnored private var selectionCursor: UUID?
+    /// The far end of a keyboard-extended selection, and the tile the keyboard is on while choosing.
+    /// The tile row scrolls to it and, while choosing, rings it.
+    private(set) var selectionCursor: UUID?
     var dropZone: DropZone?
     /// The drag over the notch can be AirDropped (shows the AirDrop zone).
     var dragCanAirDrop = false
@@ -405,6 +406,7 @@ public final class ShelfModule: NotchModule {
             return closes
         }
         let command = event.modifierFlags.contains(.command)
+        if isChoosing, let handled = handleChoosingKey(event) { return handled }
         switch event.keyCode {
         case 49: // Space, like a click: show the item in the tall notch
             guard prompt == nil else { return false }
@@ -438,6 +440,22 @@ public final class ShelfModule: NotchModule {
             return false
         default:
             return false
+        }
+    }
+
+    /// Choosing items to remove: Space and Return tick the tile the cursor is on (like a click), Delete
+    /// removes the ticked ones. Nil: the key isn't special while choosing.
+    private func handleChoosingKey(_ event: NSEvent) -> Bool? {
+        switch event.keyCode {
+        case 49, 36, 76: // Space, Return, Enter
+            // A held key would tick and untick.
+            if !event.isARepeat, let id = selectionCursor ?? store.items.first?.id { click(id, modifiers: []) }
+            return true
+        case 51, 117: // Delete, Forward Delete
+            if !selection.isEmpty { removeChosen() }
+            return true
+        default:
+            return nil
         }
     }
 
@@ -558,6 +576,7 @@ public final class ShelfModule: NotchModule {
     func startChoosing() {
         guard case .full(let pending) = prompt else { return }
         selection = []
+        selectionCursor = store.items.first?.id
         prompt = .choosing(pending: pending)
     }
 
@@ -658,6 +677,7 @@ public final class ShelfModule: NotchModule {
         let ids = Set(store.items.map(\.id))
         selection.formIntersection(ids)
         if let detailID, !ids.contains(detailID) { setHold { $0.detailID = nil } }
+        if let selectionCursor, !ids.contains(selectionCursor) { self.selectionCursor = nil }
         thumbnails.keepOnly(ids)
         if notch?.state == .expanded { thumbnails.load(store.items.prefix(ShelfThumbnails.firstVisible), scale: 2) }
         if store.items.isEmpty { confirmingClear = false }
@@ -683,6 +703,7 @@ public final class ShelfModule: NotchModule {
         confirmingClear = false
         if case .choosing = prompt {
             selection.formSymmetricDifference([id])
+            selectionCursor = id
             return
         }
         if modifiers.contains(.command) {
@@ -707,7 +728,7 @@ public final class ShelfModule: NotchModule {
         let next = current.map { min(max($0 + step, 0), ids.count - 1) } ?? (step > 0 ? 0 : ids.count - 1)
         selectionCursor = ids[next]
         if isChoosing {
-            return // While choosing, a click (or VoiceOver's default action) toggles; arrows don't.
+            return // While choosing, the arrows only move the ring; Space, a click or VoiceOver toggles.
         }
         if extending, let anchor = selectionAnchor.flatMap({ ids.firstIndex(of: $0) }) {
             selection = Set(ids[min(anchor, next)...max(anchor, next)])
