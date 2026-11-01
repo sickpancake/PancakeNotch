@@ -336,7 +336,7 @@ private struct TimerRunning: View {
         return layout {
             HStack(spacing: isCompact ? 10 : 18) {
                 ZStack {
-                    TimerRing(fraction: timer.fractionLeft(at: now), size: ringSize, lineWidth: isCompact ? 3 : 4)
+                    TimerRing(module: module, size: ringSize, lineWidth: isCompact ? 3 : 4)
                     Image(systemName: timer.isPaused ? "pause.fill" : module.symbol)
                         .font(.system(size: ringSize * 0.3, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.7))
@@ -350,8 +350,6 @@ private struct TimerRunning: View {
                         weight: .medium,
                         style: module.settings.digitAnimation
                     )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
                     Text(statusLine(timer))
                         .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
@@ -489,18 +487,16 @@ struct StopwatchPane: View {
 
     private func digits(now: Date) -> some View {
         let elapsed = module.center.stopwatch.elapsed(at: now)
-        // Past an hour the time is three digits longer: a smaller size keeps it in place.
-        let size: CGFloat = (isCompact ? 26 : 40) * (elapsed >= 3_600 ? 0.78 : 1)
+        // Always hours, minutes, seconds and hundredths ("00:00:00.00"), so it's as wide at the start as after
+        // ten hours: nothing shrinks, nothing moves.
         return DrumText(
             text: TimerText.precise(elapsed),
-            size: size,
+            size: isCompact ? 26 : 40,
             weight: .medium,
             style: module.settings.digitAnimation,
             direction: .up,
             steadyDigits: 2
         )
-        .lineLimit(1)
-        .fixedSize()
         .accessibilityLabel(Text("Stopwatch, \(TimerText.spoken(elapsed.rounded(.down)))"))
     }
 
@@ -609,7 +605,7 @@ private struct LapRow: View {
                 Text(TimerText.precise(lap.total))
                     .font(.system(size: 10.5).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 66, alignment: .trailing)
+                    .frame(width: 70, alignment: .trailing)
             }
         }
         .lineLimit(1)

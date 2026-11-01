@@ -31,6 +31,9 @@ public final class TimerCenter {
     public var customSeconds: TimeInterval { didSet { defaults?.set(customSeconds, forKey: Keys.customSeconds) } }
     /// The timer ran out while the app wasn't running (found at launch): it shows Done without ringing.
     public private(set) var finishedWhileAway = false
+    /// Goes up each time the Mac woke or the clock changed. Things that follow the time on their own
+    /// (the ring's animation) start from the new time when it changes.
+    public private(set) var clockEpoch = 0
 
     /// A timer just finished: play the sound, open the notch. Called once per finish.
     @ObservationIgnored public var onFinish: (() -> Void)?
@@ -154,6 +157,7 @@ public final class TimerCenter {
     /// The Mac woke or the clock changed: a timer that's due finishes now, otherwise the alarm is set
     /// again for the end date on the new clock.
     public func timeMayHaveJumped() {
+        clockEpoch += 1
         correctStopwatch()
         if !checkFinished() { scheduleAlarm() }
     }
