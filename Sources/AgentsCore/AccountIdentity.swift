@@ -34,13 +34,12 @@ enum AccountIdentity {
         return Claude(email: account["emailAddress"] as? String, plan: plan, billing: .plan, limits: limits)
     }
 
-    /// "claude_max" + "default_claude_max_5x" → "Max 5×".
+    /// "claude_max" + "default_claude_max_5x" → "Max".
     static func claudePlan(type: String?, tier: String?) -> String? {
         switch type {
         case "claude_pro": return "Pro"
         case "claude_max":
-            if tier?.contains("20x") == true { return "Max 20×" }
-            if tier?.contains("5x") == true { return "Max 5×" }
+            if tier?.contains("20x") == true { return "Ultra" }
             return "Max"
         case "claude_team": return "Team"
         case "claude_enterprise": return "Enterprise"

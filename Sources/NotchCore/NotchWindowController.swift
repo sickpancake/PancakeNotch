@@ -43,7 +43,7 @@ public final class NotchWindowController {
         didSet {
             guard isHiddenForFullScreen != oldValue else { return }
             // Open right now (the user is in it): it hides once it has closed.
-            isRevealed = isHiddenForFullScreen && model?.state == .expanded
+            isRevealed = isHiddenForFullScreen && (model?.state == .expanded || model?.layout.isPeeking == true)
             updateVisibility()
         }
     }
@@ -123,7 +123,7 @@ public final class NotchWindowController {
     /// Back to hidden once the notch the shortcut opened has finished closing (or shrinking: in full
     /// screen nothing stays around the notch).
     private func hideAfterReveal() {
-        guard isRevealed, let model, model.state != .expanded else { return }
+        guard isRevealed, let model, model.state != .expanded, !model.layout.isPeeking else { return }
         isRevealed = false
         updateVisibility()
     }
@@ -155,6 +155,7 @@ public final class NotchWindowController {
     }
 
     private func updateVisibility() {
+        model?.automaticPeeksAvailable = hasGeometry && !isSuppressed && isEnabled
         if isShowing {
             panel?.orderFrontRegardless()
         } else {
@@ -206,7 +207,16 @@ public final class NotchWindowController {
         model.onOpen = onOpen
         model.onModuleShown = onModuleShown
         model.openSettings = openSettings
-        model.modules = modules
+        model.automaticPeeksAvailable = hasGeometry && !isSuppressed && isEnabled
+        model.prepareAutomaticPeek = { [weak self] reveal in
+            guard let self, self.hasGeometry, self.isEnabled, !self.isSuppressed else { return false }
+            if self.isHiddenForFullScreen, !self.isRevealed {
+                guard reveal else { return false }
+                self.isRevealed = true
+                self.updateVisibility()
+            }
+            return true
+        }
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
@@ -228,6 +238,9 @@ public final class NotchWindowController {
         self.model = model
         self.panel = panel
         self.container = container
+        // Attaching can immediately present a queued reset. Give it the real panel and fitWindow
+        // callback first, so the initial strip gets its full height and full-screen reveal lifetime.
+        model.modules = modules
         watchScrolls()
         updateDragWatcher()
     }

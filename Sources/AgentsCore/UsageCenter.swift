@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import Stats
@@ -13,6 +14,7 @@ public final class UsageCenter {
 
     /// Grouped by tool (Claude Code, then Codex), the standard folder first.
     public private(set) var accounts: [AgentAccount] = []
+    @ObservationIgnored private var discoveredAccounts: [AgentAccount] = []
     /// By account ID.
     public private(set) var limits: [String: AccountLimits] = [:]
     /// The selected account and range.
@@ -96,6 +98,17 @@ public final class UsageCenter {
     /// A user action in the practice notch, for the lessons.
     @ObservationIgnored public var onPracticeEvent: (@MainActor (UsagePracticeEvent) -> Void)?
 
+    @ObservationIgnored public var onResetsPending: (@MainActor () -> Void)?
+    @ObservationIgnored public private(set) var pendingResets: [LimitReset] = []
+    public nonisolated static let resetFreshness: TimeInterval = 30 * 60
+    public nonisolated static let resetGrouping: TimeInterval = 60
+    private struct SavedResetState: Codable {
+        let tracker: LimitResetTracker
+        let pending: [LimitReset]
+    }
+    @ObservationIgnored private var resetTracker = LimitResetTracker()
+    @ObservationIgnored private var clockObservers: [(NotificationCenter, any NSObjectProtocol)] = []
+
     public nonisolated static let nearLimitPercent: Double = 10
 
     @ObservationIgnored private var live: LiveUsageSources?
@@ -111,6 +124,21 @@ public final class UsageCenter {
         self.settings = settings
         self.stats = stats
         isPractice = false
+        if let saved = settings.resetWindows,
+           let restored = try? JSONDecoder().decode(SavedResetState.self, from: saved) {
+            resetTracker = restored.tracker
+            let now = Date()
+            noteResets(restored.pending + resetTracker.check(now: now), now: now)
+        }
+        settings.onResetPreferenceChange = { [weak self] wasAllowed in
+            guard let self else { return }
+            // A sleeping task may be delivered late. Settle elapsed windows under the previous
+            // preference, so turning notices back on cannot revive a reset that happened while off.
+            self.noteResets(self.resetTracker.check(now: Date()), now: Date(), allowed: wasAllowed)
+            if !self.settings.peeksOnReset || !self.settings.usageEnabled { self.discardPendingResets() }
+            self.saveResetWindows()
+            self.scheduleReset()
+        }
     }
 
     private init(practiceSettings: AgentsSettings) {
@@ -126,6 +154,7 @@ public final class UsageCenter {
         guard !isPractice, live == nil else { return }
         let sources = LiveUsageSources(center: self, stats: stats)
         live = sources
+        watchClock()
         sources.start()
         if viewers > 0 { sources.setVisible(true) }
     }
@@ -133,9 +162,14 @@ public final class UsageCenter {
     public func stop() {
         resetTask?.cancel()
         resetTask = nil
+        for (center, token) in clockObservers { center.removeObserver(token) }
+        clockObservers = []
+        // Pending resets remain recoverable in the saved windows until displayed or discarded.
+        pendingResets = []
         live?.stop()
         live = nil
         accounts = []
+        discoveredAccounts = []
         limits = [:]
         totals = .zero
         firstReadProgress = nil
@@ -174,37 +208,134 @@ public final class UsageCenter {
     // MARK: Updates from the sources
 
     func setAccounts(_ found: [AgentAccount]) {
-        accounts = found.map { account in
-            var named = account
-            if let nickname = settings.nicknames[account.id] { named.name = nickname }
-            return named
-        }
+        discoveredAccounts = found
+        accounts = AgentAccount.named(found, nicknames: settings.nicknames)
         limits = limits.filter { id, _ in accounts.contains { $0.id == id } }
+        let ids = Set(accounts.map(\.id))
+        resetTracker.keep(accountIDs: ids)
+        pendingResets.removeAll { !ids.contains($0.accountID) }
+        saveResetWindows()
         refreshTotals()
     }
 
-    func setLimits(_ value: AccountLimits, for accountID: String) {
-        guard limits[accountID] != value else { return }
+    func setLimits(_ value: AccountLimits, for accountID: String, now: Date = .now) {
+        guard accounts.contains(where: { $0.id == accountID }), limits[accountID] != value else { return }
         limits[accountID] = value
+        if value.state == .noLimits {
+            pendingResets.filter { $0.accountID == accountID }.forEach(markHandled)
+            pendingResets.removeAll { $0.accountID == accountID }
+        }
+        let resets = resetTracker.observe(accountID: accountID, limits: value, now: now)
+        // A provider may correct a window's end after it was queued. Keep that correction, including
+        // when it moves back into the future, without confusing it with the next real window.
+        pendingResets = pendingResets.map { reset in
+            guard let window = resetTracker.windows[reset.key], window.identityAt == reset.identityAt,
+                  let corrected = window.reset else { return reset }
+            return corrected
+        }.sorted { $0.endedAt < $1.endedAt }
+        noteResets(resets, now: now)
+        saveResetWindows()
         checkNearLimit(accountID)
         scheduleReset()
+        onResetsPending?()
     }
 
-    /// A single wake-up at the next known reset removes an expired ear without polling while idle.
+    /// One sleeping task for the next window end or the end of a 60-second grouping interval.
     private func scheduleReset() {
         resetTask?.cancel()
         let now = Date()
-        guard !isPractice, let next = limits.values.flatMap(\.limits).compactMap(\.resetsAt).filter({ $0 > now }).min() else {
-            resetTask = nil
-            return
-        }
+        let known = limits.values.flatMap(\.limits).compactMap(\.resetsAt).filter { $0 > now }
+        let expires = pendingResets.first?.endedAt.addingTimeInterval(Self.resetFreshness + 0.01)
+        let candidates = known + [resetTracker.nextEnd(after: now), nextResetDelivery, expires].compactMap { $0 }.filter { $0 > now }
+        guard !isPractice, let next = candidates.min() else { resetTask = nil; return }
         resetTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(next.timeIntervalSince(now))) } catch { return }
-            guard let self else { return }
-            self.limitsRevision += 1
-            for account in self.accounts { self.checkNearLimit(account.id) }
-            self.scheduleReset()
+            self?.timeMayHaveChanged()
         }
+    }
+
+    func timeMayHaveChanged(now: Date = .now) {
+        limitsRevision += 1
+        noteResets(resetTracker.check(now: now), now: now)
+        saveResetWindows()
+        for account in accounts { checkNearLimit(account.id) }
+        scheduleReset()
+        onResetsPending?()
+    }
+
+    private func watchClock() {
+        guard clockObservers.isEmpty else { return }
+        for (center, name) in [
+            (NSWorkspace.shared.notificationCenter, NSWorkspace.didWakeNotification),
+            (NotificationCenter.default, Notification.Name.NSSystemClockDidChange),
+            (NotificationCenter.default, Notification.Name.NSSystemTimeZoneDidChange)
+        ] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.timeMayHaveChanged() }
+            }
+            clockObservers.append((center, token))
+        }
+    }
+
+    private func saveResetWindows() {
+        settings.resetWindows = try? JSONEncoder().encode(SavedResetState(tracker: resetTracker, pending: pendingResets))
+    }
+
+    private func noteResets(_ resets: [LimitReset], now: Date, allowed: Bool? = nil) {
+        for reset in resets {
+            guard reset.identityAt.timeIntervalSince1970 > (settings.handledResets[reset.key] ?? 0) + LimitResetTracker.sameWindow else { continue }
+            guard allowed ?? (settings.peeksOnReset && settings.usageEnabled),
+                  reset.endedAt > (settings.resetNoticesEnabledAfter ?? .distantPast),
+                  now.timeIntervalSince(reset.endedAt) <= Self.resetFreshness else { markHandled(reset); continue }
+            if !pendingResets.contains(where: { $0.key == reset.key && abs($0.identityAt.timeIntervalSince(reset.identityAt)) <= LimitResetTracker.sameWindow }) {
+                pendingResets.append(reset)
+            }
+        }
+        pendingResets.sort { $0.endedAt == $1.endedAt ? $0.key < $1.key : $0.endedAt < $1.endedAt }
+    }
+
+    public var nextResetDelivery: Date? {
+        pendingResets.first?.endedAt.addingTimeInterval(Self.resetGrouping)
+    }
+
+    /// Resets within a minute share one strip. Later groups wait for the previous strip to finish.
+    public func nextResetNotice(now: Date = .now) -> LimitResetNotice? {
+        guard settings.peeksOnReset, settings.usageEnabled else { discardPendingResets(); return nil }
+        let stale = pendingResets.filter { now.timeIntervalSince($0.endedAt) > Self.resetFreshness }
+        stale.forEach(markHandled)
+        pendingResets.removeAll { stale.contains($0) }
+        if !stale.isEmpty { saveResetWindows() }
+        guard let first = pendingResets.first, now >= first.endedAt.addingTimeInterval(Self.resetGrouping) else { return nil }
+        let items = pendingResets.filter { $0.endedAt.timeIntervalSince(first.endedAt) <= Self.resetGrouping && $0.endedAt <= now }.compactMap { reset in
+            accounts.first { $0.id == reset.accountID }.map { LimitResetNotice.Item(account: $0, reset: reset) }
+        }
+        return items.isEmpty ? nil : LimitResetNotice(items: items)
+    }
+
+    /// Called only after the notch accepts the strip, never merely when it was requested.
+    public func resetNoticeStarted(_ notice: LimitResetNotice) {
+        notice.items.forEach { markHandled($0.reset) }
+        pendingResets.removeAll { reset in notice.items.contains { $0.reset == reset } }
+        saveResetWindows()
+        scheduleReset()
+    }
+
+    private func discardPendingResets() {
+        pendingResets.forEach(markHandled)
+        pendingResets = []
+        saveResetWindows()
+        scheduleReset()
+    }
+
+    private func markHandled(_ reset: LimitReset) {
+        // This per-limit high-water mark must not expire: a later wall-clock rollback can make an
+        // old provider file look fresh again. At most one number is stored for each known limit.
+        settings.handledResets[reset.key] = max(settings.handledResets[reset.key] ?? 0, reset.identityAt.timeIntervalSince1970)
+    }
+
+    public func exampleResetNotice(now: Date = .now) -> LimitResetNotice? {
+        guard isPractice, let account = accounts.first(where: { $0.plan == "Max" }) ?? accounts.first else { return nil }
+        return LimitResetNotice(items: [.init(account: account, reset: LimitReset(accountID: account.id, kind: .session, endedAt: now, leftBefore: 8))])
     }
 
     func setTotals(_ value: UsageTotals) {
@@ -241,11 +372,7 @@ public final class UsageCenter {
 
     /// The nickname changed in Settings.
     public func renamed() {
-        setAccounts(accounts.map { account in
-            var plain = account
-            plain.name = account.email ?? account.tool.shortName
-            return plain
-        })
+        setAccounts(discoveredAccounts)
     }
 
     private func checkNearLimit(_ accountID: String) {
