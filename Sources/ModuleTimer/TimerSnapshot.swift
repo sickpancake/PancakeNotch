@@ -97,6 +97,18 @@ public enum TimerSnapshot {
                 timer.beginEditing(.minutes)
                 timer.typed = "4"
             },
+            // The "Timer done" strip: just ended, and ended a while ago (the longest line it has to fit).
+            model(.compact, [module { center, clock in
+                center.startTimer(seconds: 5 * 60)
+                clock.advance(5 * 60)
+                center.timeMayHaveJumped()
+            }]) { $0.peekForSnapshot($0.modules[0]) },
+            model(.compact, [module { center, clock in
+                center.startTimer(seconds: 90 * 60)
+                clock.advance(90 * 60)
+                center.timeMayHaveJumped()
+                clock.advance(8 * 60)
+            }]) { $0.peekForSnapshot($0.modules[0]) },
             model(.expanded, [module(settings: { settings in
                 settings.sideBySide = true
                 for index in 1...7 { _ = settings.addPreset(seconds: TimeInterval(index * 60), name: "Quick time \(index)") }

@@ -10,11 +10,14 @@ final class SecondEarModule: NotchModule {
     var isActive = true
     var prefersSecondEar = true
     var opensFromEar = true
+    /// Has a "Timer done" strip to show (`peekView`).
+    var hasStrip = false
     weak var notch: NotchViewModel?
 
     init(_ id: String = "timer") { moduleID = id }
 
     func attach(to notch: NotchViewModel?) { self.notch = notch }
+    func peekView(layout: NotchLayout) -> AnyView? { hasStrip ? AnyView(EmptyView()) : nil }
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
     func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(EmptyView()), extra: AnyView(EmptyView()), soloMain: AnyView(EmptyView()))
@@ -226,5 +229,60 @@ struct AttentionVisibilityTests {
         controller.isHiddenForFullScreen = true
         controller.model?.requestAttention(from: timer, revealsInFullScreen: true)
         #expect(!controller.isShowing)
+    }
+
+    // MARK: The strip instead of the open notch (TimerAlarm.tla, DoneAlert "strip")
+
+    /// StripOnlyWhereShown: switched off, the strip mustn't slide out behind a hidden window.
+    @Test func switchedOffNoStrip() {
+        let (controller, timer) = makeController()
+        timer.hasStrip = true
+        controller.isEnabled = false
+        controller.model?.requestPeek(from: timer, for: .seconds(10), revealsInFullScreen: true)
+        #expect(controller.model?.layout.isPeeking == false)
+        controller.isEnabled = true
+        #expect(controller.model?.layout.isPeeking == false)
+    }
+
+    /// SoundOnlyStaysHidden: over a full-screen app the strip shows only when asked, and the window hides
+    /// again when the strip has gone (RevealOnlyWhileOpen).
+    @Test func overFullScreenTheStripOnlyWhenAsked() async throws {
+        let (controller, timer) = makeController()
+        timer.hasStrip = true
+        controller.isHiddenForFullScreen = true
+        controller.model?.requestPeek(from: timer, for: .seconds(10), revealsInFullScreen: false)
+        #expect(!controller.isShowing)
+        #expect(controller.model?.layout.isPeeking == false)
+        controller.model?.requestPeek(from: timer, for: .milliseconds(60), revealsInFullScreen: true)
+        #expect(controller.isShowing)
+        #expect(controller.model?.layout.isPeeking == true)
+        #expect(controller.model?.state != .expanded)
+        try await settle(.milliseconds(100)) { controller.model?.layout.isPeeking == false && !controller.isShowing }
+        #expect(controller.model?.layout.isPeeking == false)
+        #expect(!controller.isShowing)
+    }
+
+    /// The window stays up under a revealed strip (it must not hide the moment the strip starts), and
+    /// opening it from the strip works like any open.
+    @Test func aRevealedStripKeepsTheWindowUpAndOpens() {
+        let (controller, timer) = makeController()
+        timer.hasStrip = true
+        controller.isHiddenForFullScreen = true
+        controller.model?.requestPeek(from: timer, for: .seconds(10), revealsInFullScreen: true)
+        #expect(controller.isShowing)
+        controller.model?.open()
+        #expect(controller.model?.state == .expanded)
+        #expect(controller.model?.layout.isPeeking == false)
+        #expect(controller.isShowing)
+    }
+
+    /// Mission Control: no strip over it; the ear tells instead.
+    @Test func missionControlNoStrip() {
+        let (controller, timer) = makeController(missionControl: { true })
+        timer.hasStrip = true
+        controller.isHiddenForFullScreen = true
+        controller.model?.requestPeek(from: timer, for: .seconds(10), revealsInFullScreen: true)
+        #expect(!controller.isShowing)
+        #expect(controller.model?.layout.isPeeking == false)
     }
 }

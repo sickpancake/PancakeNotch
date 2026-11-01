@@ -204,12 +204,28 @@ struct TimerEar: View {
     }
 }
 
-/// The strip under the compact notch when a timer finished while the open notch showed another module.
+/// The strip under the compact notch for a finished timer: when it finished while the open notch showed
+/// another module, or when "When a timer ends" is "Show a strip". Hovering or clicking the notch opens the
+/// Done card.
 struct TimerPeek: View {
     let module: TimerModule
 
     var body: some View {
         let detail = TimerDoneText.detail(module.center)
+        // The strip is only as wide as the compact notch: when "ended 3:42 PM" doesn't fit after a long
+        // length, the length alone does (the Done card has the rest).
+        ViewThatFits(in: .horizontal) {
+            line(detail)
+            line(TimerDoneText.length(module.center))
+            line(TimerDoneText.length(module.center), truncates: true)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Timer done, \(detail)"))
+    }
+
+    private func line(_ detail: String, truncates: Bool = false) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "bell.fill")
                 .font(.system(size: 10, weight: .semibold))
@@ -222,11 +238,8 @@ struct TimerPeek: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.6))
                 .lineLimit(1)
+                .fixedSize(horizontal: !truncates, vertical: false)
         }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Timer done, \(detail)"))
     }
 }
 
@@ -234,8 +247,12 @@ struct TimerPeek: View {
 /// wasn't just now ("5 min timer · ended 3:42 PM").
 @MainActor
 enum TimerDoneText {
+    static func length(_ center: TimerCenter) -> String {
+        String(localized: "\(TimerText.length(center.timer.total)) timer", comment: "Done card: e.g. 5 min timer")
+    }
+
     static func detail(_ center: TimerCenter) -> String {
-        let length = String(localized: "\(TimerText.length(center.timer.total)) timer", comment: "Done card: e.g. 5 min timer")
+        let length = length(center)
         guard case .done(let endedAt) = center.timer.phase,
               center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return length }
         return length + " · " + String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")

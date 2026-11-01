@@ -112,6 +112,9 @@ public final class NotchViewModel {
     /// Set by the window controller: opens for a module's alert only where the notch can show (not
     /// switched off or hidden), over a full-screen app only when asked. `nil` in previews.
     @ObservationIgnored public var presentAttention: ((_ moduleID: String, _ revealsInFullScreen: Bool) -> Void)?
+    /// Set by the window controller: shows a module's strip for an alert only where the notch can show,
+    /// over a full-screen app only when asked. `nil` in previews.
+    @ObservationIgnored public var presentPeek: ((_ moduleID: String, _ duration: Duration, _ revealsInFullScreen: Bool) -> Void)?
     @ObservationIgnored private var transitionID = 0
     /// Settled in Closed: the ears (faded out under the notch) aren't built, about 1 MiB less while the
     /// notch rests (measured). Every way out of Closed wakes them before it animates.
@@ -553,6 +556,18 @@ public final class NotchViewModel {
             presentAttention(module.moduleID, revealsInFullScreen)
         } else {
             openForAttention(focusing: module.moduleID)
+        }
+    }
+
+    /// A module's alert (a timer that finished) wants to be seen, but only as its strip under the notch for
+    /// `duration`, not by opening the notch. Shown where the notch can show, like `requestAttention`; not
+    /// while Mission Control is up (the ear tells instead). Hovering or clicking the strip opens the notch.
+    public func requestPeek(from module: any NotchModule, for duration: Duration, revealsInFullScreen: Bool) {
+        guard modules.contains(where: { $0 === module }), !isMissionControlActive() else { return }
+        if let presentPeek {
+            presentPeek(module.moduleID, duration, revealsInFullScreen)
+        } else {
+            peek(module, for: duration)
         }
     }
 

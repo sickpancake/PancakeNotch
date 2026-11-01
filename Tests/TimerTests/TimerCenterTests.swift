@@ -209,7 +209,7 @@ struct TimerModuleTests {
         func compactEars(layout: NotchLayout) -> CompactEars? { nil }
     }
 
-    func makeModule(state: NotchState = .closed, defaults: UserDefaults = scratchDefaults(),
+    func makeModule(state: NotchState = .closed, defaults: UserDefaults = scratchDefaults(), missionControl: Bool = false,
                     _ adjust: (TimerSettings) -> Void = { _ in }) -> (TimerModule, NotchViewModel, TestClock) {
         let clock = TestClock()
         let center = TimerCenter(now: { clock.now })
@@ -218,7 +218,7 @@ struct TimerModuleTests {
         settings.hapticOnDone = false
         adjust(settings)
         let module = TimerModule(center: center, settings: settings)
-        let notch = NotchViewModel(layout: layout, state: state, pointerLocation: { CGPoint(x: 5, y: 5) }, isMissionControlActive: { false })
+        let notch = NotchViewModel(layout: layout, state: state, pointerLocation: { CGPoint(x: 5, y: 5) }, isMissionControlActive: { missionControl })
         notch.attentionCloseDelay = .seconds(30)
         notch.modules = [OtherModule(), module]
         return (module, notch, clock)
@@ -326,6 +326,88 @@ struct TimerModuleTests {
         #expect(!notch.layout.isPeeking)
     }
 
+    // MARK: When a timer ends: Show a strip (TimerAlarm.tla, DoneAlert "strip")
+
+    /// Closed, a finish only slides the strip out: the notch doesn't open and nothing is waiting to close it.
+    @Test func stripSettingSlidesTheStripOutInsteadOfOpening() throws {
+        let (module, notch, clock) = makeModule { $0.doneAlert = .strip }
+        finish(module, clock)
+        #expect(notch.state != .expanded)
+        #expect(notch.peekModuleID == "timer")
+        #expect(notch.layout.isPeeking)
+        #expect(!module.peekPending)
+        #expect(module.isActive)
+    }
+
+    /// The default is the whole notch.
+    @Test func openNotchStaysTheDefault() {
+        let (module, notch, clock) = makeModule()
+        #expect(module.settings.doneAlert == .openNotch)
+        finish(module, clock)
+        #expect(notch.state == .expanded)
+        #expect(!notch.layout.isPeeking)
+    }
+
+    /// StripGivesWayToOpen: hovering or clicking opens the Done card, and the strip is gone.
+    @Test func openingFromTheStripShowsTheDoneCard() {
+        let (module, notch, clock) = makeModule { $0.doneAlert = .strip }
+        finish(module, clock)
+        notch.tap()
+        #expect(notch.state == .expanded)
+        #expect(notch.selectedModule === module)
+        #expect(module.mode == .timer)
+        #expect(!notch.layout.isPeeking)
+        #expect(notch.peekModuleID == nil)
+    }
+
+    /// PeekTruthful: stopped in the app window while the strip shows, it goes at once.
+    @Test func stoppedWhileTheStripShowsItGoes() async throws {
+        let (module, notch, clock) = makeModule { $0.doneAlert = .strip }
+        finish(module, clock)
+        #expect(notch.layout.isPeeking)
+        module.center.stopTimer()
+        try await settle { notch.peekModuleID == nil }
+        #expect(notch.peekModuleID == nil)
+        #expect(!notch.layout.isPeeking)
+    }
+
+    /// Left alone the strip slides away, and the ear keeps saying Done.
+    @Test func theStripSlidesAwayAndTheEarKeepsDone() async throws {
+        let (module, notch, clock) = makeModule { $0.doneAlert = .strip }
+        module.stripTime = .milliseconds(60)
+        finish(module, clock)
+        #expect(notch.layout.isPeeking)
+        try await settle { !notch.layout.isPeeking }
+        #expect(!notch.layout.isPeeking)
+        #expect(notch.state == .compact)
+        #expect(module.isActive)
+        #expect(module.center.timer.isDone)
+    }
+
+    /// Mission Control refuses what would show over it: no strip, the ear says Done.
+    @Test func missionControlNoStrip() {
+        let (module, notch, clock) = makeModule(missionControl: true) { $0.doneAlert = .strip }
+        finish(module, clock)
+        #expect(!notch.layout.isPeeking)
+        #expect(notch.state != .expanded)
+        #expect(module.isActive)
+    }
+
+    /// Open on the Timer the Done card shows in place; behind another module the finish still waits for
+    /// the close: the setting only changes what happens with the notch closed.
+    @Test func stripSettingChangesNothingWhileTheNotchIsOpen() async throws {
+        let (onTimer, notchA, clockA) = makeModule(state: .expanded) { $0.doneAlert = .strip }
+        notchA.select("timer")
+        finish(onTimer, clockA)
+        #expect(notchA.state == .expanded)
+        #expect(!notchA.layout.isPeeking)
+        let (behind, notchB, clockB) = makeModule(state: .expanded) { $0.doneAlert = .strip }
+        notchB.select("nowPlaying")
+        finish(behind, clockB)
+        #expect(behind.peekPending)
+        #expect(!notchB.layout.isPeeking)
+    }
+
     /// With the ear set by order or off, a finished timer still gets the second ear.
     @Test func doneAlwaysGetsAnEar() {
         let (module, _, clock) = makeModule { $0.earPlacement = .ranking }
@@ -425,6 +507,15 @@ func settle(_ condition: () -> Bool) async throws {
 
 @MainActor
 struct TimerSettingsTests {
+    @Test func theDoneAlertIsSavedAndFallsBack() {
+        let defaults = scratchDefaults()
+        #expect(TimerSettings(defaults: defaults).doneAlert == .openNotch)
+        TimerSettings(defaults: defaults).doneAlert = .strip
+        #expect(TimerSettings(defaults: defaults).doneAlert == .strip)
+        defaults.set("flash", forKey: "timer.doneAlert")
+        #expect(TimerSettings(defaults: defaults).doneAlert == .openNotch)
+    }
+
     /// A chosen sound this Mac no longer has falls back to Glass rather than ring silently.
     @Test func aMissingSoundFallsBack() {
         let defaults = scratchDefaults()

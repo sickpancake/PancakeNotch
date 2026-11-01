@@ -32,6 +32,14 @@ public enum TimerFullScreenAlert: String, CaseIterable, Sendable {
     case soundOnly
 }
 
+/// What a finish does while the notch is closed (and may be seen).
+public enum TimerDoneAlert: String, CaseIterable, Sendable {
+    /// The whole notch opens on the Done card, then closes again if nobody touches it.
+    case openNotch
+    /// Only a small "Timer done" strip slides out under the notch; hovering or clicking opens the card.
+    case strip
+}
+
 /// A quick-start time on the Timer page, with an optional name ("Tea").
 public struct TimerPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var id: UUID
@@ -64,6 +72,8 @@ public final class TimerSettings {
     public var sound: String { didSet { defaults.set(sound, forKey: Keys.sound) } }
     public var hapticOnDone: Bool { didSet { defaults.set(hapticOnDone, forKey: Keys.hapticOnDone) } }
     public var fullScreenAlert: TimerFullScreenAlert { didSet { defaults.set(fullScreenAlert.rawValue, forKey: Keys.fullScreenAlert) } }
+    /// Whether a finish opens the whole notch or only shows a small strip (TimerAlarm.tla, DoneAlert).
+    public var doneAlert: TimerDoneAlert { didSet { defaults.set(doneAlert.rawValue, forKey: Keys.doneAlert) } }
     /// The quick-start times, in the user's order. Never empty after Reset; at most `mostPresets`.
     public var presets: [TimerPreset] {
         didSet {
@@ -86,6 +96,7 @@ public final class TimerSettings {
         sound = savedSound.isEmpty || TimerSound.url(for: savedSound) != nil ? savedSound : Self.defaultSound
         hapticOnDone = defaults.object(forKey: Keys.hapticOnDone) as? Bool ?? true
         fullScreenAlert = defaults.string(forKey: Keys.fullScreenAlert).flatMap(TimerFullScreenAlert.init(rawValue:)) ?? .showNotch
+        doneAlert = defaults.string(forKey: Keys.doneAlert).flatMap(TimerDoneAlert.init(rawValue:)) ?? .openNotch
         let saved = defaults.data(forKey: Keys.presets).flatMap { try? JSONDecoder().decode([TimerPreset].self, from: $0) }
         presets = saved.map(Self.cleaned) ?? Self.defaultPresets
         if defaults == UserDefaults.standard { Self.user = self }
@@ -157,6 +168,7 @@ public final class TimerSettings {
         static let sound = "timer.sound"
         static let hapticOnDone = "timer.hapticOnDone"
         static let fullScreenAlert = "timer.fullScreenAlert"
+        static let doneAlert = "timer.doneAlert"
         static let presets = "timer.presets"
     }
 }

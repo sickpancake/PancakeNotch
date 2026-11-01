@@ -100,8 +100,21 @@ struct TimerSettingsRows: View {
                     .labelsHidden()
             }
             SettingsRow(
+                title: String(localized: "When a timer ends"),
+                subtitle: String(localized: "Open the notch on the Done card, or only slide out a small strip under it. Hover or click to open the card. Either way, Done stays beside the notch until you stop it.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "When a timer ends"),
+                    options: [
+                        (TimerDoneAlert.openNotch, String(localized: "Open the notch")),
+                        (.strip, String(localized: "Show a strip")),
+                    ],
+                    selection: $settings.doneAlert
+                )
+            }
+            SettingsRow(
                 title: String(localized: "When a timer ends in full screen"),
-                subtitle: String(localized: "If the notch is hiding for a full-screen app (Notch settings), it can show itself with Done, then hide again.")
+                subtitle: String(localized: "If the notch is hiding for a full-screen app (Notch settings), it can show itself (or its strip) with Done, then hide again.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "When a timer ends in full screen"),
