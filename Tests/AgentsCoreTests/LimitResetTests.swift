@@ -347,6 +347,8 @@ struct UsageDayRolloverTests {
         // Past midnight (a wake, a clock or time zone change, or the day change itself): reloaded, once.
         usage.timeMayHaveChanged(now: tomorrow)
         #expect(usage.historyRevision == before + 1)
+        usage.timeMayHaveChanged(now: tomorrow)
+        #expect(usage.historyRevision == before + 1)
     }
 
     @Test func aHiddenHistoryWaitsForItsNextShowing() {

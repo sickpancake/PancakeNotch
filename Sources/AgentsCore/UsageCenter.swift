@@ -267,7 +267,7 @@ public final class UsageCenter {
         // otherwise showing it again does.
         if viewers > 0, totalsDay != Calendar.current.startOfDay(for: now) {
             historyChanged()
-            refreshTotals()
+            refreshTotals(now: now)
         }
     }
 
@@ -371,12 +371,12 @@ public final class UsageCenter {
     }
 
     /// Asks for the selected range's totals again (selection, range or history changed).
-    func refreshTotals() {
+    func refreshTotals(now: Date = .now) {
         if isPractice {
             totals = PracticeUsage.totals(for: selection, range: range)
             return
         }
-        totalsDay = Calendar.current.startOfDay(for: .now)
+        totalsDay = Calendar.current.startOfDay(for: now)
         live?.refreshTotals(accountIDs: shownAccounts.map(\.id), days: range.days)
     }
 
