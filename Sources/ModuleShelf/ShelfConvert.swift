@@ -46,7 +46,10 @@ final class ShelfConversion {
     /// The button Tab last moved to; nil until it does (Return then presses the card's main button).
     var control: Control?
     var phase: Phase {
-        didSet { control = nil }
+        didSet {
+            // Inspection finishing keeps the same controls: preserve a Tab to Back while it ran.
+            if oldValue != .looking || phase != .choosing { control = nil }
+        }
     }
     /// Another format can't help: the result has no room on the Shelf.
     var roomIsShort = false
@@ -269,7 +272,7 @@ extension ShelfModule {
     }
 
     static var noRoomText: String {
-        String(localized: "The Shelf is full and this result can only be kept there. Make room on the Shelf, then convert again.", comment: "Convert: nowhere to save the result")
+        String(localized: "This result needs room on the Shelf. Finish any waiting Shelf prompt or remove some items, then convert again.", comment: "Convert: nowhere to save the result")
     }
 
     /// Moves what the helper made to where it goes, never over an existing file, and adds it to the Shelf.

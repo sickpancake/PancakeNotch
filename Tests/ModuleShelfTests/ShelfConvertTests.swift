@@ -331,11 +331,12 @@ struct ShelfConvertTests {
 
     /// The Shelf filled up while it converted: the result that only it could keep is told as not kept,
     /// instead of waiting on a card that deletes it.
-    @Test func aShelfFilledMeanwhileDoesNotLoseOrHideTheResult() async throws {
+    @Test func aShelfFilledMeanwhileReportsThatTheResultCouldNotBeKept() async throws {
         let fixture = try ShelfFixture()
         let (module, _) = makeModule(fixture, runner: FakeRunner(delay: .milliseconds(150)))
         module.keepsConvertedFiles = true
-        module.startConversion([try fixture.file("Photo.jpg")])
+        let photo = try fixture.file("Photo.jpg")
+        module.startConversion([photo])
         try await waitUntil { isChoosing(module) }
         module.chooseConvertFormat(.png)
         module.offer(try fixture.files(ShelfStore.capacity))
@@ -343,6 +344,8 @@ struct ShelfConvertTests {
         #expect(failedMessage(module) == ShelfModule.noRoomText)
         #expect(module.prompt == nil)
         #expect(module.store.items.count == ShelfStore.capacity)
+        module.notchDidClose()
+        #expect(FileManager.default.fileExists(atPath: photo.path))
     }
 
     // MARK: Keyboard
@@ -367,6 +370,21 @@ struct ShelfConvertTests {
         // Return on the back button goes back; it doesn't convert the format the row was on.
         _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
         #expect(module.handleKey(try ShelfKey.event(ShelfKey.return)))
+        #expect(module.conversion == nil)
+        #expect(module.store.items.isEmpty)
+    }
+
+    @Test func tabFocusSurvivesTheProbeFinishing() async throws {
+        let fixture = try ShelfFixture()
+        let (module, _) = makeModule(fixture)
+        module.startConversion([try fixture.file("Photo.jpg")])
+        let session = try #require(module.conversion)
+        #expect(session.phase == .looking)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.tab))
+        #expect(session.control == .back)
+        try await waitUntil { isChoosing(module) }
+        #expect(session.control == .back)
+        _ = module.handleKey(try ShelfKey.event(ShelfKey.return))
         #expect(module.conversion == nil)
         #expect(module.store.items.isEmpty)
     }

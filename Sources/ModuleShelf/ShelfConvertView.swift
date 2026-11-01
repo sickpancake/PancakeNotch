@@ -326,7 +326,6 @@ private struct ShelfConvertDoneCard: View {
                 Text(whereText)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     ShelfPillButton(title: String(localized: "Open"), prominent: true, isKeyFocused: session.control == .open) {
@@ -369,7 +368,7 @@ private struct ShelfConvertDoneCard: View {
     private var whereText: String {
         var lines: [String] = []
         if done.notOnShelf > 0 {
-            lines.append(String(localized: "Saved, but the Shelf is full: \(done.notOnShelf) not added. Press Done to make room.", comment: "Convert finished; the Shelf has no room for the new files"))
+            lines.append(String(localized: "Saved. \(done.notOnShelf) not added to the Shelf yet. Press Done to review them.", comment: "Convert finished; the Shelf has pending new files"))
         } else if module.keepsConvertedFiles {
             lines.append(String(localized: "Added to this practice Shelf.", comment: "Convert in the app window's practice Shelf"))
         } else if done.keptInShelf {
