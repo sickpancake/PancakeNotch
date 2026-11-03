@@ -98,6 +98,31 @@ struct NotchModulesTests {
         #expect(ears.right == nil)
     }
 
+    @Test func theShrinkAfterAClickStillShowsTheCurrentModule() {
+        let (model, _, _) = makeModel()
+        model.open()
+        #expect(model.state == .expanded)
+        model.tap()
+        #expect(model.state == .compact)
+        #expect(model.ears(layout: model.layout).left?.id == "nowPlaying.main")
+    }
+
+    @Test func aStripWithNothingActiveShowsNoEars() {
+        let (model, music, _) = makeModel()
+        #expect(model.peek(music, for: .seconds(3)))
+        #expect(model.state == .compact)
+        let ears = model.ears(layout: model.layout)
+        #expect(ears.left == nil)
+        #expect(ears.right == nil)
+    }
+
+    @Test func aStripKeepsTheActiveModulesEars() {
+        let (model, music, shelf) = makeModel()
+        shelf.isActive = true
+        #expect(model.peek(music, for: .seconds(3)))
+        #expect(model.ears(layout: model.layout).left?.id == "shelf.main")
+    }
+
     @Test func aModuleWithoutEarsLeavesItsSideToTheNext() {
         let (model, music, shelf) = makeModel()
         let third = RankedModule("third")
