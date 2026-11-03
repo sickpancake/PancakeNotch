@@ -93,7 +93,7 @@ struct HelpView: View {
             }
             SettingsRow(
                 title: String(localized: "Some have a set spot"),
-                subtitle: String(localized: "Keep Awake always takes the first spot. The Timer takes the second, so your top module keeps its place. The others wait until a spot is free.")
+                subtitle: String(localized: "Keep Awake always takes the first spot. The Timer takes the second, so it doesn't push your top module out, unless its Beside the notch setting is By order or Don't show. The others wait until a spot is free.")
             ) {
                 EmptyView()
             }
