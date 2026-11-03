@@ -258,7 +258,11 @@ struct AttentionVisibilityTests {
         #expect(controller.isShowing)
         #expect(controller.model?.layout.isPeeking == true)
         #expect(controller.model?.state != .expanded)
-        try await settle(.milliseconds(100)) { controller.model?.layout.isPeeking == false && !controller.isShowing }
+        // The window hides when the strip's slide-away animation reports it finished; on a busy CI machine
+        // with every test running that once took over 2 seconds, so this waits for a hang, not for speed.
+        try await settle(.milliseconds(100), within: .seconds(30)) {
+            controller.model?.layout.isPeeking == false && !controller.isShowing
+        }
         #expect(controller.model?.layout.isPeeking == false)
         #expect(!controller.isShowing)
     }
