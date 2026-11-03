@@ -1,4 +1,5 @@
 import { LazyMotion, domAnimation } from 'motion/react'
+import { BetaNote } from '@/components/BetaNote'
 import { FeatureRow } from '@/components/FeatureRow'
 import { Footer } from '@/components/Footer'
 import { Journey } from '@/components/Journey'
@@ -16,6 +17,7 @@ export function App() {
         <ScrollWords />
         <FeatureRow />
         <Proof />
+        <BetaNote />
         <Footer />
       </main>
     </LazyMotion>

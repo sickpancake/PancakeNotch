@@ -115,6 +115,14 @@ const ICONS = {
   ),
   check: <path d="m5.5 12.5 4.3 4.3 8.7-9.6" />,
   chevronDown: <path d="m6.5 9.5 5.5 5.5 5.5-5.5" />,
+  // Keep Awake: a cup with steam rising from it.
+  cup: (
+    <>
+      <path d="M4.5 10h11v4.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5Z" />
+      <path d="M15.5 11.5h1.3a2.2 2.2 0 0 1 0 4.4h-1.6M8 3.5c-.8.9-.8 2.1 0 3M11.5 3.5c-.8.9-.8 2.1 0 3" />
+    </>
+  ),
+  arrowRight: <path d="M4.5 12h14M13.5 6.5 19 12l-5.5 5.5" />,
   key: <path d="M5 7.5h14a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V9A1.5 1.5 0 0 1 5 7.5ZM7 12h.01M10.5 12h.01M14 12h.01M17 12h.01" />,
 } satisfies Record<string, ReactNode>
 
