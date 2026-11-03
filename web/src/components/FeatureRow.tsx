@@ -7,19 +7,23 @@ import { EXAMPLES, type ThreadState } from './notch/data'
 /* What the app does, as a row of cards you can scroll sideways: swipe, drag with the mouse, use the
    arrow buttons or the arrow keys. Each card has a small drawing made from the same pieces as the live
    notch above (its covers, icons and Shelf previews), a title and one line. The row runs off the right
-   edge on purpose, so it's clear there's more. */
+   edge on purpose, so it's clear there's more. What's new in the latest release carries a small "New" tag. */
 
-type Feature = { title: string; line: string; art: ReactNode; top?: boolean }
+type Feature = { title: string; line: string; art: ReactNode; top?: boolean; fresh?: boolean }
 
 const FEATURES: Feature[] = [
   { title: 'Now Playing', line: 'The cover, the song and the sound bars, right in the notch.', art: <NowPlayingArt />, top: true },
   { title: 'Shelf', line: 'Drop files, notes and links. Pick them up later.', art: <ShelfArt /> },
+  { title: 'Convert', line: 'Turn pictures, PDFs, sound and video into another format in one click.', art: <ConvertArt />, fresh: true },
+  { title: 'Timer and Stopwatch', line: 'Count down or keep laps. The time left waits beside the notch.', art: <TimerArt />, top: true, fresh: true },
+  { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt />, fresh: true },
   { title: 'Agents', line: 'Claude Code, Codex and Cursor at work. Allow or Deny from the notch.', art: <AgentsArt /> },
-  { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, for every account.', art: <UsageArt /> },
+  { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, and a heads-up when one resets.', art: <UsageArt /> },
   { title: 'Module Menu', line: 'Every module in one place. Your favorites get a tab.', art: <MenuArt /> },
   { title: 'Statistics', line: 'What you listen to, and how light the app stays.', art: <StatsArt /> },
   { title: 'Full screen', line: 'Steps aside while you watch a video.', art: <FullScreenArt /> },
   { title: 'Your shortcut', line: 'Open it from the keyboard, with keys you choose.', art: <ShortcutArt /> },
+  { title: 'Open on click', line: 'Rather it opened only when you click? One switch.', art: <ClickArt />, top: true, fresh: true },
 ]
 
 // The row starts where the page's text starts, and bleeds off the right edge.
@@ -109,7 +113,14 @@ export function FeatureRow() {
               <article className="h-full rounded-2xl bg-[#101010] p-2.5 ring-1 ring-white/8 transition-colors hover:bg-[#151515]">
                 <ArtFrame top={feature.top}>{feature.art}</ArtFrame>
                 <div className="px-2 pt-4 pb-3">
-                  <h3 className="text-lg font-semibold tracking-[-0.01em] text-ink">{feature.title}</h3>
+                  <h3 className="flex items-center gap-2 text-lg font-semibold tracking-[-0.01em] text-ink">
+                    {feature.title}
+                    {feature.fresh && (
+                      <span className="rounded-full px-2 py-0.5 text-[11px] leading-none font-semibold tracking-normal text-soft ring-1 ring-white/15">
+                        New
+                      </span>
+                    )}
+                  </h3>
                   <p className="mt-1.5 text-[15px] leading-snug text-soft">{feature.line}</p>
                 </div>
               </article>
@@ -292,6 +303,71 @@ function ShortcutArt() {
         </kbd>
       ))}
       <kbd className="grid h-12 w-24 place-items-center rounded-xl bg-[#1f1f1f] font-sans text-sm text-ink ring-1 ring-white/10">Space</kbd>
+    </div>
+  )
+}
+
+function ConvertArt() {
+  const formats = ['PNG', 'HEIC', 'PDF']
+  return (
+    <div aria-hidden="true" className={cn('flex items-center gap-3 rounded-2xl p-3.5', SURFACE)}>
+      <Thumb item={EXAMPLES.find((item) => item.kind === 'file' && item.thumb === 'photo') ?? EXAMPLES[0]} />
+      <Icon name="arrowRight" className="text-lg text-soft" />
+      <div className="grid gap-1.5">
+        {formats.map((format, i) => (
+          <span
+            key={format}
+            className={cn(
+              'grid h-6 w-14 place-items-center rounded-full text-[11px] leading-none font-semibold',
+              i === 0 ? 'bg-white text-black' : 'bg-[#1f1f1f] text-ink',
+            )}
+          >
+            {format}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The closed notch with a timer running beside it: a ring that has drained a little, and the time left. */
+function TimerArt() {
+  const left = 0.72 // share of the ring still to go
+  return (
+    <div aria-hidden="true" className={cn('flex w-[14rem] items-center justify-between rounded-b-[1.4rem] px-3.5 py-2.5', SURFACE)}>
+      <span className="size-9" />
+      <span className="flex items-center gap-2 text-[15px] font-semibold text-ink tabular-nums">
+        <svg viewBox="0 0 20 20" className="size-[18px] -rotate-90">
+          <circle cx="10" cy="10" r="7.5" fill="none" stroke="#fff" strokeOpacity=".2" strokeWidth="2.5" />
+          <circle cx="10" cy="10" r="7.5" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" pathLength="1" strokeDasharray={`${left} 1`} />
+        </svg>
+        7:14
+      </span>
+    </div>
+  )
+}
+
+/** A cup beside an "on" switch. */
+function KeepAwakeArt() {
+  return (
+    <div aria-hidden="true" className={cn('flex w-[13.5rem] items-center gap-3 rounded-2xl p-3.5', SURFACE)}>
+      <span className="grid size-10 place-items-center rounded-xl bg-[#1f1f1f] text-xl text-ink">
+        <Icon name="cup" />
+      </span>
+      <span className="h-1.5 w-16 rounded-full bg-white/18" />
+      <span className="ml-auto flex h-6 w-10 items-center justify-end rounded-full bg-white p-0.5">
+        <span className="size-5 rounded-full bg-black" />
+      </span>
+    </div>
+  )
+}
+
+/** The closed notch, and a pointer clicking just under it. */
+function ClickArt() {
+  return (
+    <div aria-hidden="true" className="flex flex-col items-center">
+      <span className="block h-7 w-32 rounded-b-2xl bg-black ring-1 ring-white/10" />
+      <Icon name="cursor" className="mt-9 text-5xl text-ink" />
     </div>
   )
 }
