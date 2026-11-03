@@ -1,7 +1,9 @@
 import AgentsCore
 import AppKit
+import KeepAwakeCore
 import Learn
 import ModuleAgents
+import ModuleKeepAwake
 import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
@@ -70,6 +72,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var timers = TimerCenter(defaults: .standard)
     /// Exists only while the Timer is switched on.
     private var timerModule: TimerModule?
+    private let keepAwakeSettings = KeepAwakeSettings()
+    /// Keeps the Mac awake (ADR-0041): a session you started survives a relaunch as the Reopen setting says.
+    /// Follows the battery, wakes and clock changes only while Keep Awake is switched on.
+    private lazy var keepAwake = KeepAwakeCenter(
+        settings: keepAwakeSettings, defaults: .standard, holder: PowerAssertion(), power: PowerState.current
+    )
+    /// Exists only while Keep Awake is switched on.
+    private var keepAwakeModule: KeepAwakeModule?
+    /// Each `observeWork` chain, so only the newest one carries on.
+    private var workGeneration = 0
     private var followedAccountFolders: [String] = []
     /// Keeps at most one app-health sample per 10 minutes, taken when the notch or window opens.
     private var healthSampler = HealthSampler()
@@ -100,6 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             connector: connector,
             timerSettings: timerSettings,
             timers: timers,
+            keepAwakeSettings: keepAwakeSettings,
+            keepAwake: keepAwake,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
@@ -108,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var menuBar = MenuBarController(
         preferences: preferences,
         updates: updates,
+        keepAwake: keepAwake,
         openApp: { [weak self] in self?.showAppWindow() }
     )
 
@@ -176,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.fullScreen.update() }
         }
         updateGeometry()
-        updates.onPendingChange = { [weak self] in self?.menuBar.updatePending() }
+        updates.onPendingChange = { [weak self] in self?.menuBar.updateIcon() }
         updates.start()
         showWelcomeIfNeeded()
         // Housekeeping waits until the notch has drawn. Old statistics go on the first open of the day
@@ -205,6 +220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         agents.stop()
         usage.stop()
         if timerModule != nil { timers.stop() }
+        // macOS drops the power hold with the process anyway; this makes it immediate.
+        if keepAwakeModule != nil { keepAwake.stop() }
         statistics.waitForWrites()
     }
 
@@ -281,15 +298,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
         if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
         if timerSettings.isEnabled { modules.append(TimerModule(center: timers, settings: timerSettings, presents: false)) }
+        if keepAwakeSettings.isEnabled { modules.append(KeepAwakeModule(center: keepAwake, presents: false)) }
         return modules
     }
 
     /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
     /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
     private func observeModules() {
-        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders, timerOn) = withObservationTracking {
+        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders, timerOn, keepAwakeOn) = withObservationTracking {
             (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled,
-             agentsSettings.usageEnabled, agentsSettings.addedFolders, timerSettings.isEnabled)
+             agentsSettings.usageEnabled, agentsSettings.addedFolders, timerSettings.isEnabled, keepAwakeSettings.isEnabled)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
@@ -350,7 +368,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timers.stopTimer()
             timers.stop()
         }
-        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule].compactMap { $0 }
+        if keepAwakeOn {
+            if keepAwakeModule == nil {
+                keepAwakeModule = KeepAwakeModule(center: keepAwake)
+                // The battery now, and a session that ran out while it was off.
+                keepAwake.start()
+            }
+        } else if keepAwakeModule != nil {
+            // The center lets the Mac go by itself when its switch goes off; this stops its listeners.
+            keepAwakeModule = nil
+            keepAwake.stop()
+        }
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule]
+            .compactMap { $0 }
+        observeWork()
+        menuBar.updateIcon()
+    }
+
+    /// Tells Keep Awake when an agent works (or waits for you) and when the Shelf converts a file, and puts
+    /// the cup on the menu bar icon while it keeps the Mac awake. Runs again on each change (no polling);
+    /// the modules being switched on or off start a new chain from `observeModules`.
+    private func observeWork() {
+        workGeneration += 1
+        let generation = workGeneration
+        let (agentsBusy, converting, _) = withObservationTracking {
+            (agentsModule != nil && agents.isBusy, shelf?.isConverting == true, keepAwake.isHolding)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.workGeneration == generation else { return }
+                self.observeWork()
+            }
+        }
+        keepAwake.setWork(agents: agentsBusy, converting: converting)
+        menuBar.updateIcon()
     }
 
     /// Counts items put on the Shelf and sent with AirDrop, for the statistics.
@@ -401,6 +451,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
                 NowPlayingSnapshot.models(layout: layout) + Self.moduleSnapshots(layout: layout) + ShelfSnapshot.models(layout: layout)
                     + AgentsSnapshot.models(layout: layout) + TimerSnapshot.models(layout: layout) { NowPlayingSnapshot.module() }
+                    + KeepAwakeSnapshot.models(layout: layout, others: { [NowPlayingSnapshot.module()] }, withTimer: {
+                        [NowPlayingSnapshot.module(), TimerSnapshot.module { center, clock in
+                            center.startTimer(seconds: 25 * 60)
+                            clock.advance(4 * 60 + 18)
+                        }]
+                    })
             }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")

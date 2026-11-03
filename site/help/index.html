@@ -86,6 +86,7 @@
         <li><a href="#agents-connect">Connect a tool</a></li>
         <li><a href="#ai-usage">AI Usage</a></li>
         <li><a href="#timer">Timer</a></li>
+        <li><a href="#keep-awake">Keep Awake</a></li>
         <li><a href="#updates">Updates</a></li>
         <li><a href="#launch-at-login">Launch at login</a></li>
         <li><a href="#privacy">Privacy</a></li>
@@ -355,6 +356,25 @@
           <li><strong>Nothing shows beside the notch</strong>Check that <strong>Beside the notch</strong> isn't set to <strong>Don't show</strong>. A finished timer always shows Done.</li>
         </ul>
         <div class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>With <strong>Reduce Motion</strong> turned on in macOS, the numbers fade instead of rolling.</p></div>
+      </section>
+
+      <section class="topic" id="keep-awake" aria-labelledby="keep-awake-title">
+        <h2 id="keep-awake-title">Keep Awake <a class="anchor" href="#keep-awake" aria-label="Link to this section">#</a></h2>
+        <p>The <strong>Keep Awake</strong> module stops your Mac falling asleep while something runs: a long download, a video call, or AI agents at work. Turn it on under <strong>Modules</strong>.</p>
+        <h3>Turning it on</h3>
+        <p>Open the notch on <strong>Keep Awake</strong> and click a length: <strong>30 min</strong>, <strong>1 hr</strong>, <strong>2 hr</strong>, <strong>4 hr</strong> or <strong>Until I stop</strong>. <strong>Turn On</strong> uses the length you picked last. While a timed one runs, <strong>+30 min</strong> adds half an hour, and the page shows until when and how long is left. <strong>Turn Off</strong> lets your Mac sleep as usual. The same choices are in the menu bar icon's <strong>Keep Awake</strong> menu.</p>
+        <p>While it keeps your Mac awake, a coffee cup shows in the first spot beside the closed notch (a ring around it drains for a timed one), and a small cup sits on the menu bar icon. When the time runs out, a short <strong>Keep Awake ended</strong> strip slides out under the notch.</p>
+        <h3>On by itself</h3>
+        <p>Keep Awake also turns on by itself while an AI agent works or waits for you (this needs the <strong>Agents</strong> module) and while the Shelf converts a file, and stops 2 minutes after the last one ends, so a short pause between steps doesn't let the screen go dark. Each can be switched off in its settings. Turn it off while an agent works and it stays off until that work ends; the next run turns it on again.</p>
+        <h3>The screen</h3>
+        <p>By default the screen stays on, so you can watch what's running. That also means the screen <strong>won't lock by itself</strong>: press <strong>Control-Command-Q</strong> to lock it when you walk away. Choose <strong>Can sleep</strong> (on the Keep Awake page or in its settings) and the screen dims, sleeps and locks as usual while your Mac keeps working.</p>
+        <h3>If something's off</h3>
+        <ul class="checks">
+          <li><strong>My Mac slept when I closed the lid</strong>Closing a MacBook's lid, choosing Apple menu › Sleep, or a nearly empty battery still put the Mac to sleep. Keep Awake only stops it falling asleep on its own.</li>
+          <li><strong>It stopped on battery</strong>On battery, Keep Awake stops at 20% (choose 10%, 30%, 50% or Never in its settings) and can't start again on battery until you plug in.</li>
+          <li><strong>It didn't turn on for my agent</strong>Check that the <strong>Agents</strong> module is on and the agent shows there, and that <strong>While AI agents work</strong> is on in Keep Awake's settings.</li>
+          <li><strong>It was still on after reopening PancakeNotch</strong>A Keep Awake you turned on carries on after an update or a quit, but not after your Mac restarts. Change this under <strong>When PancakeNotch opens again</strong>.</li>
+        </ul>
       </section>
 
       <section class="topic" id="updates" aria-labelledby="updates-title">

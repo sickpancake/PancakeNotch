@@ -1,4 +1,5 @@
 import AgentsCore
+import KeepAwakeCore
 import Learn
 import ModuleNowPlaying
 import ModuleShelf
@@ -53,6 +54,9 @@ final class AppContext {
     /// The Timer's options, and its timer and stopwatch shared with the real notch.
     let timerSettings: TimerSettings
     let timers: TimerCenter
+    /// Keep Awake's options, and its state shared with the real notch and the menu bar.
+    let keepAwakeSettings: KeepAwakeSettings
+    let keepAwake: KeepAwakeCenter
     let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
@@ -77,6 +81,8 @@ final class AppContext {
         connector: AgentConnector,
         timerSettings: TimerSettings,
         timers: TimerCenter,
+        keepAwakeSettings: KeepAwakeSettings,
+        keepAwake: KeepAwakeCenter,
         makeLiveModules: @escaping () -> [any NotchModule],
         detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() }
     ) {
@@ -97,6 +103,8 @@ final class AppContext {
         self.connector = connector
         self.timerSettings = timerSettings
         self.timers = timers
+        self.keepAwakeSettings = keepAwakeSettings
+        self.keepAwake = keepAwake
         self.makeLiveModules = makeLiveModules
         self.detectTools = detectTools
     }
@@ -109,6 +117,7 @@ final class AppContext {
         case "agents": agentsSettings.agentsEnabled
         case "aiUsage": agentsSettings.usageEnabled
         case "timer": timerSettings.isEnabled
+        case "keepAwake": keepAwakeSettings.isEnabled
         default: false
         }
     }
@@ -120,6 +129,7 @@ final class AppContext {
         case "agents": agentsSettings.agentsEnabled = enabled
         case "aiUsage": agentsSettings.usageEnabled = enabled
         case "timer": timerSettings.isEnabled = enabled
+        case "keepAwake": keepAwakeSettings.isEnabled = enabled
         default: break
         }
     }
@@ -132,6 +142,7 @@ final class AppContext {
         case "agents": (String(localized: "Agents", comment: "Module name"), "sparkles")
         case "aiUsage": (String(localized: "AI Usage", comment: "Module name"), "gauge.with.dots.needle.50percent")
         case "timer": (String(localized: "Timer", comment: "Module name"), "timer")
+        case "keepAwake": (String(localized: "Keep Awake", comment: "Module name"), "cup.and.heat.waves")
         default: (moduleID, "square")
         }
     }

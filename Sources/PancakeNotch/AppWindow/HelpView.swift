@@ -25,6 +25,7 @@ struct HelpView: View {
             connectCard
             aiUsageCard
             timerCard
+            keepAwakeCard
             shortcutCard
             updatesCard
             startOverCard
@@ -292,6 +293,47 @@ struct HelpView: View {
                 EmptyView()
             }
             MoreOnlineRow(topic: .aiUsage)
+        }
+    }
+
+    // MARK: Keep Awake
+
+    @ViewBuilder
+    private var keepAwakeCard: some View {
+        let settings = context.keepAwakeSettings
+        SettingsCard(header: String(localized: "Keep Awake")) {
+            if !settings.isEnabled {
+                SettingsRow(
+                    title: String(localized: "Keep Awake is switched off"),
+                    subtitle: String(localized: "Turn it on to keep your Mac from falling asleep while something runs.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.isEnabled = true }
+                }
+            } else {
+                SettingsRow(
+                    title: String(localized: "My Mac slept when I closed the lid"),
+                    subtitle: String(localized: "Closing a MacBook's lid, Apple menu › Sleep or a nearly empty battery still put it to sleep. Keep Awake stops it falling asleep on its own.")
+                ) {
+                    EmptyView()
+                }
+                if settings.screen == .staysOn {
+                    SettingsRow(
+                        title: String(localized: "The screen didn't lock"),
+                        subtitle: String(localized: "While Keep Awake keeps the screen on, it won't lock by itself. Press Control-Command-Q to lock it, or let the screen sleep.")
+                    ) {
+                        Button(String(localized: "Let It Sleep")) { settings.screen = .canTurnOff }
+                    }
+                }
+                if settings.whileAgentsWork, !context.agentsSettings.agentsEnabled {
+                    SettingsRow(
+                        title: String(localized: "It doesn't turn on for agents"),
+                        subtitle: String(localized: "That needs the Agents module, which is off.")
+                    ) {
+                        Button(String(localized: "Turn On Agents")) { context.agentsSettings.agentsEnabled = true }
+                    }
+                }
+            }
+            MoreOnlineRow(topic: .keepAwake)
         }
     }
 

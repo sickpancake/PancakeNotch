@@ -295,8 +295,9 @@ public final class NotchViewModel {
     /// What the compact ears show: the top two active modules by ranking, #1's main view on the left
     /// and #2's on the right (or swapped). A module that asks for the second ear (the Timer), or one
     /// shown briefly (the Shelf's after-drop count), takes #2 and leaves #1 to the best-ranked other one.
-    /// A module alone fills both ears if it has an extra view. With nothing active, the current module
-    /// shows for the short shrink after a click only, not for a peek strip.
+    /// A module that asks for the first ear (Keep Awake) takes #1 and leaves #2 to the one asking for it,
+    /// or else to the best-ranked other one. A module alone fills both ears if it has an extra view. With
+    /// nothing active, the current module shows for the short shrink after a click only, not for a peek strip.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
         // Not while a strip is up (peekModuleID lasts until its exit animation ends, so no ear flashes in).
@@ -304,8 +305,11 @@ public final class NotchViewModel {
         // Only modules that have ears take a side.
         let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
         var picked = Array(withEars.prefix(2))
-        if withEars.count > 1, let second = withEars.firstIndex(where: { takesSecondEar($0.0) }),
-           let first = withEars.indices.first(where: { $0 != second }) {
+        let firstClaim = withEars.firstIndex { $0.0.prefersFirstEar }
+        let secondClaim = withEars.indices.first { $0 != firstClaim && takesSecondEar(withEars[$0].0) }
+        if withEars.count > 1, firstClaim != nil || secondClaim != nil,
+           let first = firstClaim ?? withEars.indices.first(where: { $0 != secondClaim }),
+           let second = secondClaim ?? withEars.indices.first(where: { $0 != first }) {
             picked = [withEars[first], withEars[second]]
         }
         var slots: [EarSlot?] = []

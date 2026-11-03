@@ -47,6 +47,7 @@ struct ModulesView: View {
                 AgentsModuleCard(context: context, showsSettings: settingsBinding("agents")) { openLesson(.agents) }
                 AIUsageModuleCard(context: context, showsSettings: settingsBinding("aiUsage")) { openLesson(.aiUsage) }
                 TimerModuleCard(context: context, showsSettings: settingsBinding("timer")) { openLesson(.timer) }
+                KeepAwakeModuleCard(context: context, showsSettings: settingsBinding("keepAwake")) { openLesson(.keepAwake) }
             }
             .onAppear { foundTools = context.detectTools() }
         }

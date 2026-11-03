@@ -3,6 +3,7 @@ import Learn
 import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
+import ModuleKeepAwake
 import ModuleTimer
 import TimerCore
 import NotchCore
@@ -129,6 +130,8 @@ struct LessonPlayer: View {
     @State private var usage: AIUsageModule?
     /// A practice timer and stopwatch (the Timer lesson).
     @State private var timer: TimerModule?
+    /// A practice Keep Awake that holds nothing (the Keep Awake lesson).
+    @State private var keepAwake: KeepAwakeModule?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -157,11 +160,12 @@ struct LessonPlayer: View {
     private var usesAgents: Bool { lesson.id == .agents }
     private var usesUsage: Bool { lesson.id == .aiUsage }
     private var usesTimer: Bool { lesson.id == .timer }
+    private var usesKeepAwake: Bool { lesson.id == .keepAwake }
 
     /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf;
     /// the Agents and AI Usage lessons have only their own.
     private var practiceModules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage, timer].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage, timer, keepAwake].compactMap { $0 }
     }
 
     private var hint: String? {
@@ -170,6 +174,7 @@ struct LessonPlayer: View {
         if usesAgents { return String(localized: "Practice agents: they're made up, and your real ones aren't touched.") }
         if usesUsage { return String(localized: "Practice accounts: they're made up, and nothing is read from your Mac.") }
         if usesTimer { return String(localized: "A practice timer: your real timer and stopwatch aren't touched.") }
+        if usesKeepAwake { return String(localized: "A practice Keep Awake: it doesn't keep your Mac awake.") }
         return nil
     }
 
@@ -310,6 +315,8 @@ struct LessonPlayer: View {
         usage = nil
         timer?.center.onEvent = nil
         timer = nil
+        keepAwake?.center.onEvent = nil
+        keepAwake = nil
     }
 
     private func restart() {
@@ -320,6 +327,19 @@ struct LessonPlayer: View {
 
     /// Fresh pretend threads or accounts each time the lesson starts.
     private func makePractice() {
+        if usesKeepAwake {
+            let module = KeepAwakeModule.practice()
+            let runner = runner
+            module.center.onEvent = { event in
+                switch event {
+                case .turnedOn: runner.receive(.keepAwakeTurnedOn)
+                case .extended: runner.receive(.keepAwakeExtended)
+                case .turnedOff: runner.receive(.keepAwakeTurnedOff)
+                }
+            }
+            keepAwake = module
+            return
+        }
         if usesTimer {
             let module = TimerModule.practice()
             let signals = TimerLessonSignals(runner: runner)
@@ -388,6 +408,14 @@ struct LessonPlayer: View {
             default: true
             }
             if !doable { center.reset() }
+        }
+        // "Add half an hour" and "Turn it off" need it on, for 30 minutes (say a step was skipped).
+        if let center = keepAwake?.center, step.signal == .keepAwakeExtended || step.signal == .keepAwakeTurnedOff,
+           center.session?.end == nil {
+            let report = center.onEvent
+            center.onEvent = nil
+            center.turnOn(.timed(30 * 60))
+            center.onEvent = report
         }
         // "Pause it and carry on" and "Stop it" need a timer to act on (say a step was skipped).
         if let center = timer?.center {

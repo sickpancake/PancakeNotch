@@ -41,6 +41,9 @@ public protocol NotchModule: AnyObject {
     /// first module keeps its place (the Timer, ADR-0040). Alone it keeps to #2, or fills both ears with an
     /// `extra`.
     var prefersSecondEar: Bool { get }
+    /// Takes the first ear (#1: left, or right with Swap sides) while active, whatever its rank (Keep Awake,
+    /// ADR-0041). A module asking for #2 keeps it; the best-ranked other module takes #2 otherwise.
+    var prefersFirstEar: Bool { get }
     /// Hovering or clicking this module's compact ear opens the notch on it (the Timer).
     var opensFromEar: Bool { get }
 
@@ -101,6 +104,7 @@ public extension NotchModule {
     var isActive: Bool { false }
     var wantsFocus: Bool { false }
     var prefersSecondEar: Bool { false }
+    var prefersFirstEar: Bool { false }
     var opensFromEar: Bool { false }
     var holdsOpen: Bool { false }
     var accessibilityStatus: String? { nil }

@@ -40,6 +40,9 @@ public final class AgentsCenter {
 
     public var hasFinished: Bool { shown.contains { $0.status.isFinished } }
 
+    /// An agent works or waits for you (Keep Awake holds the Mac awake meanwhile, ADR-0041).
+    public var isBusy: Bool { shown.contains { !$0.status.isFinished } }
+
     /// The threads of the tools not hidden in Settings, without the helpers that show under another.
     private var shown: [AgentThread] {
         let hidden = settings.hiddenTools
