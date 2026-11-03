@@ -19,6 +19,7 @@ struct HelpView: View {
             subtitle: String(localized: "Quick fixes for the common problems. Each one checks how things are right now.")
         ) {
             notchCard
+            besideNotchCard
             musicCard
             shelfCard
             agentsCard
@@ -72,6 +73,31 @@ struct HelpView: View {
                 }
             }
             MoreOnlineRow(topic: .notchNotShowing)
+        }
+    }
+
+    // MARK: Beside the notch
+
+    /// Who gets the two spots beside the closed notch (ADR-0011's ear rules), with the sides as set now.
+    @ViewBuilder
+    private var besideNotchCard: some View {
+        let swapped = context.arrangement.swapsEarSides
+        SettingsCard(header: String(localized: "Beside the notch")) {
+            SettingsRow(
+                title: String(localized: "Your order decides"),
+                subtitle: swapped
+                    ? String(localized: "The first two modules in your list that have something to show get the spots beside the notch. Sides are swapped, so the first one is on the right.")
+                    : String(localized: "The first two modules in your list that have something to show get the spots beside the notch. The first one is on the left.")
+            ) {
+                Button(String(localized: "Open Modules")) { navigation.section = .modules }
+            }
+            SettingsRow(
+                title: String(localized: "Some have a set spot"),
+                subtitle: String(localized: "Keep Awake always takes the first spot. The Timer takes the second, so your top module keeps its place. The others wait until a spot is free.")
+            ) {
+                EmptyView()
+            }
+            MoreOnlineRow(topic: .besideTheNotch)
         }
     }
 

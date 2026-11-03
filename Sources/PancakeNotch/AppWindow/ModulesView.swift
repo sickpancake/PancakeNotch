@@ -80,8 +80,9 @@ struct ModulesView: View {
 
 // MARK: Your modules
 
-/// Every module in ranking order: drag to reorder (the top two get the spots beside the notch), star
-/// the ones you want as tabs, switch them on or off. Ear sides can be swapped.
+/// Every module in ranking order: drag to reorder (usually the top two active ones get the spots beside
+/// the notch; Keep Awake and the Timer have set spots, ADR-0011's ear rules), star the ones you want as
+/// tabs, switch them on or off. Ear sides can be swapped, and Help explains how the spots work.
 private struct YourModulesCard: View {
     let context: AppContext
     /// Opens a module's settings further down the page.
@@ -90,6 +91,7 @@ private struct YourModulesCard: View {
     /// The row a reorder drag is over right now (nil once it leaves, is dropped or is cancelled).
     @State private var dropTarget: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let arrangement = context.arrangement
@@ -112,6 +114,15 @@ private struct YourModulesCard: View {
                         .labelsHidden()
                 }
             }
+            SettingsRow(
+                title: String(localized: "How the spots work"),
+                subtitle: String(localized: "Which module shows beside the notch, and why.")
+            ) {
+                Button { openURL(HelpLinks.url(.besideTheNotch)) } label: {
+                    Label(String(localized: "Read More"), systemImage: "arrow.up.right")
+                        .labelStyle(TrailingIconLabelStyle())
+                }
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: arrangement.order)
         .onDisappear { dragging = nil; dropTarget = nil }
@@ -119,7 +130,7 @@ private struct YourModulesCard: View {
 
     /// The order, then what a star does with the way the open notch is set to move between modules.
     private func footer(_ navigation: NotchNavigation) -> String {
-        let order = String(localized: "Drag a module or use its arrows to reorder. The first two that are active get the spots beside the notch.")
+        let order = String(localized: "Drag a module or use its arrows to reorder. Usually the first two that are active get the spots beside the notch; some modules have a set spot.")
         let favorites = switch navigation {
         case .tabsAndMenu:
             String(localized: "Favorites (★) get a tab in the open notch and a big tile in the Module Menu.")
@@ -271,13 +282,36 @@ private struct ModuleListRow: View {
         AccessibilityNotification.Announcement(String(localized: "\(title), now number \(rank + 1)")).post()
     }
 
-    /// Where its ear goes. Ears go to the first two active modules (switched on and with something to
-    /// show) in this order, the first on the left; a module alone takes the left.
+    /// Where its ear goes (ADR-0011's ear rules). Keep Awake always takes the first spot and the Timer
+    /// (on "Second spot") the second; the other ears go to the first two active modules (switched on and
+    /// with something to show) in this order, the first on the left; a module alone takes the left.
     private func status(isOn: Bool) -> String {
         guard isOn else { return String(localized: "Off") }
         let arrangement = context.arrangement
-        let place = arrangement.order.filter { context.isEnabled($0) }.firstIndex(of: moduleID) ?? 0
-        switch (place, arrangement.swapsEarSides) {
+        let swapped = arrangement.swapsEarSides
+        if moduleID == "keepAwake" {
+            return swapped
+                ? String(localized: "Always right of the notch while it keeps the Mac awake")
+                : String(localized: "Always left of the notch while it keeps the Mac awake")
+        }
+        if moduleID == "timer" {
+            switch context.timerSettings.earPlacement {
+            case .second:
+                return swapped
+                    ? String(localized: "Always left of the notch while it runs")
+                    : String(localized: "Always right of the notch while it runs")
+            case .off:
+                return String(localized: "Only in the open notch. A finished timer still shows Done beside it")
+            case .ranking:
+                break
+            }
+        }
+        // Modules with a set spot don't take a place in the order.
+        let ranked = arrangement.order.filter { id in
+            context.isEnabled(id) && id != "keepAwake" && (id != "timer" || context.timerSettings.earPlacement == .ranking)
+        }
+        let place = ranked.firstIndex(of: moduleID) ?? 0
+        switch (place, swapped) {
         case (0, false): return String(localized: "Left of the notch when active")
         case (0, true): return String(localized: "Right of the notch when active")
         case (1, false): return String(localized: "Right of the notch when active, or left when it's the only one")
