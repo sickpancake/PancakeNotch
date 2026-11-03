@@ -81,15 +81,40 @@ struct KeepAwakeCenterTests {
         #expect(ends == [.timeUp])
         #expect(hold.kind == nil)
 
-        // While an agent works, the session ending doesn't let the Mac sleep: no strip.
+        // A chosen deadline also stops automatic Keep Awake for the current work.
         ends = []
         center.setWork(agents: true, converting: false)
         center.turnOn(.timed(30 * 60))
         clock.advance(30 * 60)
         center.timeMayHaveJumped()
         #expect(center.session == nil)
+        #expect(!center.isHolding)
+        #expect(center.pausedForWork)
+        #expect(hold.kind == nil)
+        #expect(ends == [.timeUp])
+        center.setWork(agents: true, converting: true)
+        #expect(!center.isHolding)
+        center.setWork(agents: false, converting: false)
+        center.setWork(agents: true, converting: false)
         #expect(center.isHolding)
-        #expect(ends.isEmpty)
+    }
+
+    @Test func timeUpDropsAnAutomaticTailAndDoesNotRestartIt() {
+        let center = makeCenter()
+        center.turnOn(.timed(1800))
+        clock.advance(1790)
+        center.setWork(agents: true, converting: false)
+        center.setWork(agents: false, converting: false)
+        #expect(center.tailEnd != nil)
+        clock.advance(10)
+        center.timeMayHaveJumped()
+        #expect(!center.isHolding)
+        #expect(center.tailEnd == nil)
+        #expect(!center.pausedForWork)
+        center.setWork(agents: false, converting: false)
+        #expect(!center.isHolding)
+        center.setWork(agents: false, converting: true)
+        #expect(center.isHolding)
     }
 
     @Test func timeUpDuringSleepEndsQuietly() {
@@ -184,8 +209,9 @@ struct KeepAwakeCenterTests {
         #expect(!center.pausedForWork)
         clock.advance(30 * 60)
         center.timeMayHaveJumped()
-        // The agent still works: automatic keeps it awake now.
-        #expect(center.isHolding)
+        // A chosen time ends even when the agent still works.
+        #expect(!center.isHolding)
+        #expect(center.pausedForWork)
     }
 
     @Test func lowBatteryEndsEverythingWithAStripAndBlocksTurnOn() {

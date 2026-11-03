@@ -476,7 +476,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setUp(model)
             return model
         }
+        // All six module tabs beside a real-width camera cutout, with Keep Awake selected.
+        let allModules = NotchViewModel(layout: layout, state: .expanded, arrangement: ModuleArrangement())
+        let agents = AgentsModule(center: .practice())
+        agents.isSnapshot = true
+        let usage = AIUsageModule(center: .practice())
+        usage.isSnapshot = true
+        allModules.modules = [NowPlayingSnapshot.module(), ShelfPreviewModule(), agents, usage,
+                              TimerSnapshot.module(), KeepAwakeSnapshot.module { center, _ in center.turnOn(.timed(3600)) }]
+        allModules.select("keepAwake")
         return [
+            allModules,
             model(.compact, shelf: ShelfSnapshot.module(itemCount: 16)),
             model(.compact, swapped: true, shelf: ShelfSnapshot.module(itemCount: 20)),
             model(.expanded),

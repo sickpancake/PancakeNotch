@@ -294,6 +294,10 @@ public final class KeepAwakeCenter {
         }
         if let end = session?.end, end <= moment {
             change(\.session, nil)
+            // A chosen end time is a stop, including while work continues. The next run may
+            // turn automatic Keep Awake on again, just as after pressing Turn Off.
+            change(\.pausedForWork, workRuns)
+            change(\.tailEnd, nil)
             if moment.timeIntervalSince(end) <= Self.lateness { told = .timeUp }
         }
         if let tail = tailEnd, tail <= moment { change(\.tailEnd, nil) }
@@ -303,7 +307,7 @@ public final class KeepAwakeCenter {
         schedule()
         wasLow = batteryLow
         wasHolding = holding
-        // Time up tells only when the Mac can sleep again: work may still keep it awake.
+        // A timed session ends once; repeated wake, power and work events cannot show another strip.
         if let told, told == .batteryLow || !holding { onEndedByItself?(told) }
     }
 

@@ -190,7 +190,8 @@ struct KeepAwakeModelTests {
         clock.advance(1800)
         center.timeMayHaveJumped()
         #expect(center.session == nil)
-        #expect(hold.kind == .screen)
+        #expect(hold.kind == nil)
+        #expect(center.pausedForWork)
     }
 
     @Test func tailLastsTwoMinutesRestartsAndEndsQuietly() {
@@ -232,7 +233,7 @@ struct KeepAwakeModelTests {
         #expect(center.tailEnd == nil)
     }
 
-    @Test func timeUpStripOccursOnceOnlyIfNoWorkOrTailRemains() {
+    @Test func timeUpStopsCurrentWorkAndShowsItsStripOnce() {
         let center = makeCenter()
         var ends: [KeepAwakeEnd] = []
         center.onEndedByItself = { ends.append($0) }
@@ -246,8 +247,14 @@ struct KeepAwakeModelTests {
         center.turnOn(.timed(1800))
         clock.advance(1800)
         center.timeMayHaveJumped()
-        #expect(ends == [.timeUp])
-        #expect(hold.kind == .screen)
+        #expect(ends == [.timeUp, .timeUp])
+        #expect(hold.kind == nil)
+        #expect(center.pausedForWork)
+        center.setPower(.pluggedIn)
+        center.timeMayHaveJumped()
+        center.setWork(agents: true, converting: false)
+        #expect(hold.kind == nil)
+        #expect(ends == [.timeUp, .timeUp])
     }
 
     @Test func lateAndBoundaryTimeEndUseSixtySecondGrace() {

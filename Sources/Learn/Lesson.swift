@@ -356,7 +356,7 @@ public struct Lesson: Identifiable, Sendable {
             LessonStep(
                 id: "keepAwake.on",
                 title: String(localized: "Keep your Mac awake for 30 minutes", comment: "Lesson step title"),
-                detail: String(localized: "Hover the notch to open it, then click 30 min. A coffee cup shows beside the notch while it's on.", comment: "Lesson step detail"),
+                detail: String(localized: "Hover the notch to open it, then click 30 min under Keep awake for. It turns off when the time runs out, even if an agent is still working. A coffee cup shows beside the notch while it's on.", comment: "Lesson step detail"),
                 symbol: "cup.and.heat.waves.fill",
                 signal: .keepAwakeTurnedOn
             ),

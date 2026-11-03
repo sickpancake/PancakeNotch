@@ -209,20 +209,25 @@ private struct LengthRow: View {
 
     var body: some View {
         let center = module.center
-        HStack(spacing: 6) {
-            ForEach(KeepAwakeLength.choices, id: \.self) { length in
-                LengthButton(title: KeepAwakeText.length(length), isLast: center.settings.lastLength == length) {
-                    module.user { center.turnOn(length) }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Keep awake for")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.6))
+            HStack(spacing: 6) {
+                ForEach(KeepAwakeLength.choices, id: \.self) { length in
+                    LengthButton(title: KeepAwakeText.length(length), isLast: center.settings.lastLength == length) {
+                        module.user { center.turnOn(length) }
+                    }
+                    .accessibilityLabel(Text(length.seconds == nil
+                        ? String(localized: "Keep awake until I stop")
+                        : String(localized: "Keep awake for \(KeepAwakeText.length(length))")))
                 }
-                .accessibilityLabel(Text(length.seconds == nil
-                    ? String(localized: "Keep awake until I stop")
-                    : String(localized: "Keep awake for \(KeepAwakeText.length(length))")))
             }
         }
         .disabled(!center.canTurnOn)
         .opacity(center.canTurnOn ? 1 : 0.4)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Lengths"))
+        .accessibilityLabel(Text("Keep awake for"))
     }
 }
 
