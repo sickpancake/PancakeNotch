@@ -70,6 +70,50 @@ struct KeepAwakeCenterTests {
         #expect(center.session?.end == nil)
     }
 
+    @Test func plusThirtyIsOffAtTheDayLimitAndTellsNothing() {
+        let center = makeCenter()
+        var events: [KeepAwakeEvent] = []
+        center.onEvent = { events.append($0) }
+        center.turnOn(.timed(4 * 3600))
+        #expect(center.canExtend)
+        while center.canExtend { center.extend() }
+        #expect(center.remaining(at: clock.now)! > KeepAwakeCenter.longest - 60)
+        let before = events.count
+        center.extend()
+        // Nothing added, so nothing to tell a lesson.
+        #expect(events.count == before)
+        // Time passing makes room again.
+        clock.advance(3600)
+        #expect(center.canExtend)
+        // Nothing to extend when it holds for work only, or for one until you stop.
+        center.turnOn(.untilStopped)
+        #expect(!center.canExtend)
+    }
+
+    @Test func endTimeSaysTomorrow() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 3, hour: 22))!
+        let later = now.addingTimeInterval(3600)
+        let tomorrow = now.addingTimeInterval(6 * 3600)
+        #expect(!KeepAwakeText.until(later, now: now, calendar: calendar).contains("tomorrow"))
+        #expect(KeepAwakeText.until(tomorrow, now: now, calendar: calendar).contains("tomorrow"))
+    }
+
+    @Test func aGoneCenterIsNotKeptByItsTimer() async {
+        weak var gone: KeepAwakeCenter?
+        do {
+            let center = KeepAwakeCenter(settings: settings, isPractice: true)
+            center.turnOn(.timed(1800))
+            gone = center
+            // Let its timer start sleeping first.
+            for _ in 0..<5 { await Task.yield() }
+        }
+        await Task.yield()
+        await Task.yield()
+        #expect(gone == nil)
+    }
+
     @Test func timeUpEndsWithAStripOnlyWhenTheMacCanSleep() {
         let center = makeCenter()
         var ends: [KeepAwakeEnd] = []
@@ -147,6 +191,17 @@ struct KeepAwakeCenterTests {
         center.setWork(agents: false, converting: false)
         center.setWork(agents: true, converting: false)
         #expect(center.tailEnd == nil)
+    }
+
+    @Test func switchingTheWorksModuleOffStartsNoTail() {
+        let center = makeCenter()
+        center.setWork(agents: true, converting: false)
+        #expect(center.isHolding)
+        // The Agents module was switched off mid-work: nothing runs, so it lets go at once.
+        center.setWork(agents: false, converting: false, startsTail: false)
+        #expect(center.tailEnd == nil)
+        #expect(!center.isHolding)
+        #expect(hold.kind == nil)
     }
 
     @Test func automaticEndingShowsNoStrip() {

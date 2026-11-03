@@ -177,6 +177,12 @@ public final class KeepAwakeCenter {
     /// Turn On can start a session now.
     public var canTurnOn: Bool { isEnabled && !batteryLow }
 
+    /// +30 min would add something: a timed session that's more than a minute short of a day ahead.
+    public var canExtend: Bool {
+        guard isHolding, let end = session?.end else { return false }
+        return end < now.addingTimeInterval(Self.longest - 60)
+    }
+
     /// How long a session has left, or `nil` for none or one until you stop.
     public func remaining(at date: Date) -> TimeInterval? {
         session?.end.map { max(0, $0.timeIntervalSince(date)) }
@@ -198,7 +204,7 @@ public final class KeepAwakeCenter {
 
     /// +30 min on a timed session (from now if it's somehow past its end), up to a day ahead.
     public func extend() {
-        guard var session, let end = session.end else { return }
+        guard canExtend, var session, let end = session.end else { return }
         let next = max(end, now).addingTimeInterval(Self.extraTime)
         session.end = min(next, now.addingTimeInterval(Self.longest))
         self.session = session
@@ -213,8 +219,9 @@ public final class KeepAwakeCenter {
         changed(.turnedOff)
     }
 
-    /// The agents or a conversion started or stopped (from the app's wiring).
-    public func setWork(agents: Bool, converting: Bool) {
+    /// The agents or a conversion started or stopped (from the app's wiring). `startsTail` is false when the
+    /// work stopped because its module was switched off: nothing runs any more, so nothing to wait for.
+    public func setWork(agents: Bool, converting: Bool, startsTail: Bool = true) {
         let wasRunning = workRuns
         change(\.agentsBusy, agents)
         change(\.converting, converting)
@@ -222,7 +229,7 @@ public final class KeepAwakeCenter {
             change(\.tailEnd, nil)
         } else {
             // The work you paused for is over: the next run turns it on again, without a tail.
-            if wasRunning, !pausedForWork { change(\.tailEnd, now.addingTimeInterval(Self.tail)) }
+            if wasRunning, !pausedForWork, startsTail { change(\.tailEnd, now.addingTimeInterval(Self.tail)) }
             change(\.pausedForWork, false)
         }
         update()
@@ -321,12 +328,12 @@ public final class KeepAwakeCenter {
     /// Sleeps until `date`, then updates. Task.sleep's clock counts sleep, so after a long sleep it wakes
     /// at once; if the wall clock moved meanwhile, it sleeps again for what's left.
     private func sleepTask(until date: Date) -> Task<Void, Never> {
+        // Holds the center only between sleeps, so a practice copy that's gone isn't kept alive by its timer.
         Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { return }
-                let wait = date.timeIntervalSince(self.now)
+                guard let wait = self.map({ date.timeIntervalSince($0.now) }) else { return }
                 if wait <= 0 {
-                    self.update()
+                    self?.update()
                     return
                 }
                 try? await Task.sleep(for: .seconds(wait))

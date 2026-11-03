@@ -549,8 +549,10 @@ public final class NotchViewModel {
         briefTask?.cancel()
         isShowingBriefly = false
         briefModuleID = nil
+        // Opening while a strip shows (hovering or clicking it) opens on what the strip tells about.
+        let peeked = layout.isPeeking ? peekModuleID : nil
         endPeek(animated: false)
-        if state != .expanded { chooseModuleForOpening(moduleID) }
+        if state != .expanded { chooseModuleForOpening(moduleID ?? peeked) }
         wasOpenedByHover = fromHover
         transition(to: .expanded)
     }

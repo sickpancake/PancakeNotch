@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     /// Exists only while Keep Awake is switched on.
     private var keepAwakeModule: KeepAwakeModule?
+    /// The Shelf in Home's live notch, which can convert a file too. Kept after Home closes, so a
+    /// conversion started there finishes and keeps the Mac awake while it runs.
+    private var liveShelf: ShelfModule?
     /// Each `observeWork` chain, so only the newest one carries on.
     private var workGeneration = 0
     private var followedAccountFolders: [String] = []
@@ -294,11 +297,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeLiveModules() -> [any NotchModule] {
         var modules: [any NotchModule] = []
         if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
-        if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
+        liveShelf = shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
+        if let liveShelf { modules.append(liveShelf) }
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
         if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
         if timerSettings.isEnabled { modules.append(TimerModule(center: timers, settings: timerSettings, presents: false)) }
         if keepAwakeSettings.isEnabled { modules.append(KeepAwakeModule(center: keepAwake, presents: false)) }
+        observeWork()
         return modules
     }
 
@@ -311,6 +316,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
+        // Work that stops because its module went off starts no 2-minute tail (Keep Awake).
+        let hadWorkModules = (agentsModule != nil, shelf != nil || liveShelf != nil)
         let accountsChanged = accountFolders != followedAccountFolders
         followedAccountFolders = accountFolders
         if nowPlayingOn {
@@ -329,6 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             shelf = nil
+            liveShelf = nil
         }
         if agentsOn {
             if agentsModule == nil {
@@ -381,25 +389,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule]
             .compactMap { $0 }
-        observeWork()
+        observeWork(startsTail: !(hadWorkModules.0 && agentsModule == nil) && !(hadWorkModules.1 && shelf == nil))
         menuBar.updateIcon()
     }
 
     /// Tells Keep Awake when an agent works (or waits for you) and when the Shelf converts a file, and puts
     /// the cup on the menu bar icon while it keeps the Mac awake. Runs again on each change (no polling);
     /// the modules being switched on or off start a new chain from `observeModules`.
-    private func observeWork() {
+    private func observeWork(startsTail: Bool = true) {
         workGeneration += 1
         let generation = workGeneration
         let (agentsBusy, converting, _) = withObservationTracking {
-            (agentsModule != nil && agents.isBusy, shelf?.isConverting == true, keepAwake.isHolding)
+            (agentsModule != nil && agents.isBusy, shelf?.isConverting == true || liveShelf?.isConverting == true,
+             keepAwake.isHolding)
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.workGeneration == generation else { return }
                 self.observeWork()
             }
         }
-        keepAwake.setWork(agents: agentsBusy, converting: converting)
+        keepAwake.setWork(agents: agentsBusy, converting: converting, startsTail: startsTail)
         menuBar.updateIcon()
     }
 

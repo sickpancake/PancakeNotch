@@ -26,6 +26,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         notchItem.target = self
         updatesItem.target = self
         keepAwakeMenu.delegate = self
+        // Each item says itself whether it can be used now (a low battery greys out the lengths).
+        keepAwakeMenu.autoenablesItems = false
         keepAwakeItem.submenu = keepAwakeMenu
     }
 
@@ -123,6 +125,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.target = self
             item.tag = index
             item.isEnabled = keepAwake.canTurnOn
+            // The length a plain Turn On uses.
+            item.state = length == keepAwake.settings.lastLength ? .on : .off
             keepAwakeMenu.addItem(item)
         }
         if keepAwake.isHolding {
@@ -130,6 +134,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             if keepAwake.session?.end != nil {
                 let more = NSMenuItem(title: String(localized: "Add 30 Minutes"), action: #selector(extendKeepAwake), keyEquivalent: "")
                 more.target = self
+                more.isEnabled = keepAwake.canExtend
                 keepAwakeMenu.addItem(more)
             }
             let off = NSMenuItem(title: String(localized: "Turn Off"), action: #selector(turnOffKeepAwake), keyEquivalent: "")

@@ -13,6 +13,7 @@ final class FirstEarModule: NotchModule {
     func attach(to notch: NotchViewModel?) {}
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
     func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
+    func peekView(layout: NotchLayout) -> AnyView? { AnyView(EmptyView()) }
 }
 
 @MainActor
@@ -69,5 +70,15 @@ struct FirstEarTests {
         let ears = model.ears(layout: layout)
         #expect(ears.left?.id == "nowPlaying.main")
         #expect(ears.right?.id == "timer.main")
+    }
+
+    /// Clicking or hovering "Keep Awake ended" opens Keep Awake, not the page used last.
+    @Test func openingDuringAStripOpensItsModule() {
+        let (model, music, _, awake) = makeModel()
+        model.select(music.moduleID)
+        model.close()
+        #expect(model.peek(awake, for: .seconds(5)))
+        model.open()
+        #expect(model.selectedModule?.moduleID == "keepAwake")
     }
 }

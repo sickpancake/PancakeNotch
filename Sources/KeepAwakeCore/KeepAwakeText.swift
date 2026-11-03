@@ -30,6 +30,17 @@ public enum KeepAwakeText {
         date.formatted(date: .omitted, time: .shortened)
     }
 
+    /// When a session ends: "Until 3:42 PM", or "Until tomorrow, 3:42 PM" (a session reaches up to a day ahead).
+    public static func until(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        if calendar.isDate(date, inSameDayAs: now) {
+            return String(localized: "Until \(time(date))", comment: "Keep Awake: when it ends")
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(date, inSameDayAs: tomorrow) {
+            return String(localized: "Until tomorrow, \(time(date))", comment: "Keep Awake: when it ends, tomorrow")
+        }
+        return String(localized: "Until \(date.formatted(date: .abbreviated, time: .shortened))", comment: "Keep Awake: when it ends, another day")
+    }
+
     private static func duration(_ seconds: TimeInterval, style: DateComponentsFormatter.UnitsStyle) -> String {
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = style
@@ -58,7 +69,7 @@ public struct KeepAwakeStatus: Equatable, Sendable {
             kind = .holding
             title = String(localized: "Keeping your Mac awake", comment: "Keep Awake: on")
             if let session = center.session {
-                detail = session.end.map { String(localized: "Until \(KeepAwakeText.time($0))", comment: "Keep Awake: when it ends") }
+                detail = session.end.map { KeepAwakeText.until($0, now: center.now) }
                     ?? String(localized: "Until you turn it off", comment: "Keep Awake: no end")
             } else {
                 detail = Self.why(center.work)

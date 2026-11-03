@@ -180,6 +180,10 @@ private struct KeepAwakeState: View {
                     NotchPill(title: String(localized: "+30 min", comment: "Keep Awake: add half an hour"), symbol: "plus") {
                         module.user { center.extend() }
                     }
+                    // A day ahead is the most: nothing more to add.
+                    .disabled(!center.canExtend)
+                    .opacity(center.canExtend ? 1 : 0.4)
+                    .help(center.canExtend ? Text("Add 30 minutes") : Text("Keep Awake runs at most a day ahead"))
                     .accessibilityLabel(Text("Add 30 minutes"))
                 }
                 NotchPill(title: String(localized: "Turn Off", comment: "Keep Awake"), symbol: "power") {
@@ -221,6 +225,7 @@ private struct LengthRow: View {
                     .accessibilityLabel(Text(length.seconds == nil
                         ? String(localized: "Keep awake until I stop")
                         : String(localized: "Keep awake for \(KeepAwakeText.length(length))")))
+                    .accessibilityAddTraits(center.settings.lastLength == length ? .isSelected : [])
                 }
             }
         }
