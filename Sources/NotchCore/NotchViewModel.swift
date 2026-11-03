@@ -295,11 +295,12 @@ public final class NotchViewModel {
     /// What the compact ears show: the top two active modules by ranking, #1's main view on the left
     /// and #2's on the right (or swapped). A module that asks for the second ear (the Timer), or one
     /// shown briefly (the Shelf's after-drop count), takes #2 and leaves #1 to the best-ranked other one.
-    /// A module alone fills both ears if it has an extra view. With nothing active (the short shrink after
-    /// a click), the current module shows.
+    /// A module alone fills both ears if it has an extra view. With nothing active, the current module
+    /// shows for the short shrink after a click only, not for a peek strip.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
-        if shown.isEmpty, let selected = selectedModule { shown = [selected] }
+        // Not while a strip is up (peekModuleID lasts until its exit animation ends, so no ear flashes in).
+        if shown.isEmpty, peekModuleID == nil || staysCompact, let selected = selectedModule { shown = [selected] }
         // Only modules that have ears take a side.
         let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
         var picked = Array(withEars.prefix(2))
