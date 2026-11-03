@@ -192,7 +192,7 @@ public final class KeepAwakeCenter {
         if !isPractice { settings.lastLength = length }
         let start = now
         session = KeepAwakeSession(start: start, end: length.seconds.map { start.addingTimeInterval($0) }, boot: bootTime())
-        pausedForWork = false
+        change(\.pausedForWork, false)
         changed(.turnedOn)
     }
 
@@ -207,23 +207,23 @@ public final class KeepAwakeCenter {
 
     /// Ends a session. While work keeps it awake, it stays off until that work ends.
     public func turnOff() {
-        session = nil
-        if workRuns { pausedForWork = true }
-        tailEnd = nil
+        change(\.session, nil)
+        if workRuns { change(\.pausedForWork, true) }
+        change(\.tailEnd, nil)
         changed(.turnedOff)
     }
 
     /// The agents or a conversion started or stopped (from the app's wiring).
     public func setWork(agents: Bool, converting: Bool) {
         let wasRunning = workRuns
-        agentsBusy = agents
-        self.converting = converting
+        change(\.agentsBusy, agents)
+        change(\.converting, converting)
         if workRuns {
-            tailEnd = nil
+            change(\.tailEnd, nil)
         } else {
             // The work you paused for is over: the next run turns it on again, without a tail.
-            if wasRunning, !pausedForWork { tailEnd = now.addingTimeInterval(Self.tail) }
-            pausedForWork = false
+            if wasRunning, !pausedForWork { change(\.tailEnd, now.addingTimeInterval(Self.tail)) }
+            change(\.pausedForWork, false)
         }
         update()
     }
@@ -244,7 +244,7 @@ public final class KeepAwakeCenter {
 
     /// The new power state. Going low while it keeps the Mac awake ends everything, with a strip (`update`).
     public func setPower(_ state: PowerState) {
-        power = state
+        change(\.power, state)
         update()
     }
 
@@ -252,16 +252,23 @@ public final class KeepAwakeCenter {
     /// Switching both automatic sources off drops the tail; switching one on while it runs ends a tail.
     func settingsChanged() {
         if workRuns {
-            tailEnd = nil
+            change(\.tailEnd, nil)
         } else {
-            if !settings.whileAgentsWork && !settings.whileConverting { tailEnd = nil }
+            if !settings.whileAgentsWork && !settings.whileConverting { change(\.tailEnd, nil) }
             // No pause for work that no longer counts.
-            pausedForWork = false
+            change(\.pausedForWork, false)
         }
         update()
     }
 
     // MARK: Inner workings
+
+    /// Writes a value only when it changes. Older Observation (the macOS 15 toolchain) tells observers about
+    /// every write, equal or not, and the app's wiring writes the same work again on each change: an
+    /// unchanged write would loop (KeepAwakeModelTests, identicalWorkInputDoesNotRetriggerHoldingObservation).
+    private func change<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<KeepAwakeCenter, Value>, _ value: Value) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
+    }
 
     private func changed(_ event: KeepAwakeEvent) {
         save()
@@ -277,19 +284,19 @@ public final class KeepAwakeCenter {
         let moment = now
         var told: KeepAwakeEnd?
         if !isEnabled {
-            session = nil
-            tailEnd = nil
-            pausedForWork = false
+            change(\.session, nil)
+            change(\.tailEnd, nil)
+            change(\.pausedForWork, false)
         } else if batteryLow, !wasLow {
-            session = nil
-            tailEnd = nil
+            change(\.session, nil)
+            change(\.tailEnd, nil)
             if wasHolding { told = .batteryLow }
         }
         if let end = session?.end, end <= moment {
-            session = nil
+            change(\.session, nil)
             if moment.timeIntervalSince(end) <= Self.lateness { told = .timeUp }
         }
-        if let tail = tailEnd, tail <= moment { tailEnd = nil }
+        if let tail = tailEnd, tail <= moment { change(\.tailEnd, nil) }
         save()
         let holding = isHolding
         holder.hold(holding ? (settings.screen == .staysOn ? .screen : .system) : nil)
