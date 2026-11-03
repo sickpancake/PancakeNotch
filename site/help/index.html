@@ -126,10 +126,10 @@
         <p>When a module has something to show, the closed notch grows a little on each side. There are two spots beside the notch, so at most two modules show there at once. When nothing needs showing, the notch stays plain black.</p>
         <h3>When a module shows there</h3>
         <ul>
-          <li><strong>Now Playing</strong>: album art and sound bars while a song plays. A paused song keeps its spot until you switch to another module in the open notch. Turn it off with <strong>Show album art and sound bars beside the notch</strong> in Now Playing settings.</li>
+          <li><strong>Now Playing</strong>: album art and sound bars while a song plays. A paused song keeps its spot until you switch to another module in the open notch, and gets it back when you open Now Playing again or the song plays. Turn it off with <strong>Show album art and sound bars beside the notch</strong> in Now Playing settings.</li>
           <li><strong>Shelf</strong>: a tray with the count once it holds 15 items, with a <strong>!</strong> when it's full at 20, and for a moment after you drop something on it. Turn it off with <strong>Show the Shelf's count beside the notch</strong> in Shelf settings.</li>
-          <li><strong>Agents</strong>: while a thread works or needs you, or has finished or stopped with an error and you haven't looked yet.</li>
-          <li><strong>AI Usage</strong>: by default only while a limit is under 10% left. Choose <strong>Never</strong>, <strong>When close</strong> or <strong>Always</strong> under <strong>Beside the closed notch</strong> in AI Usage settings.</li>
+          <li><strong>Agents</strong>: while a thread works or needs you, or has finished, been stopped or hit an error and you haven't looked yet.</li>
+          <li><strong>AI Usage</strong>: by default only while a limit is under 10% left. Choose <strong>Never</strong>, <strong>When close</strong> or <strong>Always</strong> (once it has a reading) under <strong>Beside the closed notch</strong> in AI Usage settings.</li>
           <li><strong>Timer</strong>: while a timer or the stopwatch runs, is paused, or is stopped but not reset, unless <strong>Beside the notch</strong> is set to <strong>Don't show</strong>. A finished timer always shows <strong>Done</strong> until you stop it.</li>
           <li><strong>Keep Awake</strong>: the whole time it keeps your Mac awake.</li>
         </ul>
@@ -137,7 +137,7 @@
         <ul>
           <li><strong>Your order decides.</strong> On the <strong>Modules</strong> page, the first two modules in your list that have something to show get the spots. The higher one takes the first spot (left of the notch), the next one the second spot (right).</li>
           <li><strong>Swap sides</strong> on the Modules page puts the first spot on the right instead.</li>
-          <li><strong>Some modules have a set spot.</strong> <a class="text-link" href="#keep-awake">Keep Awake</a> always takes the first spot. The <a class="text-link" href="#timer">Timer</a> takes the second spot, so your top module (like your music) keeps its place. To have the Timer follow your order instead, set <strong>Beside the notch</strong> to <strong>By order</strong>. A finished timer still takes the second spot. The Shelf's quick count after a drop borrows the second spot for a moment, then gives it back.</li>
+          <li><strong>Some modules have a set spot.</strong> <a class="text-link" href="#keep-awake">Keep Awake</a> always takes the first spot. The <a class="text-link" href="#timer">Timer</a> takes the second spot, so your top module (like your music) keeps its place. To have the Timer follow your order instead, set <strong>Beside the notch</strong> to <strong>By order</strong>. A finished timer still takes the second spot. When the Shelf holds fewer than 15 items, its quick count after a drop borrows the second spot for a moment, then gives it back.</li>
           <li><strong>The other spot</strong> goes to the highest module in your list that has something to show. While Keep Awake and the Timer both show, they take both spots.</li>
           <li><strong>A module on its own</strong> uses one spot, except Now Playing, which fills both: the album art in one, the sound bars in the other. With another module showing, it keeps only the album art. A Timer in the second spot stays there even when it's alone.</li>
           <li><strong>More than two?</strong> The others wait and show up as soon as a spot is free. Open the notch to see all of them.</li>
@@ -145,7 +145,7 @@
         <h3>Hovering and clicking</h3>
         <ul>
           <li>Hover or click the Timer's or Keep Awake's spot and the notch opens on that module. Anywhere else, it opens on whatever needs you most: music that's playing, an agent waiting for you or a finished timer, picked by your order. If nothing does, it opens on the module you used last.</li>
-          <li>Click the open notch once to shrink it so only the spots show. If no module has something to show, the module you were on shows there. It stays like that until you open the notch and click it again, which closes it all the way.</li>
+          <li>Click the open notch once to shrink it so only the spots show. If no module has something to show, the module you were on shows there, even if its own setting keeps it from beside the notch otherwise. It stays like that until you open the notch and click it again, which closes it all the way.</li>
           <li>The slim strips that slide out under the notch (a new song, an agent alert, a limit pop-up) are separate. They don't change who has a spot.</li>
           <li>The spots hide along with the notch while it's hidden in <a class="text-link" href="#full-screen">full screen</a>.</li>
         </ul>
