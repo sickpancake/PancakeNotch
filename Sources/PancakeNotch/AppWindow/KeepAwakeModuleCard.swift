@@ -129,7 +129,7 @@ struct KeepAwakeSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "If PancakeNotch quits"),
-                subtitle: String(localized: "Whether a Keep Awake you turned on comes back when PancakeNotch opens again, after an update or if you quit it. Turn back on skips a restart of your Mac, so it's never left on from yesterday.")
+                subtitle: String(localized: "Whether a Keep Awake you turned on comes back when PancakeNotch opens again, after an update or if you quit it. Turn back on doesn't bring it back after your Mac restarts, so it's never left on from yesterday.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "If PancakeNotch quits"),
