@@ -309,13 +309,20 @@ public final class NotchViewModel {
         if shown.isEmpty, peekModuleID == nil || staysCompact, let selected = selectedModule { shown = [selected] }
         // Only modules that have ears take a side.
         let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
-        // Who gets a spot: waiting modules first, then by rank.
-        let byPriority = withEars.filter { $0.0.waitsForYou } + withEars.filter { !$0.0.waitsForYou }
+        // Who gets a spot: waiting modules first, then one ordinary set-spot claim, then by rank.
+        // This keeps both alerts visible, while a brief Shelf badge can still displace ordinary music.
+        let waiting = withEars.filter { $0.0.waitsForYou }
+        let reservedSecond = withEars.first { !$0.0.waitsForYou && takesSecondEar($0.0) }
+        let byPriority = waiting + (reservedSecond.map { [$0] } ?? []) + withEars.filter {
+            !$0.0.waitsForYou && $0.0.moduleID != reservedSecond?.0.moduleID
+        }
         // Where: by rank, so a module doesn't change sides just because another one started waiting.
         let chosen = byPriority.prefix(2).map(\.0.moduleID)
         var picked = withEars.filter { chosen.contains($0.0.moduleID) }
-        if withEars.count > 1, let second = withEars.first(where: { takesSecondEar($0.0) }),
-           let first = byPriority.first(where: { $0.0 !== second.0 }) {
+        // Place only the selected modules. A waiting timer keeps #2 ahead of a brief Shelf badge.
+        let secondCandidates = picked.filter { $0.0.waitsForYou } + picked.filter { !$0.0.waitsForYou }
+        if picked.count > 1, let second = secondCandidates.first(where: { takesSecondEar($0.0) }),
+           let first = picked.first(where: { $0.0 !== second.0 }) {
             picked = [first, second]
         }
         var slots: [EarSlot?] = []
