@@ -54,7 +54,7 @@ struct KeepAwakeSettingsRows: View {
                 )
             }
             SettingsRow(
-                title: String(localized: "While AI agents work"),
+                title: String(localized: "Turn on while AI agents work"),
                 subtitle: agentsSubtitle
             ) {
                 HStack(spacing: 10) {
@@ -62,12 +62,12 @@ struct KeepAwakeSettingsRows: View {
                         Button(String(localized: "Turn On Agents")) { context.agentsSettings.agentsEnabled = true }
                             .buttonStyle(PillButtonStyle())
                     }
-                    Toggle(String(localized: "While AI agents work"), isOn: $settings.whileAgentsWork)
+                    Toggle(String(localized: "Turn on while AI agents work"), isOn: $settings.whileAgentsWork)
                         .labelsHidden()
                 }
             }
             SettingsRow(
-                title: String(localized: "While a file converts"),
+                title: String(localized: "Turn on while a file converts"),
                 subtitle: convertSubtitle
             ) {
                 HStack(spacing: 10) {
@@ -78,7 +78,7 @@ struct KeepAwakeSettingsRows: View {
                         }
                         .buttonStyle(PillButtonStyle())
                     }
-                    Toggle(String(localized: "While a file converts"), isOn: $settings.whileConverting)
+                    Toggle(String(localized: "Turn on while a file converts"), isOn: $settings.whileConverting)
                         .labelsHidden()
                 }
             }
@@ -145,12 +145,12 @@ struct KeepAwakeSettingsRows: View {
     }
 
     private var agentsSubtitle: String {
-        let base = String(localized: "While an AI agent (like Claude Code or Codex) works or waits for you, and for 2 minutes after.")
+        let base = String(localized: "Keeps your Mac awake by itself while an AI agent, like Claude Code or Codex, is working or waiting for your answer. It stays on for 2 more minutes after the agent finishes.")
         return context.agentsSettings.agentsEnabled ? base : base + " " + String(localized: "Needs the Agents module, which is off.")
     }
 
     private var convertSubtitle: String {
-        let base = String(localized: "While the Shelf converts a file, and for 2 minutes after.")
+        let base = String(localized: "Keeps your Mac awake by itself while the Shelf converts a file. It stays on for 2 more minutes after the file is done.")
         return context.shelfSettings.isEnabled && context.shelfSettings.convertEnabled
             ? base : base + " " + String(localized: "Needs the Shelf's Convert, which is off.")
     }

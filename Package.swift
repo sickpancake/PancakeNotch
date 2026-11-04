@@ -89,7 +89,8 @@ let package = Package(
         ),
         .testTarget(
             name: "PancakeNotchTests",
-            dependencies: ["PancakeNotch"]
+            dependencies: ["PancakeNotch"],
+            swiftSettings: testing
         ),
         .testTarget(
             name: "NotchCoreTests",

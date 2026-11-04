@@ -76,8 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Keeps the Mac awake (ADR-0041): a session you started survives a relaunch as the Reopen setting says.
     /// Follows the battery, wakes and clock changes only while Keep Awake is switched on.
     private lazy var keepAwake = KeepAwakeCenter(
-        settings: keepAwakeSettings, defaults: .standard, holder: PowerAssertion(), power: PowerState.current
+        settings: keepAwakeSettings, defaults: .standard, holder: PowerAssertion(), power: Self.readPower
     )
+    /// The battery: IOKit's, or in testing builds `PANCAKENOTCH_FAKE_BATTERY`'s pretend one (FakeBattery.swift).
+    private static var readPower: () -> PowerState {
+        #if PANCAKENOTCH_INTERNAL_TESTING
+        if let path = FakeBattery.path { return { FakeBattery.read(path) } }
+        #endif
+        return PowerState.current
+    }
     /// Exists only while Keep Awake is switched on.
     private var keepAwakeModule: KeepAwakeModule?
     /// The Shelf in Home's live notch, which can convert a file too. Kept after Home closes, so a
@@ -149,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if FakeBattery.path != nil { FakeBattery.watch { [weak self] in self?.keepAwake.powerChanged() } }
         #endif
         NSApp.mainMenu = MainMenu.make(target: self, settingsAction: #selector(showSettings),
                                        updatesAction: updates.isAvailable ? #selector(checkForUpdates) : nil)
