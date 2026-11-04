@@ -1,4 +1,5 @@
 import AppKit
+@testable import NotchCore
 import SwiftUI
 import Testing
 import TimerCore

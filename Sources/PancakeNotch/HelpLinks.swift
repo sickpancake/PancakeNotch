@@ -14,6 +14,7 @@ enum HelpTopic: String, CaseIterable {
     case agentsConnect = "agents-connect"
     case aiUsage = "ai-usage"
     case timer
+    case keepAwake = "keep-awake"
     case updates
     case launchAtLogin = "launch-at-login"
     case privacy
