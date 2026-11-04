@@ -9,7 +9,6 @@ final class SecondEarModule: NotchModule {
     let moduleID: String
     var isActive = true
     var prefersSecondEar = true
-    var opensFromEar = true
     /// Has a "Timer done" strip to show (`peekView`).
     var hasStrip = false
     weak var notch: NotchViewModel?

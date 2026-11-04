@@ -44,8 +44,10 @@ public final class AgentsModule: NotchModule {
     /// An ear while any thread works, needs you or has an unseen finish.
     public var isActive: Bool { center.attention != nil }
 
-    /// The notch opens on Agents while a thread needs you.
-    public var wantsFocus: Bool {
+    /// The notch opens on Agents while a thread needs you, also while a song plays (ADR-0037), and its
+    /// "!" gets a spot beside the notch before modules that don't wait.
+    public var wantsFocus: Bool { waitsForYou }
+    public var waitsForYou: Bool {
         if case .needsYou? = center.attention { return true }
         return false
     }

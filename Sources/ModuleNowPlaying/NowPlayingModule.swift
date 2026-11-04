@@ -26,9 +26,15 @@ public final class NowPlayingModule: NotchModule {
     /// Rendering off-screen: plain SwiftUI bars instead of the Core Animation ones.
     @ObservationIgnored public var isSnapshot = false
 
-    /// The user picked another module while this song was paused (or before it started playing):
-    /// the song gives up its ear until music plays again, and the notch stops opening on it.
+    /// The user picked another module in the open notch. The notch stops opening on Now Playing until the
+    /// music stops and plays again, or the user comes back to it; later songs in a row don't undo the pick.
+    /// A paused song also gives up its ear meanwhile.
     private(set) var hasYielded = false
+    /// When the music last stopped (paused, or nothing loaded), to tell a real stop from the short gap
+    /// between two songs. `nil` while it plays.
+    @ObservationIgnored private var stoppedAt: Date?
+    /// The clock (replaceable in tests).
+    @ObservationIgnored var now: () -> Date = Date.init
     /// Where the progress bar is being dragged to, in seconds (nil when not dragging).
     var scrubTime: TimeInterval?
     /// A short note over the artwork (the practice player can't open an app).
@@ -42,6 +48,9 @@ public final class NowPlayingModule: NotchModule {
 
     /// How long a paused song still counts as "what you're listening to" when the notch opens.
     static let recentPause: TimeInterval = 5 * 60
+    /// Music that stops for less than this and plays again is the gap between two songs, not a stop:
+    /// the user's pick of another module stays.
+    static let songGap: TimeInterval = 10
 
     public init(center: NowPlayingCenter) {
         self.center = center
@@ -68,7 +77,8 @@ public final class NowPlayingModule: NotchModule {
         return track.isPlaying || !hasYielded
     }
 
-    /// The notch opens on Now Playing while music plays or was paused a moment ago.
+    /// The notch opens on Now Playing while music plays or was paused a moment ago, unless the user picked
+    /// another module since the music started (`hasYielded`).
     public var wantsFocus: Bool {
         guard let track = center.track, !hasYielded else { return false }
         if track.isPlaying { return true }
@@ -94,6 +104,7 @@ public final class NowPlayingModule: NotchModule {
         }
         lastIdentity = center.track?.identity
         wasPlaying = center.track?.isPlaying ?? false
+        stoppedAt = wasPlaying ? nil : now()
         observeCenter()
         notch?.activityChanged()
     }
@@ -153,12 +164,16 @@ public final class NowPlayingModule: NotchModule {
     private func centerChanged() {
         let track = center.track
         let isPlaying = track?.isPlaying ?? false
-        // Music playing again, or a new song, takes the ears back.
-        if isPlaying, !wasPlaying { hasYielded = false }
+        if isPlaying, !wasPlaying {
+            // Music playing again after a real stop takes the ears and the first page back. The next song
+            // (even after the player's short gap between songs) keeps the user's pick.
+            if stoppedAt.map({ now().timeIntervalSince($0) >= Self.songGap }) ?? true { hasYielded = false }
+            stoppedAt = nil
+        } else if !isPlaying, wasPlaying || stoppedAt == nil {
+            stoppedAt = now()
+        }
         if let identity = track?.identity, identity != lastIdentity {
             if lastIdentity != nil {
-                // Another paused song showing up isn't music playing again: the ear stays given up.
-                if isPlaying { hasYielded = false }
                 if settings.peeksOnSongChange, isPlaying, let notch, notch.state != .expanded {
                     notch.peek(self, for: .seconds(3))
                 }
