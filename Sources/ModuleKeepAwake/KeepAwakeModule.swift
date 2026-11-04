@@ -14,8 +14,10 @@ public final class KeepAwakeModule: NotchModule {
 
     @ObservationIgnored public private(set) weak var notch: NotchViewModel?
 
-    /// Why it last stopped by itself, while its strip shows or waits for the notch to close.
-    private(set) var ended: KeepAwakeEnd?
+    /// The battery stopped it and plugging in brings it back (the battery strip says so).
+    private var comesBack: Bool { center.stoppedForBattery && center.settings.plugIn == .turnBackOn }
+    /// What it last told with a strip, while the strip shows or waits for the notch to close.
+    private(set) var ended: KeepAwakeNotice?
     /// It stopped by itself while the open notch showed another module: the strip shows once it closes.
     private var endPending = false
     /// The display is asleep: nothing ticks.
@@ -51,11 +53,11 @@ public final class KeepAwakeModule: NotchModule {
         observationGeneration += 1
         self.notch = notch
         guard notch != nil else {
-            if presents { center.onEndedByItself = nil }
+            if presents { center.onNotice = nil }
             stopWatchingDisplay()
             return
         }
-        if presents { center.onEndedByItself = { [weak self] reason in self?.endedByItself(reason) } }
+        if presents { center.onNotice = { [weak self] reason in self?.noticed(reason) } }
         watchDisplay()
         observe()
         notch?.activityChanged()
@@ -70,7 +72,7 @@ public final class KeepAwakeModule: NotchModule {
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {
-        ended.map { AnyView(KeepAwakePeek(reason: $0)) }
+        ended.map { AnyView(KeepAwakePeek(reason: $0, comesBack: comesBack)) }
     }
 
     public func notchDidOpen() {
@@ -90,7 +92,7 @@ public final class KeepAwakeModule: NotchModule {
             Task { @MainActor in
                 guard let self, self.notch != nil, self.observationGeneration == generation else { return }
                 // Back on: an old "ended" strip no longer tells the truth.
-                if self.center.isHolding { self.clearEnded() }
+                if self.center.isHolding, self.ended?.isStop == true { self.clearEnded() }
                 self.notch?.activityChanged()
                 self.showPendingStrip()
                 self.observe()
@@ -100,14 +102,14 @@ public final class KeepAwakeModule: NotchModule {
 
     /// It stopped by itself: a strip where it can be seen. Open on this page: the page shows it. Open on
     /// another module: the strip when the notch closes. Closed: the strip now.
-    private func endedByItself(_ reason: KeepAwakeEnd) {
+    private func noticed(_ reason: KeepAwakeNotice) {
         guard let notch else { return }
         ended = reason
         notch.activityChanged()
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
-            userInfo: [.announcement: Self.stripText(reason).spoken, .priority: NSAccessibilityPriorityLevel.medium.rawValue]
+            userInfo: [.announcement: Self.stripText(reason, comesBack: comesBack).spoken, .priority: NSAccessibilityPriorityLevel.medium.rawValue]
         )
         if notch.state == .expanded {
             endPending = !(notch.selectedModule === self && !notch.showsMenu)
@@ -123,7 +125,7 @@ public final class KeepAwakeModule: NotchModule {
     }
 
     /// Off-screen pictures: the strip for `reason`, without anything having ended.
-    public func showEndedForSnapshot(_ reason: KeepAwakeEnd) {
+    public func showNoticeForSnapshot(_ reason: KeepAwakeNotice) {
         ended = reason
     }
 
@@ -134,8 +136,8 @@ public final class KeepAwakeModule: NotchModule {
         ended = nil
     }
 
-    /// The strip's words: a title and a detail, and what VoiceOver says.
-    static func stripText(_ reason: KeepAwakeEnd) -> (title: String, detail: String, spoken: String) {
+    /// The strip's words: a title and a detail, and what VoiceOver says. `comesBack`: plugging in brings it back.
+    static func stripText(_ reason: KeepAwakeNotice, comesBack: Bool = false) -> (title: String, detail: String, spoken: String) {
         let detail = String(localized: "Your Mac can sleep again", comment: "Keep Awake strip")
         switch reason {
         case .timeUp:
@@ -143,7 +145,19 @@ public final class KeepAwakeModule: NotchModule {
             return (title, detail, title + ". " + detail)
         case .batteryLow:
             let title = String(localized: "Battery low", comment: "Keep Awake strip: stopped for the battery")
-            return (title, detail, String(localized: "Keep Awake stopped, battery low. Your Mac can sleep again."))
+            guard comesBack else {
+                return (title, detail, String(localized: "Keep Awake stopped, battery low. Your Mac can sleep again."))
+            }
+            let back = String(localized: "Back on when you plug in", comment: "Keep Awake strip: stopped for the battery, comes back")
+            return (title, back, String(localized: "Keep Awake stopped, battery low. It comes back on when you plug in."))
+        case .batteryLowKeepsGoing:
+            let title = String(localized: "Battery low", comment: "Keep Awake strip: low battery, keeps going")
+            let going = String(localized: "Keep Awake keeps going", comment: "Keep Awake strip: low battery, keeps going")
+            return (title, going, String(localized: "Battery low. Keep Awake keeps going."))
+        case .backOn:
+            let title = String(localized: "Keep Awake is back on", comment: "Keep Awake strip: back on after plugging in")
+            let plugged = String(localized: "Your Mac is plugged in", comment: "Keep Awake strip: back on after plugging in")
+            return (title, plugged, title + ". " + plugged)
         }
     }
 

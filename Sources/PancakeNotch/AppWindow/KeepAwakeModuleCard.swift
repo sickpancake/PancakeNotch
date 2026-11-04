@@ -83,25 +83,60 @@ struct KeepAwakeSettingsRows: View {
                 }
             }
             SettingsRow(
-                title: String(localized: "Stop when the battery is low"),
-                subtitle: String(localized: "On battery, Keep Awake stops at this level and shows a strip under the notch. It can't start again on battery until you plug in.")
+                title: String(localized: "Low battery level"),
+                subtitle: String(localized: "On battery, at or below this level Keep Awake stops or keeps going, as you choose below. Never: it doesn't look at the battery.")
             ) {
                 MonochromeSegmented(
-                    title: String(localized: "Stop when the battery is low"),
+                    title: String(localized: "Low battery level"),
                     options: KeepAwakeSettings.cutoffChoices.map { (Optional($0), "\($0)%") } + [(nil, String(localized: "Never"))],
                     selection: $settings.batteryCutoff
                 )
             }
+            // Only while a level is set: with Never there's nothing to choose.
+            if let cutoff = settings.batteryCutoff {
+                SettingsRow(
+                    title: String(localized: "At the low battery level"),
+                    subtitle: settings.lowBattery == .stop
+                        ? String(localized: "At \(cutoff)% Keep Awake stops, with a strip under the notch, so it can't run your battery flat. It can't start again on battery until you plug in.")
+                        : String(localized: "At \(cutoff)% Keep Awake keeps going and tells you once with a strip under the notch. macOS still puts your Mac to sleep when the battery is nearly empty.")
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "At the low battery level"),
+                        options: [
+                            (KeepAwakeLowBattery.stop, String(localized: "Stop")),
+                            (.keepGoing, String(localized: "Keep going")),
+                        ],
+                        selection: $settings.lowBattery
+                    )
+                }
+                if settings.lowBattery == .stop {
+                    SettingsRow(
+                        title: String(localized: "When you plug in"),
+                        subtitle: settings.plugIn == .turnBackOn
+                            ? String(localized: "After the battery stopped it, Keep Awake comes back on when you plug in: the rest of your session and automatic keep-awake. A strip under the notch tells you.")
+                            : String(localized: "After the battery stopped it, Keep Awake stays off when you plug in, until you turn it on or the agent or conversion that runs now ends.")
+                    ) {
+                        MonochromeSegmented(
+                            title: String(localized: "When you plug in"),
+                            options: [
+                                (KeepAwakePlugIn.turnBackOn, String(localized: "Turn back on")),
+                                (.stayOff, String(localized: "Stay off")),
+                            ],
+                            selection: $settings.plugIn
+                        )
+                    }
+                }
+            }
             SettingsRow(
-                title: String(localized: "When PancakeNotch opens again"),
-                subtitle: String(localized: "What happens to a Keep Awake you turned on, after an update or if you quit the app. Carry on doesn't carry it over a restart of your Mac, so it's never left on from yesterday.")
+                title: String(localized: "If PancakeNotch quits"),
+                subtitle: String(localized: "Whether a Keep Awake you turned on comes back when PancakeNotch opens again, after an update or if you quit it. Turn back on skips a restart of your Mac, so it's never left on from yesterday.")
             ) {
                 MonochromeSegmented(
-                    title: String(localized: "When PancakeNotch opens again"),
+                    title: String(localized: "If PancakeNotch quits"),
                     options: [
-                        (KeepAwakeReopen.carryOn, String(localized: "Carry on")),
+                        (KeepAwakeReopen.carryOn, String(localized: "Turn back on")),
                         (.carryOnAfterRestart, String(localized: "Even after a restart")),
-                        (.startOff, String(localized: "Start off")),
+                        (.startOff, String(localized: "Stay off")),
                     ],
                     selection: $settings.reopen
                 )

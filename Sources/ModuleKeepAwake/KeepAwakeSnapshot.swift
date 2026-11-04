@@ -44,9 +44,9 @@ public enum KeepAwakeSnapshot {
             setUp(model)
             return model
         }
-        func ended(_ reason: KeepAwakeEnd) -> KeepAwakeModule {
+        func ended(_ reason: KeepAwakeNotice) -> KeepAwakeModule {
             let module = module()
-            module.showEndedForSnapshot(reason)
+            module.showNoticeForSnapshot(reason)
             return module
         }
         return [
@@ -64,6 +64,11 @@ public enum KeepAwakeSnapshot {
             model(.expanded, [module(setUp: { center, _ in center.turnOn(.untilStopped) }, settings: { $0.screen = .canTurnOff })]),
             model(.compact, [ended(.timeUp)]) { $0.peekForSnapshot($0.modules[0]) },
             model(.compact, [ended(.batteryLow)]) { $0.peekForSnapshot($0.modules[0]) },
+            model(.compact, [ended(.batteryLowKeepsGoing)]) { $0.peekForSnapshot($0.modules[0]) },
+            model(.compact, [ended(.backOn)]) { $0.peekForSnapshot($0.modules[0]) },
+            // Kept going on a low battery: the page says so.
+            model(.expanded, [module(power: PowerState(onBattery: true, percent: 8), setUp: { center, _ in center.turnOn(.untilStopped) },
+                                     settings: { $0.lowBattery = .keepGoing })]),
         ]
     }
 }

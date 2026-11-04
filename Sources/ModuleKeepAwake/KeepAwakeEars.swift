@@ -27,13 +27,14 @@ struct KeepAwakeEar: View {
     }
 }
 
-/// The strip under the compact notch when Keep Awake stopped by itself: the time ran out, or the battery
-/// is low. Hovering or clicking the notch opens the page.
+/// The strip under the compact notch: Keep Awake stopped by itself (the time ran out, the battery is low), it
+/// keeps going on a low battery, or it came back on when you plugged in. Hovering or clicking it opens the page.
 struct KeepAwakePeek: View {
-    let reason: KeepAwakeEnd
+    let reason: KeepAwakeNotice
+    var comesBack = false
 
     var body: some View {
-        let text = KeepAwakeModule.stripText(reason)
+        let text = KeepAwakeModule.stripText(reason, comesBack: comesBack)
         ViewThatFits(in: .horizontal) {
             line(text.title, text.detail)
             line(text.title, nil)
@@ -46,7 +47,8 @@ struct KeepAwakePeek: View {
 
     private func line(_ title: String, _ detail: String?) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: reason == .batteryLow ? "battery.25" : "cup.and.heat.waves")
+            Image(systemName: reason == .batteryLow || reason == .batteryLowKeepsGoing ? "battery.25"
+                  : reason == .backOn ? "cup.and.heat.waves.fill" : "cup.and.heat.waves")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.6))
             Text(title)

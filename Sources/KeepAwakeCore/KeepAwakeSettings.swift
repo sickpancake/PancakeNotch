@@ -25,14 +25,30 @@ public enum KeepAwakeScreen: String, CaseIterable, Sendable {
     case canTurnOff
 }
 
-/// What a session you started does when PancakeNotch opens again.
+/// Whether a Keep Awake you turned on comes back when PancakeNotch opens again (an update, or you quit it).
 public enum KeepAwakeReopen: String, CaseIterable, Sendable {
-    /// Carries on, but not after the Mac restarted (so it's never left on from yesterday).
+    /// Comes back, but not after the Mac restarted (so it's never left on from yesterday).
     case carryOn
-    /// Carries on, even after a restart.
+    /// Comes back, even after the Mac restarted.
     case carryOnAfterRestart
-    /// Starts off.
+    /// Stays off.
     case startOff
+}
+
+/// What Keep Awake does on battery at the cutoff (ADR-0041 amendment 2026-11-03).
+public enum KeepAwakeLowBattery: String, CaseIterable, Sendable {
+    /// Stops, with a strip, and can't start again on battery below the cutoff.
+    case stop
+    /// Carries on, with one strip saying the battery is low.
+    case keepGoing
+}
+
+/// What comes back when you plug in after the battery stopped Keep Awake.
+public enum KeepAwakePlugIn: String, CaseIterable, Sendable {
+    /// The session the battery stopped (if time is left) and automatic keep-awake come back, with a strip.
+    case turnBackOn
+    /// It stays off until you turn it on, or until the work that runs now ends.
+    case stayOff
 }
 
 /// Keep Awake's options in the app window (Modules page). Stored in `UserDefaults`.
@@ -51,6 +67,10 @@ public final class KeepAwakeSettings {
     public var whileConverting: Bool { didSet { defaults.set(whileConverting, forKey: Keys.whileConverting); changed() } }
     /// Stops on battery at or below this percent; `nil` never stops for the battery.
     public var batteryCutoff: Int? { didSet { defaults.set(batteryCutoff ?? 0, forKey: Keys.batteryCutoff); changed() } }
+    /// Stop or keep going on battery at the cutoff.
+    public var lowBattery: KeepAwakeLowBattery { didSet { defaults.set(lowBattery.rawValue, forKey: Keys.lowBattery); changed() } }
+    /// What plugging in brings back after the battery stopped it (read when you plug in).
+    public var plugIn: KeepAwakePlugIn { didSet { defaults.set(plugIn.rawValue, forKey: Keys.plugIn) } }
     public var reopen: KeepAwakeReopen { didSet { defaults.set(reopen.rawValue, forKey: Keys.reopen) } }
     /// The length picked last: a plain Turn On uses it.
     public var lastLength: KeepAwakeLength {
@@ -71,6 +91,8 @@ public final class KeepAwakeSettings {
         // 0 is Never; a missing or odd value is the default.
         let cutoff = (defaults.object(forKey: Keys.batteryCutoff) as? NSNumber)?.intValue ?? Self.defaultCutoff
         batteryCutoff = cutoff == 0 ? nil : Self.cutoffChoices.contains(cutoff) ? cutoff : Self.defaultCutoff
+        lowBattery = defaults.string(forKey: Keys.lowBattery).flatMap(KeepAwakeLowBattery.init(rawValue:)) ?? .stop
+        plugIn = defaults.string(forKey: Keys.plugIn).flatMap(KeepAwakePlugIn.init(rawValue:)) ?? .turnBackOn
         reopen = defaults.string(forKey: Keys.reopen).flatMap(KeepAwakeReopen.init(rawValue:)) ?? .carryOn
         let saved = defaults.data(forKey: Keys.lastLength).flatMap { try? JSONDecoder().decode(KeepAwakeLength.self, from: $0) }
         lastLength = saved.flatMap { KeepAwakeLength.choices.contains($0) ? $0 : nil } ?? .standard
@@ -94,6 +116,8 @@ public final class KeepAwakeSettings {
         static let whileAgentsWork = "keepAwake.whileAgentsWork"
         static let whileConverting = "keepAwake.whileConverting"
         static let batteryCutoff = "keepAwake.batteryCutoff"
+        static let lowBattery = "keepAwake.lowBattery"
+        static let plugIn = "keepAwake.plugIn"
         static let reopen = "keepAwake.reopen"
         static let lastLength = "keepAwake.lastLength"
     }

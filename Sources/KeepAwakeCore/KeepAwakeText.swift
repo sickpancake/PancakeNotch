@@ -74,11 +74,13 @@ public struct KeepAwakeStatus: Equatable, Sendable {
             } else {
                 detail = Self.why(center.work)
             }
-        } else if center.isEnabled, center.batteryLow {
+        } else if center.isEnabled, center.batteryStops {
             kind = .batteryLow
             let percent = center.power.percent ?? 0
             title = String(localized: "Battery low (\(percent)%)", comment: "Keep Awake: stopped for the battery")
-            detail = String(localized: "Plug in to keep your Mac awake", comment: "Keep Awake: on a low battery")
+            detail = center.stoppedForBattery && center.settings.plugIn == .turnBackOn
+                ? String(localized: "Comes back on when you plug in", comment: "Keep Awake: stopped for the battery, back when plugged in")
+                : String(localized: "Plug in to keep your Mac awake", comment: "Keep Awake: on a low battery")
         } else if center.pausedForWork {
             kind = .pausedForWork
             title = String(localized: "Off for now", comment: "Keep Awake: turned off while work runs")

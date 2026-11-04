@@ -59,8 +59,8 @@ struct KeepAwakeModelTests {
 
     @Test func findingCutoffReactionEndsSessionAndReportsBatteryOnce() async {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.untilStopped)                              // TurnOn
         settings.batteryCutoff = nil                              // ChangeCutoff
         center.setPower(PowerState(onBattery: true, percent: 30))  // SetPower
@@ -71,29 +71,30 @@ struct KeepAwakeModelTests {
         #expect(ends == [.batteryLow])                            // current observer sends nothing
         center.setPower(PowerState(onBattery: true, percent: 30))  // wasLow is already true
         #expect(center.session == nil)
-        center.setPower(.pluggedIn)                               // SetPower: must not resurrect session
-        #expect(center.session == nil)
-        #expect(!center.isHolding)
-        #expect(ends == [.batteryLow])
+        center.setPower(.pluggedIn)                               // SetPower: Turn back on (default) brings it back
+        #expect(center.session != nil)
+        #expect(center.isHolding)
+        #expect(ends == [.batteryLow, .backOn])
     }
 
     @Test func findingPowerCallbackBetweenCutoffWriteAndReactionStillEndsSession() {
         let center = makeCenter(power: PowerState(onBattery: true, percent: 30))
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.untilStopped)
         settings.batteryCutoff = 50
         center.setPower(PowerState(onBattery: true, percent: 30))  // SetPower before ObserveSettings
         #expect(center.session == nil)
         #expect(ends == [.batteryLow])
         center.setPower(.pluggedIn)
-        #expect(!center.isHolding)
+        #expect(center.isHolding)
+        #expect(ends == [.batteryLow, .backOn])
     }
 
     @Test func findingModuleOffAtDeadlineDoesNotEmitTimeUp() async {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         clock.advance(60)                                         // ClockTick
         center.turnOn(.timed(120))                                // TurnOn at tick 1, end at tick 3
         settings.isEnabled = false                               // ChangeModule, reaction queued
@@ -106,8 +107,8 @@ struct KeepAwakeModelTests {
 
     @Test func findingLowCutoffAtDeadlineDoesNotMisreportTimeUp() async {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(1800))                               // TurnOn
         center.extend()                                          // Extend
         settings.batteryCutoff = nil                             // ChangeCutoff
@@ -196,8 +197,8 @@ struct KeepAwakeModelTests {
 
     @Test func tailLastsTwoMinutesRestartsAndEndsQuietly() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.setWork(agents: true, converting: false)
         center.setWork(agents: false, converting: false)
         #expect(center.tailEnd == clock.now.addingTimeInterval(120))
@@ -235,8 +236,8 @@ struct KeepAwakeModelTests {
 
     @Test func timeUpStopsCurrentWorkAndShowsItsStripOnce() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(1800))
         clock.advance(1800)
         center.timeMayHaveJumped()
@@ -259,8 +260,8 @@ struct KeepAwakeModelTests {
 
     @Test func lateAndBoundaryTimeEndUseSixtySecondGrace() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(1800))
         clock.advance(1860)                                       // exactly one minute late is allowed
         center.timeMayHaveJumped()
@@ -274,8 +275,8 @@ struct KeepAwakeModelTests {
 
     @Test func clockBackAndEarlyWakeLeaveDeadlineIntactThenEnd() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(1800))
         let end = center.session?.end
         clock.advance(-600)
@@ -307,10 +308,10 @@ struct KeepAwakeModelTests {
         #expect(hold.kind == .screen)
     }
 
-    @Test func lowPowerEndsSessionButPlugRestartsOnlyAutomaticWork() {
+    @Test func lowPowerEndsSessionAndPlugBringsItBack() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.untilStopped)
         center.setWork(agents: true, converting: false)
         center.setPower(PowerState(onBattery: true, percent: 20))
@@ -321,8 +322,9 @@ struct KeepAwakeModelTests {
         center.setPower(PowerState(onBattery: true, percent: 19))
         #expect(ends == [.batteryLow])
         center.setPower(.pluggedIn)
-        #expect(center.session == nil)
+        #expect(center.session != nil)
         #expect(hold.kind == .screen)
+        #expect(ends == [.batteryLow, .backOn])
     }
 
     @Test func restorePolicyMatrixMatchesBootExpiryBatteryAndModule() {

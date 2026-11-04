@@ -166,6 +166,10 @@ private struct KeepAwakeState: View {
     /// What the screen does, said once, plainly (the lock is the part people don't expect).
     private func note(_ status: KeepAwakeStatus) -> String? {
         guard status.kind == .holding else { return nil }
+        // Kept going on a low battery: that's what matters most now.
+        if module.center.batteryLow, let percent = module.center.power.percent {
+            return String(localized: "Battery low (\(percent)%): Keep Awake keeps going", comment: "Keep Awake: on a low battery, set to keep going")
+        }
         return module.center.settings.screen == .staysOn
             ? String(localized: "The screen stays on and won't lock by itself", comment: "Keep Awake: what the screen does")
             : String(localized: "The screen can sleep and lock; your Mac keeps working", comment: "Keep Awake: what the screen does")
@@ -296,7 +300,7 @@ struct KeepAwakeDial: View {
 
     @MainActor
     static func symbol(_ center: KeepAwakeCenter) -> String {
-        if center.isEnabled, center.batteryLow, !center.isHolding { return "battery.25" }
+        if center.isEnabled, center.batteryStops, !center.isHolding { return "battery.25" }
         return center.isHolding ? "cup.and.heat.waves.fill" : "cup.and.heat.waves"
     }
 }

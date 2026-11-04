@@ -116,8 +116,8 @@ struct KeepAwakeCenterTests {
 
     @Test func timeUpEndsWithAStripOnlyWhenTheMacCanSleep() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(30 * 60))
         clock.advance(30 * 60)
         center.timeMayHaveJumped()
@@ -163,8 +163,8 @@ struct KeepAwakeCenterTests {
 
     @Test func timeUpDuringSleepEndsQuietly() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.timed(30 * 60))
         clock.advance(3 * 3600)
         center.timeMayHaveJumped()
@@ -206,8 +206,8 @@ struct KeepAwakeCenterTests {
 
     @Test func automaticEndingShowsNoStrip() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.setWork(agents: false, converting: true)
         center.setWork(agents: false, converting: false)
         clock.advance(200)
@@ -271,8 +271,8 @@ struct KeepAwakeCenterTests {
 
     @Test func lowBatteryEndsEverythingWithAStripAndBlocksTurnOn() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.turnOn(.untilStopped)
         center.setPower(PowerState(onBattery: true, percent: 21))
         #expect(center.isHolding)
@@ -289,13 +289,157 @@ struct KeepAwakeCenterTests {
         center.setPower(PowerState(onBattery: false, percent: 20))
         #expect(center.isHolding)
         #expect(center.canTurnOn)
-        #expect(ends == [.batteryLow])
+        // Plugged in: the session you had comes back, and a strip says so.
+        #expect(center.session?.end == nil && center.session != nil)
+        #expect(ends == [.batteryLow, .backOn])
+    }
+
+    // MARK: Low battery and plugging in (ADR-0041 amendment 2026-11-03)
+
+    @Test func pluggingInBringsBackTheRestOfTheSession() {
+        settings.batteryCutoff = 10
+        let center = makeCenter()
+        center.turnOn(.timed(2 * 3600))
+        clock.advance(1800)
+        center.setPower(PowerState(onBattery: true, percent: 10))
+        #expect(!center.isHolding)
+        #expect(center.stoppedForBattery)
+        clock.advance(600)
+        center.setPower(PowerState(onBattery: false, percent: 11))
+        #expect(center.isHolding)
+        #expect(center.remaining(at: clock.now) == 4800)
+        #expect(!center.stoppedForBattery)
+    }
+
+    @Test func aSessionThatRanOutWhileStoppedStaysGone() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.timed(1800))
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        clock.advance(3600)
+        center.timeMayHaveJumped()
+        center.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(center.session == nil)
+        #expect(!center.isHolding)
+        // Nothing came back, so nothing to tell.
+        #expect(notices == [.batteryLow])
+    }
+
+    @Test func stayOffKeepsItOffUntilTheWorkEnds() {
+        settings.plugIn = .stayOff
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)
+        center.setWork(agents: true, converting: false)
+        center.setPower(PowerState(onBattery: true, percent: 12))
+        center.setPower(PowerState(onBattery: false, percent: 12))
+        #expect(!center.isHolding)
+        #expect(center.session == nil)
+        #expect(center.pausedForWork)
+        #expect(notices == [.batteryLow])
+        // That work ends; the next run keeps it awake again.
+        center.setWork(agents: false, converting: false)
+        #expect(!center.isHolding)
+        center.setWork(agents: true, converting: false)
+        #expect(center.isHolding)
+        // And Turn On works at once.
+        center.setWork(agents: false, converting: false)
+        center.turnOn(.timed(1800))
+        #expect(center.isHolding)
+    }
+
+    @Test func keepGoingCarriesOnAndTellsOnce() {
+        settings.lowBattery = .keepGoing
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 20))
+        center.setPower(PowerState(onBattery: true, percent: 19))
+        center.setPower(PowerState(onBattery: true, percent: 5))
+        #expect(center.isHolding)
+        #expect(center.session != nil)
+        #expect(notices == [.batteryLowKeepsGoing])
+        // Turning it on below the level works too.
+        center.turnOff()
+        #expect(center.canTurnOn)
+        center.turnOn()
+        #expect(center.isHolding)
+        // Nothing was stopped, so plugging in tells nothing.
+        center.setPower(PowerState(onBattery: false, percent: 5))
+        #expect(notices == [.batteryLowKeepsGoing])
+    }
+
+    @Test func keepGoingSaysNothingWhenNothingHolds() {
+        settings.lowBattery = .keepGoing
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.setPower(PowerState(onBattery: true, percent: 5))
+        #expect(notices.isEmpty)
+    }
+
+    @Test func switchingToKeepGoingWhileStoppedBringsItBackQuietly() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        #expect(!center.isHolding)
+        settings.lowBattery = .keepGoing
+        #expect(center.isHolding)
+        #expect(center.session != nil)
+        #expect(notices == [.batteryLow])
+    }
+
+    @Test func aLowerLevelWhileStoppedBringsItBackQuietly() {
+        let center = makeCenter()
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        settings.batteryCutoff = 10
+        #expect(center.isHolding)
+        #expect(center.session != nil)
+    }
+
+    @Test func switchingTheModuleOffForgetsWhatTheBatteryStopped() {
+        let center = makeCenter()
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        settings.isEnabled = false
+        settings.isEnabled = true
+        center.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(center.session == nil)
+        #expect(!center.isHolding)
+    }
+
+    @Test func reopeningOnALowBatteryBringsItBackWhenPluggedIn() {
+        makeCenter().turnOn(.untilStopped)
+        let center = makeCenter(power: PowerState(onBattery: true, percent: 10))
+        #expect(center.session == nil)
+        #expect(center.stoppedForBattery)
+        center.setPower(PowerState(onBattery: false, percent: 10))
+        #expect(center.session != nil)
+        #expect(center.isHolding)
+    }
+
+    @Test func automaticWorkComesBackWithAStripWhenPluggedIn() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.setWork(agents: true, converting: false)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        #expect(!center.isHolding)
+        center.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(center.isHolding)
+        #expect(notices == [.batteryLow, .backOn])
     }
 
     @Test func lowBatteryWhileNothingHoldsShowsNoStrip() {
         let center = makeCenter()
-        var ends: [KeepAwakeEnd] = []
-        center.onEndedByItself = { ends.append($0) }
+        var ends: [KeepAwakeNotice] = []
+        center.onNotice = { ends.append($0) }
         center.setPower(PowerState(onBattery: true, percent: 5))
         #expect(ends.isEmpty)
     }
