@@ -22,21 +22,33 @@ struct NotchModuleBar: View {
 
     /// How far the bar reaches from the body's left edge, so modules can start their header after it.
     static func width(for model: NotchViewModel) -> CGFloat {
-        let content: CGFloat
-        switch model.arrangement.navigation {
-        case .menu:
-            content = menuButtonWidth(title: menuTitle(for: model))
-        case .tabs:
-            content = tabsWidth(count: model.tabModules.count)
-        case .tabsAndMenu:
-            content = buttonSize.width + dividerWidth + tabsWidth(count: model.tabModules.count)
-        }
-        return leadingInset + content + trailingGap
+        leadingInset + fit(for: model).contentWidth + trailingGap
     }
 
-    private static func tabsWidth(count: Int) -> CGFloat {
-        guard count > 0 else { return 0 }
-        return CGFloat(count) * buttonSize.width + CGFloat(count - 1) * spacing
+    /// Fit every button beside the camera cutout. Compact spacing keeps all six current modules
+    /// visible; with less room, the current module's Menu button keeps every module reachable.
+    struct Fit {
+        let available: CGFloat
+        let buttonWidth: CGFloat
+        let usesMenu: Bool
+        let contentWidth: CGFloat
+    }
+
+    static func fit(for model: NotchViewModel) -> Fit {
+        let layout = model.layout
+        let sideWidth = (layout.bodySize(for: .expanded).width - layout.geometry.notchRect.width) / 2
+        let available = max(0, sideWidth - leadingInset - trailingGap)
+        let navigation = model.arrangement.navigation
+        let count = model.tabModules.count
+        let hasMenu = navigation == .tabsAndMenu
+        let buttons = count + (hasMenu ? 1 : 0)
+        let gaps = CGFloat(max(0, count - 1)) * spacing + (hasMenu ? dividerWidth : 0)
+        let buttonWidth = min(buttonSize.width, max(22, floor((available - gaps) / CGFloat(max(1, buttons)))))
+        let tabsWidth = CGFloat(buttons) * buttonWidth + gaps
+        let usesMenu = navigation == .menu || tabsWidth > available
+        let content = usesMenu ? menuButtonWidth(title: menuTitle(for: model)) : tabsWidth
+        return Fit(available: available, buttonWidth: buttonWidth, usesMenu: usesMenu,
+                   contentWidth: min(content, available))
     }
 
     /// Icon, name and chevron of the "Menu only" button.
@@ -50,22 +62,24 @@ struct NotchModuleBar: View {
     }
 
     var body: some View {
+        let fit = Self.fit(for: model)
         HStack(spacing: Self.spacing) {
-            switch model.arrangement.navigation {
-            case .menu:
+            if fit.usesMenu {
                 menuNameButton
-            case .tabs:
-                tabs
-            case .tabsAndMenu:
-                menuButton
-                Capsule()
-                    .fill(.white.opacity(0.16))
-                    .frame(width: 1, height: 12)
-                    .frame(width: Self.dividerWidth - Self.spacing * 2)
-                    .accessibilityHidden(true)
+            } else {
+                if model.arrangement.navigation == .tabsAndMenu {
+                    menuButton
+                    Capsule()
+                        .fill(.white.opacity(0.16))
+                        .frame(width: 1, height: 12)
+                        .frame(width: Self.dividerWidth - Self.spacing * 2)
+                        .accessibilityHidden(true)
+                }
                 tabs
             }
         }
+        .frame(width: fit.contentWidth, alignment: .leading)
+        .clipped()
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: model.selectedModule?.moduleID)
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: model.showsMenu)
         .accessibilityElement(children: .contain)
@@ -75,7 +89,8 @@ struct NotchModuleBar: View {
     private var tabs: some View {
         ForEach(model.tabModules, id: \.moduleID) { module in
             let isSelected = !model.showsMenu && module.moduleID == model.selectedModule?.moduleID
-            BarButton(symbol: module.symbol, isSelected: isSelected, highlight: highlight) {
+            BarButton(symbol: module.symbol, isSelected: isSelected, highlight: highlight,
+                      width: Self.fit(for: model).buttonWidth) {
                 model.select(module.moduleID)
             }
             .help(Text(module.title))
@@ -86,7 +101,8 @@ struct NotchModuleBar: View {
     }
 
     private var menuButton: some View {
-        BarButton(symbol: "square.grid.2x2", isSelected: model.showsMenu, highlight: highlight) {
+        BarButton(symbol: "square.grid.2x2", isSelected: model.showsMenu, highlight: highlight,
+                  width: Self.fit(for: model).buttonWidth) {
             model.toggleMenu()
         }
         .help(Text("Module Menu"))
@@ -107,7 +123,7 @@ struct NotchModuleBar: View {
                 Text(Self.menuTitle(for: model))
                     .font(Font(Self.titleFont))
                     .lineLimit(1)
-                    .fixedSize()
+                    .truncationMode(.tail)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.white.opacity(0.55))
@@ -132,6 +148,7 @@ private struct BarButton: View {
     let symbol: String
     let isSelected: Bool
     let highlight: Namespace.ID
+    let width: CGFloat
     let action: () -> Void
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -141,7 +158,7 @@ private struct BarButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(isSelected ? 1 : isHovered ? 0.85 : 0.5))
-                .frame(width: NotchModuleBar.buttonSize.width, height: NotchModuleBar.buttonSize.height)
+                .frame(width: width, height: NotchModuleBar.buttonSize.height)
                 .background {
                     if isSelected {
                         Capsule()

@@ -21,6 +21,9 @@ public enum NotchSnapshot {
                     Color(white: 0.55)
                     Color(white: 0.85).frame(height: geometry.notchRect.height)
                     NotchView(model: models[index])
+                    // The camera cutout hides pixels on a real Mac. Cover them here too so
+                    // a button under the hardware cannot look correct in an off-screen picture.
+                    Color.black.frame(width: geometry.notchRect.width, height: geometry.notchRect.height)
                 }
                 .frame(width: window.width, height: window.height)
             }

@@ -157,33 +157,6 @@ private struct ModeSegment: View {
 
 // MARK: Buttons
 
-/// A round control: white with a black sign for the main one, a soft grey circle otherwise.
-struct TimerRoundButton: View {
-    let symbol: String
-    let label: String
-    var prominent = false
-    var size: CGFloat = 36
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: size * 0.36, weight: .bold))
-                .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(prominent ? .black : .white)
-                .frame(width: size, height: size)
-                .background(prominent ? .white.opacity(isHovered ? 0.88 : 1) : .white.opacity(isHovered ? 0.2 : 0.13), in: Circle())
-                .contentShape(Circle())
-                .animation(.easeOut(duration: 0.15), value: isHovered)
-        }
-        .buttonStyle(PressableStyle())
-        .onHover { isHovered = $0 }
-        .help(Text(label))
-        .accessibilityLabel(Text(label))
-    }
-}
-
 // MARK: Timer
 
 /// The Timer page: presets and wheels before it starts, the countdown while it runs, Done when it's over.
@@ -376,15 +349,15 @@ private struct TimerRunning: View {
     private func controls(_ timer: CountdownTimer) -> some View {
         let size: CGFloat = isCompact ? 30 : 38
         HStack(spacing: 10) {
-            TimerRoundButton(symbol: "xmark", label: String(localized: "Cancel timer"), size: size) {
+            NotchRoundButton(symbol: "xmark", label: String(localized: "Cancel timer"), size: size) {
                 module.user { module.center.cancelTimer() }
             }
             if timer.isPaused {
-                TimerRoundButton(symbol: "play.fill", label: String(localized: "Resume"), prominent: true, size: size) {
+                NotchRoundButton(symbol: "play.fill", label: String(localized: "Resume"), prominent: true, size: size) {
                     module.user { module.center.resumeTimer() }
                 }
             } else {
-                TimerRoundButton(symbol: "pause.fill", label: String(localized: "Pause"), prominent: true, size: size) {
+                NotchRoundButton(symbol: "pause.fill", label: String(localized: "Pause"), prominent: true, size: size) {
                     module.user { module.center.pauseTimer() }
                 }
             }
@@ -432,7 +405,7 @@ private struct TimerDone: View {
                     HStack(spacing: 5) {
                         NotchPill(title: String(localized: "+1 min")) { module.addMinute() }
                             .accessibilityLabel(Text("Add 1 minute"))
-                        TimerRoundButton(symbol: "arrow.clockwise", label: String(localized: "Repeat"), size: 24) { module.repeatTimer() }
+                        NotchRoundButton(symbol: "arrow.clockwise", label: String(localized: "Repeat"), size: 24) { module.repeatTimer() }
                     }
                 }
                 NotchPill(title: String(localized: "Stop"), symbol: "stop.fill", prominent: true) { module.stopTimer() }
@@ -504,22 +477,22 @@ struct StopwatchPane: View {
         let size: CGFloat = isCompact ? 30 : 38
         return HStack(spacing: 10) {
             if stopwatch.isStopped {
-                TimerRoundButton(symbol: "arrow.counterclockwise", label: String(localized: "Reset"), size: size) {
+                NotchRoundButton(symbol: "arrow.counterclockwise", label: String(localized: "Reset"), size: size) {
                     module.user { module.center.resetStopwatch() }
                 }
             } else {
-                TimerRoundButton(symbol: "flag.fill", label: String(localized: "Lap"), size: size) {
+                NotchRoundButton(symbol: "flag.fill", label: String(localized: "Lap"), size: size) {
                     module.user { module.center.lap() }
                 }
                 .disabled(!stopwatch.canLap)
                 .opacity(stopwatch.canLap ? 1 : 0.35)
             }
             if stopwatch.isRunning {
-                TimerRoundButton(symbol: "stop.fill", label: String(localized: "Stop stopwatch"), prominent: true, size: size) {
+                NotchRoundButton(symbol: "stop.fill", label: String(localized: "Stop stopwatch"), prominent: true, size: size) {
                     module.user { module.center.stopStopwatch() }
                 }
             } else {
-                TimerRoundButton(symbol: "play.fill", label: String(localized: "Start stopwatch"), prominent: true, size: size) {
+                NotchRoundButton(symbol: "play.fill", label: String(localized: "Start stopwatch"), prominent: true, size: size) {
                     module.user { module.center.startStopwatch() }
                 }
             }

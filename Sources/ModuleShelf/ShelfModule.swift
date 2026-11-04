@@ -80,6 +80,8 @@ public final class ShelfModule: NotchModule {
     /// The Convert session (ADR-0038): the format row, progress, then the result. Holds the notch open
     /// while it shows.
     var conversion: ShelfConversion?
+    /// A file converts right now, on screen or carrying on with the notch closed (Keep Awake, ADR-0041).
+    public var isConverting: Bool { conversion?.isConverting == true }
     /// Runs conversions: the helper in the app, a fake in tests. Nil hides Convert.
     @ObservationIgnored var convertRunner: (any ShelfConvertRunning)? = ShelfConvertHelper.bundled
     /// What the strip under the notch says when a conversion finished out of sight.

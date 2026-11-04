@@ -61,3 +61,38 @@ public struct NotchPill: View {
         .onHover { isHovered = $0 }
     }
 }
+
+/// A round control: white with a black sign for the main one, a soft grey circle otherwise.
+public struct NotchRoundButton: View {
+    let symbol: String
+    let label: String
+    var prominent = false
+    var size: CGFloat = 36
+    let action: () -> Void
+    @State private var isHovered = false
+
+    public init(symbol: String, label: String, prominent: Bool = false, size: CGFloat = 36, action: @escaping () -> Void) {
+        self.symbol = symbol
+        self.label = label
+        self.prominent = prominent
+        self.size = size
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.36, weight: .bold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(prominent ? .black : .white)
+                .frame(width: size, height: size)
+                .background(prominent ? .white.opacity(isHovered ? 0.88 : 1) : .white.opacity(isHovered ? 0.2 : 0.13), in: Circle())
+                .contentShape(Circle())
+                .animation(.easeOut(duration: 0.15), value: isHovered)
+        }
+        .buttonStyle(PressableStyle())
+        .onHover { isHovered = $0 }
+        .help(Text(label))
+        .accessibilityLabel(Text(label))
+    }
+}

@@ -300,29 +300,43 @@ public final class NotchViewModel {
     /// and #2's on the right (or swapped). Modules that wait for you (an agent's question, a finished
     /// timer) get a spot before the others, which then wait; the spots still follow the ranking. A module
     /// that asks for the second ear (the Timer), or one shown briefly (the Shelf's after-drop count),
-    /// takes #2 and leaves #1 to the best other one. A module alone fills both ears if it has an extra
-    /// view. With nothing active, the current module shows for the short shrink after a click only, not
-    /// for a peek strip.
+    /// takes #2 and leaves #1 to the best other one. A module that asks for the first ear (Keep Awake)
+    /// takes #1, unless #2 is taken and something else waits for you: then that gets #1. A module alone
+    /// fills both ears if it has an extra view. With nothing active, the current module shows for the
+    /// short shrink after a click only, not for a peek strip.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
         // Not while a strip is up (peekModuleID lasts until its exit animation ends, so no ear flashes in).
         if shown.isEmpty, peekModuleID == nil || staysCompact, let selected = selectedModule { shown = [selected] }
         // Only modules that have ears take a side.
         let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
-        // Who gets a spot: waiting modules first, then one ordinary set-spot claim, then by rank.
-        // This keeps both alerts visible, while a brief Shelf badge can still displace ordinary music.
+        // Waiting alerts choose first, including among competing second-spot claims.
         let waiting = withEars.filter { $0.0.waitsForYou }
-        let reservedSecond = withEars.first { !$0.0.waitsForYou && takesSecondEar($0.0) }
-        let byPriority = waiting + (reservedSecond.map { [$0] } ?? []) + withEars.filter {
-            !$0.0.waitsForYou && $0.0.moduleID != reservedSecond?.0.moduleID
+        let byPriority = waiting + withEars.filter { !$0.0.waitsForYou }
+        var firstClaim = withEars.first { $0.0.prefersFirstEar }
+        let secondClaim = byPriority.first { $0.0 !== firstClaim?.0 && takesSecondEar($0.0) }
+        // Both claimed while something else waits for you: what needs you comes first.
+        if let claimed = firstClaim, let second = secondClaim,
+           withEars.contains(where: { $0.0.waitsForYou && $0.0 !== claimed.0 && $0.0 !== second.0 }) {
+            firstClaim = nil
         }
-        // Where: by rank, so a module doesn't change sides just because another one started waiting.
-        let chosen = byPriority.prefix(2).map(\.0.moduleID)
+        // Set spots reserve remaining room ahead of ordinary activity, never ahead of waiting alerts.
+        let ordinarySecond = withEars.first {
+            !$0.0.waitsForYou && $0.0 !== firstClaim?.0 && takesSecondEar($0.0)
+        }
+        let reserved = [firstClaim, ordinarySecond].compactMap { $0 }.filter { !$0.0.waitsForYou }
+        let candidates = waiting + reserved + withEars.filter { candidate in
+            !candidate.0.waitsForYou && !reserved.contains { $0.0 === candidate.0 }
+        }
+        let chosen = candidates.prefix(2).map(\.0.moduleID)
         var picked = withEars.filter { chosen.contains($0.0.moduleID) }
-        // Place only the selected modules. A waiting timer keeps #2 ahead of a brief Shelf badge.
+        // Place only the chosen modules. A waiting timer keeps #2 ahead of a brief Shelf badge.
+        let selectedFirst = picked.first { $0.0.prefersFirstEar }
         let secondCandidates = picked.filter { $0.0.waitsForYou } + picked.filter { !$0.0.waitsForYou }
-        if picked.count > 1, let second = secondCandidates.first(where: { takesSecondEar($0.0) }),
-           let first = picked.first(where: { $0.0 !== second.0 }) {
+        let selectedSecond = secondCandidates.first { $0.0 !== selectedFirst?.0 && takesSecondEar($0.0) }
+        if picked.count > 1,
+           let first = selectedFirst ?? picked.first(where: { $0.0 !== selectedSecond?.0 }),
+           let second = selectedSecond ?? picked.first(where: { $0.0 !== first.0 }) {
             picked = [first, second]
         }
         var slots: [EarSlot?] = []

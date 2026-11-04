@@ -199,7 +199,7 @@ private struct NotchHero: View {
 
     /// Which modules are on: the live notch follows the switches.
     private var enabledModules: [Bool] {
-        ["nowPlaying", "shelf", "agents", "aiUsage", "timer"].map(context.isEnabled)
+        ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake"].map(context.isEnabled)
     }
 
     var body: some View {

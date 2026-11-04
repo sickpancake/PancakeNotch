@@ -29,9 +29,12 @@ struct LogoGlyph: Shape {
     }
 
     /// The mark as a template image, which macOS tints for the menu bar (light, dark, highlighted).
-    /// `dot` adds a small badge at the top right, cut free of the mark (an update is waiting).
+    /// `dot` adds a small badge at the top right, cut free of the mark (an update is waiting); `cup` a small
+    /// coffee cup at the bottom right (Keep Awake keeps the Mac awake).
     @MainActor
-    static func templateImage(pointSize: CGFloat = 18, dot: Bool = false) -> NSImage {
+    static func templateImage(pointSize: CGFloat = 18, dot: Bool = false, cup: Bool = false) -> NSImage {
+        let cupSymbol = cup ? NSImage(systemSymbolName: "cup.and.heat.waves.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: pointSize * 0.42, weight: .bold)) : nil
         let size = CGSize(width: pointSize, height: pointSize)
         let image = NSImage(size: size, flipped: true) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
@@ -48,6 +51,17 @@ struct LogoGlyph: Shape {
             context.addPath(path.cgPath)
             context.setFillColor(NSColor.black.cgColor)
             context.fillPath()
+            if let cupSymbol {
+                // Cut a little room round it, so it reads apart from the pancakes.
+                let side = rect.width * 0.5
+                let badge = CGRect(x: rect.maxX - side, y: rect.maxY - side, width: side, height: side)
+                context.setBlendMode(.clear)
+                context.fillEllipse(in: badge.insetBy(dx: -rect.width * 0.04, dy: -rect.width * 0.04))
+                context.setBlendMode(.normal)
+                let fit = cupSymbol.size
+                let drawn = CGRect(x: badge.midX - fit.width / 2, y: badge.midY - fit.height / 2, width: fit.width, height: fit.height)
+                cupSymbol.draw(in: drawn, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
             return true
         }
         image.isTemplate = true

@@ -1,5 +1,6 @@
 import AgentsCore
 import ModuleAgents
+import ModuleKeepAwake
 import ModuleNowPlaying
 import ModuleShelf
 import ModuleTimer
@@ -8,7 +9,7 @@ import SwiftUI
 
 /// Practice modules a stage can make for itself: the real module code on throwaway data.
 enum PracticeKind: Hashable {
-    case nowPlaying, shelf, agents, aiUsage, timer
+    case nowPlaying, shelf, agents, aiUsage, timer, keepAwake
 }
 
 /// A stage's own practice modules: they exist only while it shows, and start fresh each time.
@@ -22,9 +23,11 @@ final class PracticeSet {
     private(set) var usage: AIUsageModule?
     /// Its own timer and stopwatch, with the user's settings.
     private(set) var timer: TimerModule?
+    /// Its own Keep Awake that holds nothing, with the user's settings.
+    private(set) var keepAwake: KeepAwakeModule?
 
     var modules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, shelf?.module, agents, usage, timer].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, shelf?.module, agents, usage, timer, keepAwake].compactMap { $0 }
     }
 
     func update(_ kinds: Set<PracticeKind>) {
@@ -54,6 +57,11 @@ final class PracticeSet {
             if timer == nil { timer = TimerModule.practice() }
         } else {
             timer = nil
+        }
+        if kinds.contains(.keepAwake) {
+            if keepAwake == nil { keepAwake = KeepAwakeModule.practice() }
+        } else {
+            keepAwake = nil
         }
     }
 
