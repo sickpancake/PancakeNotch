@@ -424,6 +424,40 @@ struct KeepAwakeCenterTests {
         #expect(center.isHolding)
     }
 
+    @Test func turnOffWhileStoppedKeepsItOffWhenPluggedIn() {
+        let center = makeCenter()
+        center.turnOn(.untilStopped)
+        center.setWork(agents: true, converting: false)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        #expect(center.stoppedForBattery)
+        center.turnOff()
+        #expect(!center.stoppedForBattery)
+        center.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(!center.isHolding)
+        #expect(center.session == nil)
+    }
+
+    @Test func workEndingWhileStoppedLeavesNothingToBringBack() {
+        let center = makeCenter()
+        center.setWork(agents: true, converting: false)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        #expect(center.stoppedForBattery)
+        center.setWork(agents: false, converting: false)
+        #expect(center.tailEnd == nil)
+        #expect(!center.stoppedForBattery)
+        center.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(!center.isHolding)
+    }
+
+    @Test func aBatteryReadingWithoutAPercentKeepsTheStop() {
+        let center = makeCenter()
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 15))
+        center.setPower(PowerState(onBattery: true, percent: nil))
+        #expect(center.batteryStops)
+        #expect(!center.isHolding)
+    }
+
     @Test func automaticWorkComesBackWithAStripWhenPluggedIn() {
         let center = makeCenter()
         var notices: [KeepAwakeNotice] = []

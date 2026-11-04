@@ -196,6 +196,12 @@ private struct KeepAwakeState: View {
                 .accessibilityHint(Text(center.session == nil
                     ? String(localized: "Stays off until this work ends.")
                     : String(localized: "Lets your Mac sleep as usual.")))
+            } else if status.kind == .batteryLow, center.stoppedForBattery, center.settings.plugIn == .turnBackOn {
+                // It comes back when you plug in: Turn Off says it shouldn't.
+                NotchPill(title: String(localized: "Turn Off", comment: "Keep Awake"), symbol: "power") {
+                    module.user { center.turnOff() }
+                }
+                .accessibilityHint(Text("Stays off when you plug in."))
             } else {
                 NotchPill(title: String(localized: "Turn On", comment: "Keep Awake"), symbol: "power", prominent: true) {
                     module.user { center.turnOn() }

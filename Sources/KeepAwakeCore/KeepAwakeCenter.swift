@@ -70,8 +70,9 @@ public final class KeepAwakeCenter {
     /// You turned it off while work kept it awake: it stays off until that work ends.
     public private(set) var pausedForWork = false
     public private(set) var power: PowerState
-    /// The battery stopped Keep Awake while it kept the Mac awake: plugging in may bring it back.
-    public private(set) var stoppedForBattery = false
+    /// The session the battery stopped, brought back when you plug in (if time is left and the setting says so).
+    /// Saved, so a quit or an update while the battery is low doesn't lose it.
+    public private(set) var stoppedSession: KeepAwakeSession?
     /// Goes up each time the Mac woke or the clock changed: the ring starts again from the new time.
     public private(set) var clockEpoch = 0
 
@@ -92,8 +93,6 @@ public final class KeepAwakeCenter {
     @ObservationIgnored private var wasLow = false
     @ObservationIgnored private var wasStopped = false
     @ObservationIgnored private var wasHolding = false
-    /// The session the battery stopped, brought back when you plug in (if time is left and the setting says so).
-    @ObservationIgnored private var stoppedSession: KeepAwakeSession?
     @ObservationIgnored private var endTask: Task<Void, Never>?
     @ObservationIgnored private var tailTask: Task<Void, Never>?
     @ObservationIgnored private var watcher: PowerSourceWatcher?
@@ -172,6 +171,15 @@ public final class KeepAwakeCenter {
     /// The battery stops Keep Awake now: low, and the setting says to stop there (not to keep going).
     public var batteryStops: Bool { batteryLow && settings.lowBattery == .stop }
 
+    /// The battery stops Keep Awake from something it would do now, a session with time left or work that
+    /// runs: plugging in (or a setting lifting the stop) brings that back. Worked out now, never remembered,
+    /// so the page and the strip only promise what will really happen.
+    public var stoppedForBattery: Bool {
+        guard isEnabled, batteryStops else { return false }
+        let hasTimeLeft = stoppedSession.map { saved in saved.end.map { $0 > now } ?? true } ?? false
+        return hasTimeLeft || (workRuns && !pausedForWork)
+    }
+
     /// The module is on (a practice copy always is).
     public var isEnabled: Bool { isPractice || settings.isEnabled }
 
@@ -228,6 +236,8 @@ public final class KeepAwakeCenter {
 
     /// Ends a session. While work keeps it awake, it stays off until that work ends.
     public func turnOff() {
+        // Also while the battery stops it: nothing comes back when you plug in.
+        change(\.stoppedSession, nil)
         change(\.session, nil)
         if workRuns { change(\.pausedForWork, true) }
         change(\.tailEnd, nil)
@@ -244,7 +254,8 @@ public final class KeepAwakeCenter {
             change(\.tailEnd, nil)
         } else {
             // The work you paused for is over: the next run turns it on again, without a tail.
-            if wasRunning, !pausedForWork, startsTail { change(\.tailEnd, now.addingTimeInterval(Self.tail)) }
+            // No tail while the battery stops it: the work is over, so plugging in brings nothing back.
+            if wasRunning, !pausedForWork, startsTail, !batteryStops { change(\.tailEnd, now.addingTimeInterval(Self.tail)) }
             change(\.pausedForWork, false)
         }
         update()
@@ -266,6 +277,8 @@ public final class KeepAwakeCenter {
 
     /// The new power state. Going low while it keeps the Mac awake ends everything, with a strip (`update`).
     public func setPower(_ state: PowerState) {
+        // A reading on battery without a percent keeps the last one, so a glitch can't lift the stop.
+        let state = state.onBattery && state.percent == nil ? PowerState(onBattery: true, percent: power.percent) : state
         change(\.power, state)
         update()
     }
@@ -316,11 +329,9 @@ public final class KeepAwakeCenter {
             change(\.pausedForWork, false)
             forgetStopped()
         } else if stops, !wasStopped {
-            if wasHolding {
-                stoppedSession = session
-                change(\.stoppedForBattery, true)
-                told = .batteryLow
-            }
+            if wasHolding { told = .batteryLow }
+            // Only a session with time left can come back; a tail can't (its work is over).
+            if let session, session.end.map({ $0 > moment }) ?? true { change(\.stoppedSession, session) }
             change(\.session, nil)
             change(\.tailEnd, nil)
         } else if !stops, wasStopped {
@@ -330,13 +341,15 @@ public final class KeepAwakeCenter {
                 change(\.tailEnd, nil)
             } else {
                 // Plugged in (or a setting lifted the stop): what the battery stopped comes back.
-                if let saved = stoppedSession, saved.end.map({ $0 > moment }) ?? true { session = saved }
+                if let saved = stoppedSession, saved.end.map({ $0 > moment }) ?? true { change(\.session, saved) }
                 mayTellBackOn = !power.onBattery
             }
             forgetStopped()
         } else if batteryLow, !wasLow, wasHolding {
             told = .batteryLowKeepsGoing
         }
+        // A remembered session whose time ran out while the battery stopped it is gone.
+        if let end = stoppedSession?.end, end <= moment { change(\.stoppedSession, nil) }
         if let end = session?.end, end <= moment {
             change(\.session, nil)
             // A chosen end time is a stop, including while work continues. The next run may
@@ -354,18 +367,24 @@ public final class KeepAwakeCenter {
         wasStopped = batteryStops
         wasHolding = holding
         if told == nil, mayTellBackOn, holding { told = .backOn }
-        // A timed session ends once; repeated wake, power and work events cannot show another strip.
-        if let told, told != .timeUp || !holding { onNotice?(told) }
+        // Only what's true now: time up and the battery stop when the Mac can sleep; keeps going and back on
+        // while it keeps the Mac awake. A timed session ends once; repeated events can't show another strip.
+        guard let told else { return }
+        switch told {
+        case .timeUp: if !holding { onNotice?(told) }
+        case .batteryLow: onNotice?(told)
+        case .batteryLowKeepsGoing, .backOn: if holding { onNotice?(told) }
+        }
     }
 
     private func forgetStopped() {
-        stoppedSession = nil
-        change(\.stoppedForBattery, false)
+        change(\.stoppedSession, nil)
     }
 
     private func schedule() {
         endTask?.cancel()
-        endTask = session?.end.map(sleepTask(until:))
+        // While the battery stops it, the remembered session's end: then it's forgotten (one sleeping Task).
+        endTask = (session ?? stoppedSession)?.end.map(sleepTask(until:))
         tailTask?.cancel()
         tailTask = tailEnd.map(sleepTask(until:))
     }
@@ -386,11 +405,14 @@ public final class KeepAwakeCenter {
         }
     }
 
-    /// The saved session, if the Reopen setting carries it on and it hasn't run out.
+    /// The saved session (or the one the battery stopped), if the Reopen setting carries it on and it hasn't
+    /// run out. A battery that stops it now keeps it for plugging in; one that stopped it but no longer does
+    /// (plugged in meanwhile) brings it back, unless When you plug in says Stay off.
     private func restoredSession() -> KeepAwakeSession? {
-        guard let defaults, isEnabled,
-              let data = defaults.data(forKey: Keys.session),
-              let saved = try? JSONDecoder().decode(KeepAwakeSession.self, from: data) else { return nil }
+        guard let defaults, isEnabled else { return nil }
+        let running = defaults.data(forKey: Keys.session).flatMap { try? JSONDecoder().decode(KeepAwakeSession.self, from: $0) }
+        let stopped = defaults.data(forKey: Keys.stoppedSession).flatMap { try? JSONDecoder().decode(KeepAwakeSession.self, from: $0) }
+        guard let saved = running ?? stopped else { return nil }
         switch settings.reopen {
         case .startOff: return nil
         case .carryOnAfterRestart: break
@@ -401,18 +423,20 @@ public final class KeepAwakeCenter {
         // A battery already low stops it quietly (there was nobody to tell); plugging in may bring it back.
         if batteryStops {
             stoppedSession = saved
-            stoppedForBattery = true
             return nil
         }
+        if running == nil, !power.onBattery, settings.plugIn == .stayOff { return nil }
         return saved
     }
 
     private func save() {
         guard let defaults else { return }
-        if let session, let data = try? JSONEncoder().encode(session) {
-            defaults.set(data, forKey: Keys.session)
-        } else {
-            defaults.removeObject(forKey: Keys.session)
+        for (value, key) in [(session, Keys.session), (stoppedSession, Keys.stoppedSession)] {
+            if let value, let data = try? JSONEncoder().encode(value) {
+                defaults.set(data, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
         }
     }
 
@@ -427,5 +451,6 @@ public final class KeepAwakeCenter {
 
     enum Keys {
         static let session = "keepAwake.session"
+        static let stoppedSession = "keepAwake.stoppedSession"
     }
 }

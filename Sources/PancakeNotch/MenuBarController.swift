@@ -129,7 +129,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.state = length == keepAwake.settings.lastLength ? .on : .off
             keepAwakeMenu.addItem(item)
         }
-        if keepAwake.isHolding {
+        // Also while it comes back when you plug in: Turn Off keeps it off.
+        let comesBack = keepAwake.stoppedForBattery && keepAwake.settings.plugIn == .turnBackOn
+        if keepAwake.isHolding || comesBack {
             keepAwakeMenu.addItem(.separator())
             if keepAwake.session?.end != nil {
                 let more = NSMenuItem(title: String(localized: "Add 30 Minutes"), action: #selector(extendKeepAwake), keyEquivalent: "")

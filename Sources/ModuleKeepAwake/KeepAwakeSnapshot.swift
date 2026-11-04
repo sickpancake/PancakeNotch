@@ -69,6 +69,11 @@ public enum KeepAwakeSnapshot {
             // Kept going on a low battery: the page says so.
             model(.expanded, [module(power: PowerState(onBattery: true, percent: 8), setUp: { center, _ in center.turnOn(.untilStopped) },
                                      settings: { $0.lowBattery = .keepGoing })]),
+            // Stopped by a low battery, coming back when plugged in: the page offers Turn Off.
+            model(.expanded, [module(setUp: { center, _ in
+                center.turnOn(.untilStopped)
+                center.setPower(PowerState(onBattery: true, percent: 8))
+            }, settings: { $0.batteryCutoff = 10 })]),
         ]
     }
 }

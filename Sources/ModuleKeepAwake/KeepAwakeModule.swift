@@ -93,6 +93,8 @@ public final class KeepAwakeModule: NotchModule {
                 guard let self, self.notch != nil, self.observationGeneration == generation else { return }
                 // Back on: an old "ended" strip no longer tells the truth.
                 if self.center.isHolding, self.ended?.isStop == true { self.clearEnded() }
+                // Plugged in (or the stop lifted) before a waiting battery strip could show: it's no longer true.
+                if self.ended == .batteryLow, !self.center.batteryStops { self.clearEnded() }
                 self.notch?.activityChanged()
                 self.showPendingStrip()
                 self.observe()
@@ -155,7 +157,7 @@ public final class KeepAwakeModule: NotchModule {
             let going = String(localized: "Keep Awake keeps going", comment: "Keep Awake strip: low battery, keeps going")
             return (title, going, String(localized: "Battery low. Keep Awake keeps going."))
         case .backOn:
-            let title = String(localized: "Keep Awake is back on", comment: "Keep Awake strip: back on after plugging in")
+            let title = String(localized: "Keep Awake turned on", comment: "Keep Awake strip: on after plugging in")
             let plugged = String(localized: "Your Mac is plugged in", comment: "Keep Awake strip: back on after plugging in")
             return (title, plugged, title + ". " + plugged)
         }

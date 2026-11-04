@@ -367,6 +367,177 @@ struct KeepAwakeModelTests {
         #expect(afterRestart.session != nil)
         afterRestart.turnOff()
     }
+
+    // MARK: Battery replays (verify-keep-awake, commit 5a6d648)
+    // Each test replays one /statechart shortest path, one call per model step. Tests named
+    // batteryFinding... assert the rule and FAIL at 5a6d648: they document real bugs for the main session.
+
+    /// The page's and strip's "comes back on when you plug in" (KeepAwakeStatus, KeepAwakeModule.comesBack).
+    private func promisesComeback(_ center: KeepAwakeCenter) -> Bool {
+        // The page and strip now read the live `stoppedForBattery`.
+        center.stoppedForBattery && center.settings.plugIn == .turnBackOn
+    }
+
+    /// PlugInTellsWhatItTurnsOn (was BackOnMeansItWasOn; the maintainer wants a strip whenever plugging in turns
+    /// it on, worded "Keep Awake turned on"): 0 Off, 1 the battery gets low, 2 work starts (held back by the
+    /// battery), 3 you plug in [Turn back on].
+    @Test func batteryPlugInTellsWhenItTurnsOnWorkTheBatteryHeldBack() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.setPower(PowerState(onBattery: true, percent: 15))   // SetPower: low, nothing held
+        center.setWork(agents: true, converting: false)             // SetWork: blocked by the stop
+        #expect(!center.isHolding)
+        #expect(center.stoppedForBattery)                           // the page says it comes back on
+        center.setPower(PowerState(onBattery: false, percent: 15))  // SetPower: plug in
+        #expect(center.isHolding)
+        #expect(notices == [.backOn])                               // "Keep Awake turned on · plugged in"
+    }
+
+    /// StayOffNeverTurnsItOn (was StayOffOnlyAfterAStop; the maintainer's Stay off means plugging in never
+    /// turns it on): 0 Off, 1 the battery gets low, 2 work starts, 3 you plug in [Stay off].
+    @Test func batteryStayOffKeepsWorkTheBatteryHeldBackOff() {
+        settings.plugIn = .stayOff
+        let center = makeCenter()
+        center.setPower(PowerState(onBattery: true, percent: 15))   // SetPower: low, nothing held
+        center.setWork(agents: true, converting: false)             // SetWork
+        center.setPower(PowerState(onBattery: false, percent: 15))  // SetPower: plug in
+        #expect(center.pausedForWork)    // "Off for now" until that agent finishes
+        #expect(!center.isHolding)
+    }
+
+    /// PagePromiseTrue (FixedBatteryChart): 0 Off, 1 work starts, 2 the battery gets low
+    /// (strip: back on when you plug in), 3 work ends (its module switched off).
+    @Test func batteryFindingPageStillPromisesComebackAfterTheWorkEnded() {
+        let center = makeCenter()
+        center.setWork(agents: true, converting: false)                       // SetWork
+        center.setPower(PowerState(onBattery: true, percent: 15))             // SetPower: strip
+        center.setWork(agents: false, converting: false, startsTail: false)   // SetWork, starts = FALSE
+        let promised = promisesComeback(center)
+        center.setPower(PowerState(onBattery: false, percent: 15))            // plug in
+        #expect(!promised || center.isHolding)   // fails: promised, nothing came back
+    }
+
+    /// PagePromiseTrue (FixedBatteryModule): 0 Off, 1 you turn it on, 2 the battery gets low, 3 time passes
+    /// beyond the session's end (ClockJump).
+    @Test func batteryFindingPageStillPromisesComebackAfterTheSessionRanOut() {
+        let center = makeCenter()
+        center.turnOn(.timed(1800))                                   // TurnOn
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: strip
+        clock.advance(3600)                                           // ClockJump (no update)
+        let promised = promisesComeback(center)
+        center.setPower(PowerState(onBattery: false, percent: 15))    // plug in
+        #expect(!promised || center.isHolding)   // fails: promised, the session had run out
+    }
+
+    /// StripPromiseTrue: 0 Off, 1 you turn it on, 2 the Mac sleeps past the end (ClockJump),
+    /// 3 the battery gets low, handled before the wake: strip "Battery low, back on when you plug in".
+    @Test func batteryFindingStripPromisesComebackForASessionThatAlreadyEnded() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.timed(1800))                                   // TurnOn
+        clock.advance(1800 + 120)                                     // ClockJump: asleep, no update
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower
+        #expect(notices == [.batteryLow])
+        let promised = promisesComeback(center)
+        center.setPower(PowerState(onBattery: false, percent: 15))    // plug in
+        #expect(!promised || center.isHolding)   // fails: the strip promised a comeback
+    }
+
+    /// StripPromiseTrue, everyday variant: work ends, its 2-minute tail runs, the battery gets low.
+    @Test func batteryFindingStripPromisesComebackForAnEndedTail() {
+        let center = makeCenter()
+        center.setWork(agents: true, converting: false)               // SetWork: work starts
+        center.setWork(agents: false, converting: false)              // SetWork: tail starts
+        #expect(center.isHolding)
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: strip, tail dropped
+        let promised = promisesComeback(center)
+        center.setPower(PowerState(onBattery: false, percent: 15))    // plug in
+        #expect(!promised || center.isHolding)   // fails: "Back on when you plug in", nothing came back
+    }
+
+    /// KeepsGoingIsTrue: 0 Off, 1 you turn it on, 2 you choose Keep going, 3 the Mac sleeps past the end
+    /// by more than a minute (ClockJump), 4 the battery gets low, handled before the wake.
+    @Test func batteryFindingKeepsGoingStripWhenItJustStopped() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.timed(1800))                                   // TurnOn
+        settings.lowBattery = .keepGoing                              // ChangeLowMode
+        clock.advance(1800 + 120)                                     // ClockJump
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower
+        #expect(!center.isHolding)
+        #expect(!notices.contains(.batteryLowKeepsGoing))   // fails: "Keep Awake keeps going" while it's off
+    }
+
+    /// Not in the model (it has no saved-defaults state): the battery stops a session while the app runs,
+    /// then PancakeNotch reopens (an update, a quit) while still low. update() saved `session == nil`, so the
+    /// stop isn't remembered and plugging in brings nothing back, unlike reopening before it noticed.
+    @Test func batteryFindingReopeningForgetsWhatTheBatteryStopped() {
+        let low = PowerState(onBattery: true, percent: 15)
+        let first = makeCenter()
+        first.turnOn(.untilStopped)
+        first.setPower(low)
+        #expect(first.stoppedForBattery)
+        let reopened = makeCenter(power: low)
+        #expect(reopened.stoppedForBattery)                    // fails
+        reopened.setPower(PowerState(onBattery: false, percent: 15))
+        #expect(reopened.isHolding)                            // fails
+    }
+
+    /// Passing replays of the new rules (they map to FixedBattery steps).
+    @Test func batteryStayOffAfterAStopPausesTheRunningWorkOnly() {
+        settings.plugIn = .stayOff
+        let center = makeCenter()
+        center.turnOn(.untilStopped)                                  // TurnOn
+        center.setWork(agents: true, converting: false)               // SetWork
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: stop, remembered
+        #expect(center.stoppedForBattery)
+        center.setPower(PowerState(onBattery: false, percent: 15))    // plug in [Stay off]
+        #expect(center.session == nil && center.pausedForWork && !center.isHolding && !center.stoppedForBattery)
+    }
+
+    @Test func batteryKeepGoingThenStopTellsBatteryLowOnce() {
+        settings.lowBattery = .keepGoing
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)                                  // TurnOn
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: keeps going
+        settings.lowBattery = .stop                                   // ChangeLowMode: stops, remembers
+        center.setPower(PowerState(onBattery: true, percent: 14))     // SetPower: still low
+        #expect(notices == [.batteryLowKeepsGoing, .batteryLow])
+        center.setPower(PowerState(onBattery: false, percent: 14))    // plug in [Turn back on]
+        #expect(center.session != nil && center.isHolding)
+        #expect(notices == [.batteryLowKeepsGoing, .batteryLow, .backOn])
+    }
+
+    @Test func batteryLoweringTheLevelWhileStoppedComesBackQuietly() {
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)                                  // TurnOn
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: stop
+        settings.batteryCutoff = nil                                  // ChangeCutoff: Never, on battery
+        #expect(center.isHolding && !center.stoppedForBattery)
+        #expect(notices == [.batteryLow])                             // no back-on strip on battery
+    }
+
+    /// SettingLiftsStopQuietly: Stay off is about plugging in; a setting that lifts the stop on battery
+    /// (Keep going, a lower level, Never) brings the session back quietly either way.
+    @Test func batteryLiftingTheStopOnBatteryIgnoresStayOff() {
+        settings.plugIn = .stayOff
+        let center = makeCenter()
+        var notices: [KeepAwakeNotice] = []
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)                                  // TurnOn
+        center.setWork(agents: true, converting: false)               // SetWork
+        center.setPower(PowerState(onBattery: true, percent: 15))     // SetPower: stop, remembered
+        settings.lowBattery = .keepGoing                              // ChangeLowMode: lifts the stop
+        #expect(center.session != nil && !center.pausedForWork && center.isHolding)
+        #expect(notices == [.batteryLow])
+    }
 }
 
 @MainActor
