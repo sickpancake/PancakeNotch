@@ -5,7 +5,8 @@ import SwiftUI
 ///
 /// The notch hosts several modules (`NotchViewModel.modules`). The open notch shows one at a time
 /// (the selected one) or the Module Menu (ADR-0010); the compact ears go to the top two active
-/// modules by ranking (ADR-0011). Attaching a module calls `attach(to:)`.
+/// modules by ranking (ADR-0011), and pointing at an ear or a strip opens the notch on its module.
+/// Attaching a module calls `attach(to:)`.
 @MainActor
 public protocol NotchModule: AnyObject {
     /// Stable identifier: the ranking, favorites and statistics key on it ("nowPlaying", "shelf").
@@ -34,8 +35,12 @@ public protocol NotchModule: AnyObject {
     /// Call `NotchViewModel.activityChanged()` when it changes.
     var isActive: Bool { get }
     /// The notch should open on this module (music is playing). The first such module by ranking
-    /// wins; otherwise the notch opens on the one used last (ADR-0010).
+    /// wins, after any that `waitsForYou`; otherwise the notch opens on the one used last (ADR-0010).
     var wantsFocus: Bool { get }
+    /// Something here waits for the user (an agent's question, a finished timer). Opening the notch comes
+    /// here first, before a playing song, and while active it gets a spot beside the notch before modules
+    /// that don't wait (ADR-0011 amendment 2026-11-03).
+    var waitsForYou: Bool { get }
 
     /// Takes the second ear (#2: right, or left with Swap sides) while active, whatever its rank, so the
     /// first module keeps its place (the Timer, ADR-0040). Alone it keeps to #2, or fills both ears with an
@@ -44,8 +49,6 @@ public protocol NotchModule: AnyObject {
     /// Takes the first ear (#1: left, or right with Swap sides) while active, whatever its rank (Keep Awake,
     /// ADR-0041). A module asking for #2 keeps it; the best-ranked other module takes #2 otherwise.
     var prefersFirstEar: Bool { get }
-    /// Hovering or clicking this module's compact ear opens the notch on it (the Timer).
-    var opensFromEar: Bool { get }
 
     /// Read by VoiceOver while the notch is closed or compact (e.g. "Shelf is full").
     var accessibilityStatus: String? { get }
@@ -103,9 +106,9 @@ public extension NotchModule {
     func peekView(layout: NotchLayout) -> AnyView? { nil }
     var isActive: Bool { false }
     var wantsFocus: Bool { false }
+    var waitsForYou: Bool { false }
     var prefersSecondEar: Bool { false }
     var prefersFirstEar: Bool { false }
-    var opensFromEar: Bool { false }
     var holdsOpen: Bool { false }
     var accessibilityStatus: String? { nil }
     func notchDidOpen() {}

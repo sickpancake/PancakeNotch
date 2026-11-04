@@ -16,6 +16,18 @@ final class FirstEarModule: NotchModule {
     func peekView(layout: NotchLayout) -> AnyView? { AnyView(EmptyView()) }
 }
 
+/// A module with something waiting for you, like an agent's question.
+@MainActor
+final class WaitingEarModule: NotchModule {
+    let moduleID = "agents"
+    var isActive = true
+    var waitsForYou = true
+
+    func attach(to notch: NotchViewModel?) {}
+    func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
+}
+
 @MainActor
 struct FirstEarTests {
     let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
@@ -72,13 +84,28 @@ struct FirstEarTests {
         #expect(ears.right?.id == "timer.main")
     }
 
-    /// Clicking or hovering "Keep Awake ended" opens Keep Awake, not the page used last.
-    @Test func openingDuringAStripOpensItsModule() {
+    /// An agent waiting beside Keep Awake: Keep Awake keeps #1, the agent takes #2 over the top module.
+    @Test func aWaitingAgentTakesTheSecondEar() {
         let (model, music, _, awake) = makeModel()
-        model.select(music.moduleID)
-        model.close()
-        #expect(model.peek(awake, for: .seconds(5)))
-        model.open()
-        #expect(model.selectedModule?.moduleID == "keepAwake")
+        music.isActive = true
+        let agents = WaitingEarModule()
+        model.modules = [music, agents, awake]
+        let ears = model.ears(layout: layout)
+        #expect(ears.left?.id == "keepAwake.main")
+        #expect(ears.right?.id == "agents.main")
+    }
+
+    /// With the Timer on #2, an agent waiting for you takes #1 from Keep Awake: what needs you shows.
+    @Test func whatWaitsForYouOutranksKeepAwakeWhenTheTimerHoldsTheSecondEar() {
+        let (model, _, timer, awake) = makeModel()
+        timer.isActive = true
+        let agents = WaitingEarModule()
+        model.modules = [timer, agents, awake]
+        let ears = model.ears(layout: layout)
+        #expect(ears.left?.id == "agents.main")
+        #expect(ears.right?.id == "timer.main")
+        agents.waitsForYou = false
+        model.activityChanged()
+        #expect(model.ears(layout: layout).left?.id == "keepAwake.main")
     }
 }

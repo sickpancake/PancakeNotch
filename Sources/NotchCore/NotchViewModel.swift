@@ -266,13 +266,17 @@ public final class NotchViewModel {
         return true
     }
 
-    /// Picks the module to open on: the first by ranking that wants it (music playing), otherwise
-    /// the one used last (ADR-0010).
+    /// Picks the module to open on: the one asked for (its ear or strip was pointed at, a drag), else the
+    /// first by ranking that waits for you (an agent's question, a finished timer), else the first that
+    /// wants it (music playing), otherwise the one used last (ADR-0010, ADR-0011 amendment 2026-11-03).
     private func chooseModuleForOpening(_ moduleID: String?) {
         showsMenu = false
+        let ranked = rankedModules
         if let moduleID, modules.contains(where: { $0.moduleID == moduleID }) {
             selectedID = moduleID
-        } else if let focused = rankedModules.first(where: { $0.wantsFocus }) {
+        } else if let waiting = ranked.first(where: { $0.waitsForYou }) {
+            selectedID = waiting.moduleID
+        } else if let focused = ranked.first(where: { $0.wantsFocus }) {
             selectedID = focused.moduleID
         }
     }
@@ -293,24 +297,35 @@ public final class NotchViewModel {
     }
 
     /// What the compact ears show: the top two active modules by ranking, #1's main view on the left
-    /// and #2's on the right (or swapped). A module that asks for the second ear (the Timer), or one
-    /// shown briefly (the Shelf's after-drop count), takes #2 and leaves #1 to the best-ranked other one.
-    /// A module that asks for the first ear (Keep Awake) takes #1 and leaves #2 to the one asking for it,
-    /// or else to the best-ranked other one. A module alone fills both ears if it has an extra view. With
-    /// nothing active, the current module shows for the short shrink after a click only, not for a peek strip.
+    /// and #2's on the right (or swapped). Modules that wait for you (an agent's question, a finished
+    /// timer) get a spot before the others, which then wait; the spots still follow the ranking. A module
+    /// that asks for the second ear (the Timer), or one shown briefly (the Shelf's after-drop count),
+    /// takes #2 and leaves #1 to the best other one. A module that asks for the first ear (Keep Awake)
+    /// takes #1, unless #2 is taken and something else waits for you: then that gets #1. A module alone
+    /// fills both ears if it has an extra view. With nothing active, the current module shows for the
+    /// short shrink after a click only, not for a peek strip.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
         // Not while a strip is up (peekModuleID lasts until its exit animation ends, so no ear flashes in).
         if shown.isEmpty, peekModuleID == nil || staysCompact, let selected = selectedModule { shown = [selected] }
         // Only modules that have ears take a side.
         let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
-        var picked = Array(withEars.prefix(2))
-        let firstClaim = withEars.firstIndex { $0.0.prefersFirstEar }
-        let secondClaim = withEars.indices.first { $0 != firstClaim && takesSecondEar(withEars[$0].0) }
+        // Who gets a spot: waiting modules first, then by rank.
+        let byPriority = withEars.filter { $0.0.waitsForYou } + withEars.filter { !$0.0.waitsForYou }
+        // Where: by rank, so a module doesn't change sides just because another one started waiting.
+        let chosen = byPriority.prefix(2).map(\.0.moduleID)
+        var picked = withEars.filter { chosen.contains($0.0.moduleID) }
+        var firstClaim = withEars.first { $0.0.prefersFirstEar }
+        let secondClaim = withEars.first { $0.0 !== firstClaim?.0 && takesSecondEar($0.0) }
+        // Both claimed while something else waits for you: what needs you comes first.
+        if let claimed = firstClaim, let second = secondClaim,
+           withEars.contains(where: { $0.0.waitsForYou && $0.0 !== claimed.0 && $0.0 !== second.0 }) {
+            firstClaim = nil
+        }
         if withEars.count > 1, firstClaim != nil || secondClaim != nil,
-           let first = firstClaim ?? withEars.indices.first(where: { $0 != secondClaim }),
-           let second = secondClaim ?? withEars.indices.first(where: { $0 != first }) {
-            picked = [withEars[first], withEars[second]]
+           let first = firstClaim ?? byPriority.first(where: { $0.0 !== secondClaim?.0 }),
+           let second = secondClaim ?? byPriority.first(where: { $0.0 !== first.0 }) {
+            picked = [first, second]
         }
         var slots: [EarSlot?] = []
         if picked.count == 1, let (module, ears) = picked.first {
@@ -330,16 +345,23 @@ public final class NotchViewModel {
         module.prefersSecondEar || (module.moduleID == briefModuleID && !module.isActive)
     }
 
-    /// The module whose compact ear the pointer is over, if it opens from its ear (the Timer).
-    func earModuleUnderPointer() -> String? {
+    /// The module the pointer is on in the compact notch: the strip's module anywhere on the strip, else the
+    /// module whose ear it's over. Hovering or clicking there opens the notch on it. `nil` in the middle,
+    /// over the hardware notch, where opening picks the module itself.
+    func moduleUnderPointer() -> String? {
         guard state == .compact else { return nil }
         let point = pointerLocation()
-        let notch = layout.geometry.notchRect
-        guard layout.outline(for: .compact, contains: point), point.x < notch.minX || point.x >= notch.maxX else { return nil }
+        let geometry = layout.geometry
+        let notch = geometry.notchRect
+        guard layout.outline(for: .compact, contains: point) else { return nil }
+        // The strip hangs below the ears (y grows upwards on screen).
+        if point.y < notch.maxY - geometry.compactHeight {
+            guard layout.isPeeking, let peekModuleID, modules.contains(where: { $0.moduleID == peekModuleID }) else { return nil }
+            return peekModuleID
+        }
+        guard point.x < notch.minX || point.x >= notch.maxX else { return nil }
         let ears = ears(layout: layout)
-        guard let slot = point.x < notch.minX ? ears.left : ears.right,
-              let module = modules.first(where: { $0.moduleID == slot.moduleID }), module.opensFromEar else { return nil }
-        return module.moduleID
+        return (point.x < notch.minX ? ears.left : ears.right)?.moduleID
     }
 
     /// The peek strip's view while a module is peeking.
@@ -362,7 +384,7 @@ public final class NotchViewModel {
         if isHovering {
             guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
-                model.open(focusing: model.earModuleUnderPointer(), fromHover: true)
+                model.open(focusing: model.moduleUnderPointer(), fromHover: true)
                 if model.state == .expanded, model.behavior.hapticOnOpen {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
@@ -508,7 +530,7 @@ public final class NotchViewModel {
         defer { isHandlingClick = false }
         cancelAttentionClose()
         guard state == .expanded else {
-            open(focusing: earModuleUnderPointer())
+            open(focusing: moduleUnderPointer())
             return
         }
         guard !isHeld else { return }
@@ -549,10 +571,8 @@ public final class NotchViewModel {
         briefTask?.cancel()
         isShowingBriefly = false
         briefModuleID = nil
-        // Opening while a strip shows (hovering or clicking it) opens on what the strip tells about.
-        let peeked = layout.isPeeking ? peekModuleID : nil
         endPeek(animated: false)
-        if state != .expanded { chooseModuleForOpening(moduleID ?? peeked) }
+        if state != .expanded { chooseModuleForOpening(moduleID) }
         wasOpenedByHover = fromHover
         transition(to: .expanded)
     }

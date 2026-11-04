@@ -45,7 +45,6 @@ public final class KeepAwakeModule: NotchModule {
     public var isActive: Bool { center.isHolding }
     /// Always the first ear while on; the Timer keeps the second (ADR-0041).
     public var prefersFirstEar: Bool { true }
-    public var opensFromEar: Bool { true }
     public var accessibilityStatus: String? { center.isHolding ? KeepAwakeStatus.spoken(center) : nil }
 
     public func attach(to notch: NotchViewModel?) {
