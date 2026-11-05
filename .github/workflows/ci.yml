@@ -16,7 +16,7 @@ jobs:
       # don't have; release-dry-run checks a build without them).
       PANCAKENOTCH_INTERNAL_TESTING: 1
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Toolchain
@@ -40,10 +40,10 @@ jobs:
   website:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -60,7 +60,7 @@ jobs:
     env:
       DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/dry-run/PancakeNotch.zip
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -125,7 +125,7 @@ jobs:
           codesign -d -r- "$RUNNER_TEMP/unpacked/PancakeNotch.app" 2>&1 | grep 'certificate leaf'
       - name: Idle memory budget with updates on (ADR-0006)
         run: ./scripts/check-memory.sh "$RUNNER_TEMP/unpacked/PancakeNotch.app" 30 50
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Website
