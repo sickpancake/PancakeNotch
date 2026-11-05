@@ -108,4 +108,39 @@ struct FirstEarTests {
         model.activityChanged()
         #expect(model.ears(layout: layout).left?.id == "keepAwake.main")
     }
+
+    /// A Shelf badge must not hide either alert, or displace Keep Awake after the agent is answered.
+    @Test(arguments: [false, true])
+    func aShelfBadgeWaitsForAlertsAndKeepAwake(swapped: Bool) {
+        let (model, music, _, awake) = makeModel()
+        music.isActive = true
+        let shelf = RankedModule("shelf")
+        let agents = WaitingEarModule()
+        let timer = WaitingModule("timer")
+        timer.isActive = true
+        timer.waitsForYou = true
+        timer.prefersSecondEar = true
+        model.modules = [music, shelf, agents, timer, awake]
+        model.arrangement.swapsEarSides = swapped
+        model.open(focusing: "shelf")
+        model.closeThroughCompact(for: .seconds(1.5), showing: shelf)
+        model.close()
+
+        let waiting = model.ears(layout: layout)
+        #expect(waiting.left?.moduleID == (swapped ? "timer" : "agents"))
+        #expect(waiting.right?.moduleID == (swapped ? "agents" : "timer"))
+
+        agents.isActive = false
+        agents.waitsForYou = false
+        model.activityChanged()
+        let answered = model.ears(layout: layout)
+        #expect(answered.left?.moduleID == (swapped ? "timer" : "keepAwake"))
+        #expect(answered.right?.moduleID == (swapped ? "keepAwake" : "timer"))
+
+        awake.isActive = false
+        model.activityChanged()
+        let roomForBadge = model.ears(layout: layout)
+        #expect(roomForBadge.left?.moduleID == (swapped ? "timer" : "shelf"))
+        #expect(roomForBadge.right?.moduleID == (swapped ? "shelf" : "timer"))
+    }
 }

@@ -238,6 +238,34 @@ struct OpeningChoiceTests {
         #expect(ears.right?.moduleID == "timer")
     }
 
+    // A drop's temporary Shelf badge must not evict either waiting alert. Once the agent is answered,
+    // the badge can use the free spot, while Done keeps the Timer's second spot.
+    @Test(arguments: [false, true], [false, true])
+    func waitingAlertsKeepTheirEarsDuringAShelfBadge(swapped: Bool, shelfRankedFirst: Bool) {
+        let pointer = Pointer()
+        let (model, _, agents, timer) = makeModel(pointer)
+        let shelf = model.modules.first { $0.moduleID == "shelf" }!
+        model.arrangement.swapsEarSides = swapped
+        if shelfRankedFirst { model.arrangement.move("shelf", to: 0) }
+        agentNeedsYou(model, agents)
+        timerIsDone(model, timer)
+        model.open(focusing: "shelf")
+        model.closeThroughCompact(for: .seconds(1.5), showing: shelf)
+        model.close()
+
+        let waiting = model.ears(layout: layout)
+        #expect(waiting.left?.moduleID == (swapped ? "timer" : "agents"))
+        #expect(waiting.right?.moduleID == (swapped ? "agents" : "timer"))
+
+        agents.isActive = false
+        agents.waitsForYou = false
+        agents.wantsFocus = false
+        model.activityChanged()
+        let answered = model.ears(layout: layout)
+        #expect(answered.left?.moduleID == (swapped ? "timer" : "shelf"))
+        #expect(answered.right?.moduleID == (swapped ? "shelf" : "timer"))
+    }
+
     // With room for both, nobody changes sides: the song stays left, the agent right.
     @Test func withRoomTheSidesFollowTheOrder() {
         let pointer = Pointer()
