@@ -195,6 +195,9 @@ Things that move all the time (the draining ring, the sound bars) must not wake 
 - **Mostly no delays.** Things start moving the moment the person acts. The few delays in the app have a
   reason: the ears wait 0.3 s to fade so their slide under the notch stays visible; Shelf's count waits 0.3 s
   after a drop so the eye has landed on it; AI Usage's refill ring waits 0.25 s after it appears.
+- **Things that leave by themselves give people time.** A few seconds by default, longer while VoiceOver is on
+  (`NSWorkspace.shared.isVoiceOverEnabled`), and they end early once what they offer no longer makes sense. Use a
+  cancellable `Task.sleep`, never a `Timer`.
 - **One thing leads.** When several things change at once, put them in the same `withAnimation` so they move
   together, rather than chaining completions.
 - **Springs over fixed curves for moves**, because a spring that is interrupted carries its speed into the new
