@@ -81,8 +81,9 @@ struct ModulesView: View {
 
 // MARK: Your modules
 
-/// Every module in ranking order: drag to reorder (the top two get the spots beside the notch), star
-/// the ones you want as tabs, switch them on or off. Ear sides can be swapped.
+/// Every module in ranking order: drag to reorder (usually the top two active ones get the spots beside
+/// the notch; Keep Awake and the Timer have set spots, ADR-0011's ear rules), star the ones you want as
+/// tabs, switch them on or off. Ear sides can be swapped, and Help explains how the spots work.
 private struct YourModulesCard: View {
     let context: AppContext
     /// Opens a module's settings further down the page.
@@ -91,6 +92,7 @@ private struct YourModulesCard: View {
     /// The row a reorder drag is over right now (nil once it leaves, is dropped or is cancelled).
     @State private var dropTarget: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let arrangement = context.arrangement
@@ -113,6 +115,15 @@ private struct YourModulesCard: View {
                         .labelsHidden()
                 }
             }
+            SettingsRow(
+                title: String(localized: "How the spots work"),
+                subtitle: String(localized: "Which module shows beside the notch, and why.")
+            ) {
+                Button { openURL(HelpLinks.url(.besideTheNotch)) } label: {
+                    Label(String(localized: "Read More"), systemImage: "arrow.up.right")
+                        .labelStyle(TrailingIconLabelStyle())
+                }
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: arrangement.order)
         .onDisappear { dragging = nil; dropTarget = nil }
@@ -120,7 +131,7 @@ private struct YourModulesCard: View {
 
     /// The order, then what a star does with the way the open notch is set to move between modules.
     private func footer(_ navigation: NotchNavigation) -> String {
-        let order = String(localized: "Drag a module or use its arrows to reorder. The first two that are active get the spots beside the notch.")
+        let order = String(localized: "Drag a module or use its arrows to reorder. Usually the first two that are active get the spots beside the notch; some modules have a set spot.")
         let favorites = switch navigation {
         case .tabsAndMenu:
             String(localized: "Favorites (★) get a tab in the open notch and a big tile in the Module Menu.")
@@ -272,19 +283,87 @@ private struct ModuleListRow: View {
         AccessibilityNotification.Announcement(String(localized: "\(title), now number \(rank + 1)")).post()
     }
 
-    /// Where its ear goes. Ears go to the first two active modules (switched on and with something to
-    /// show) in this order, the first on the left; a module alone takes the left.
+    /// Where its ear goes, by the ear rules (docs/ear-rules.md), worded for the row under its name.
     private func status(isOn: Bool) -> String {
         guard isOn else { return String(localized: "Off") }
-        let arrangement = context.arrangement
-        let place = arrangement.order.filter { context.isEnabled($0) }.firstIndex(of: moduleID) ?? 0
-        switch (place, arrangement.swapsEarSides) {
+        let plan = EarPlan(context)
+        let swapped = context.arrangement.swapsEarSides
+        guard plan.showsEar(moduleID) else {
+            return moduleID == "timer"
+                ? String(localized: "Only in the open notch. A finished timer still shows Done beside it")
+                : String(localized: "Only in the open notch. Its spot beside the notch is off in its settings")
+        }
+        if moduleID == plan.setFirst {
+            return swapped
+                ? String(localized: "Right of the notch while it keeps the Mac awake")
+                : String(localized: "Left of the notch while it keeps the Mac awake")
+        }
+        if moduleID == plan.setSecond {
+            return swapped
+                ? String(localized: "Always left of the notch while a timer or stopwatch is in use")
+                : String(localized: "Always right of the notch while a timer or stopwatch is in use")
+        }
+        let place = plan.ranked.firstIndex(of: moduleID) ?? 0
+        switch (place, swapped) {
+        case (0, _) where plan.setFirst != nil && plan.setSecond != nil:
+            return swapped
+                ? String(localized: "Right of the notch when active, unless Keep Awake is showing")
+                : String(localized: "Left of the notch when active, unless Keep Awake is showing")
+        case (0, _) where plan.setFirst != nil:
+            return swapped
+                ? String(localized: "Right of the notch when active, or left while Keep Awake is showing")
+                : String(localized: "Left of the notch when active, or right while Keep Awake is showing")
         case (0, false): return String(localized: "Left of the notch when active")
         case (0, true): return String(localized: "Right of the notch when active")
+        case (1, _) where plan.hasSetSpots:
+            return String(localized: "Beside the notch when active and a spot is free")
         case (1, false): return String(localized: "Right of the notch when active, or left when it's the only one")
         case (1, true): return String(localized: "Left of the notch when active, or right when it's the only one")
         default: return String(localized: "In the open notch. Beside it too when a module above has nothing to show")
         }
+    }
+}
+
+/// How the spots beside the notch are given out (docs/ear-rules.md), for the Modules page's labels and
+/// diagram: the modules with a set spot, then the others in the user's order. Switched-off modules and
+/// ones whose spot is off in their settings never take a spot.
+@MainActor
+private struct EarPlan {
+    /// Keep Awake: always the first spot.
+    var setFirst: String?
+    /// The Timer on "Second spot": always the second.
+    var setSecond: String?
+    /// The rest, in order.
+    var ranked: [String] = []
+    private let context: AppContext
+
+    init(_ context: AppContext) {
+        self.context = context
+        let shown = context.arrangement.order.filter { context.isEnabled($0) && showsEar($0) }
+        setFirst = shown.first { $0 == "keepAwake" }
+        setSecond = shown.first { $0 == "timer" && context.timerSettings.earPlacement == .second }
+        ranked = shown.filter { $0 != setFirst && $0 != setSecond }
+    }
+
+    var hasSetSpots: Bool { setFirst != nil || setSecond != nil }
+
+    /// Whether the module can show beside the closed notch at all (its own setting).
+    func showsEar(_ moduleID: String) -> Bool {
+        switch moduleID {
+        case "nowPlaying": context.nowPlayingSettings.showsInEars
+        case "shelf": context.shelfSettings.showsInEars
+        case "aiUsage": context.agentsSettings.earMode != .never
+        case "timer": context.timerSettings.earPlacement != .off
+        default: true
+        }
+    }
+
+    /// The first and second spot with every module busy: set spots first, then the order.
+    var busiest: (first: String?, second: String?) {
+        var rest = ranked
+        let first = setFirst ?? (rest.isEmpty ? nil : rest.removeFirst())
+        let second = setSecond ?? rest.first
+        return (first, second)
     }
 }
 
@@ -324,15 +403,16 @@ private struct ModuleReorderDrop: DropDelegate {
     }
 }
 
-/// A tiny notch with the first two modules' symbols where their ears go.
+/// A tiny notch with the symbols of the two modules that would sit beside it with every module busy.
 private struct EarsDiagram: View {
     let context: AppContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let ranked = context.arrangement.order.filter { context.isEnabled($0) }.prefix(2).map { AppContext.moduleInfo($0).symbol }
-        let first = ranked.first
-        let second = ranked.count > 1 ? ranked[1] : nil
+        // Who'd sit where with every module busy, set spots included (docs/ear-rules.md).
+        let busiest = EarPlan(context).busiest
+        let first = busiest.first.map { AppContext.moduleInfo($0).symbol }
+        let second = busiest.second.map { AppContext.moduleInfo($0).symbol }
         let left = context.arrangement.swapsEarSides ? second : first
         let right = context.arrangement.swapsEarSides ? first : second
         HStack(spacing: 0) {

@@ -3,6 +3,10 @@
 What's new in each release. The release pipeline copies a version's notes into the update window,
 so write them for people using the app: short, plain, no code talk.
 
+## Unreleased
+
+- **What shows beside the notch.** A new Help section explains which modules get the two spots beside the notch and why, and the Modules page now shows where each one goes, including the Timer's second spot.
+
 ## 0.3.0 — beta
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.

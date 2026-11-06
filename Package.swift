@@ -129,6 +129,10 @@ let package = Package(
             dependencies: ["TimerCore", "ModuleTimer", "NotchCore"]
         ),
         .testTarget(
+            name: "ModuleNowPlayingTests",
+            dependencies: ["ModuleNowPlaying", "NowPlayingCore", "NotchCore"]
+        ),
+        .testTarget(
             name: "KeepAwakeTests",
             dependencies: ["KeepAwakeCore", "ModuleKeepAwake", "NotchCore"]
         ),

@@ -566,8 +566,8 @@ struct ShelfPromptCard: View {
 
 // MARK: Compact
 
-/// The Shelf in the compact notch's left ear: a tray with a count badge, "!" when full (ADR-0013).
-/// The right ear stays free for another module.
+/// The Shelf in the compact notch's ear (the one its ranking gives it, docs/ear-rules.md): a tray with a
+/// count badge, "!" when full (ADR-0013).
 struct ShelfEar: View {
     let module: ShelfModule
     /// The number on the badge while it counts up after a drop; `nil` shows the real count.
