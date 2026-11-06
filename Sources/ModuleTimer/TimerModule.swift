@@ -79,11 +79,11 @@ public final class TimerModule: NotchModule {
         center.timer.isDone || (settings.earPlacement != .off && center.hasActivity)
     }
 
-    /// Opening the notch while a timer is done lands on its Done card.
+    /// Opening the notch while a timer is done lands on its Done card, also while a song plays.
     public var wantsFocus: Bool { center.timer.isDone }
+    public var waitsForYou: Bool { center.timer.isDone }
     /// A finished timer takes #2 whatever the setting, so Done always has an ear.
     public var prefersSecondEar: Bool { settings.earPlacement == .second || center.timer.isDone }
-    public var opensFromEar: Bool { true }
     public var holdsOpen: Bool { editing != nil }
 
     public var accessibilityStatus: String? {

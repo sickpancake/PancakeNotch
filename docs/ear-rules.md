@@ -5,11 +5,11 @@ for which module shows there and where. In the app and in Help they're called th
 **#1** is the first spot (left) and **#2** the second spot (right). Users read the plain-English version in Help,
 under [What shows beside the notch](https://sickpancake.github.io/PancakeNotch/help/#beside-the-notch).
 
-The logic lives in `NotchViewModel.ears(layout:)` and `activityChanged()` (`Sources/NotchCore`), driven by each
-module's `isActive`, `prefersFirstEar` (arrives with Keep Awake), `prefersSecondEar`, `opensFromEar` and
-`compactEars(layout:)`. Tests:
-`EarRulesTests`, `NotchModulesTests` and `SecondEarTests` (NotchCoreTests), `NowPlayingEarTests`, and each module's
-own tests. If you change a rule, change this page, Help and the tests together.
+The logic lives in `NotchViewModel.ears(layout:)`, `activityChanged()` and `moduleUnderPointer()`
+(`Sources/NotchCore`), driven by each module's `isActive`, `waitsForYou`, `wantsFocus`, `prefersFirstEar`,
+`prefersSecondEar` and `compactEars(layout:)`. Tests:
+`EarRulesTests`, `NotchModulesTests`, `FirstEarTests` and `SecondEarTests` (NotchCoreTests), `NowPlayingEarTests`,
+`KeepAwakeEarTests`, and each module's own tests. If you change a rule, change this page, Help and the tests together.
 
 ## When the ears are out
 
@@ -39,14 +39,19 @@ own tests. If you change a rule, change this page, Help and the tests together.
 5. With no candidates, the module the open notch last showed appears, but only for the shrink after a click. A peek strip with nothing
    active shows no ears.
 6. Normally the **top two by rank** take #1 and #2. Others wait and show once a spot frees up.
+   **Waiting alerts come first:** a module that `waitsForYou` (an agent that needs you, a Timer showing Done) is
+   chosen before every module that doesn't, whatever its rank. Ranking still orders them among themselves.
 7. **Set spots:**
-   - Keep Awake takes **#1** (`prefersFirstEar`).
+   - Keep Awake takes **#1** (`prefersFirstEar`), unless #2 is also claimed and another module waits for you:
+     then the waiting one gets a spot first and Keep Awake waits.
    - The Timer takes **#2** on "Second spot" (the default) and always while Done (`prefersSecondEar`). On
      "By order" it ranks like any other module.
-   - The after-drop Shelf count, when the Shelf isn't active on its own (under 15 items), borrows **#2**.
+   - The after-drop Shelf count, when the Shelf isn't active on its own (under 15 items), borrows **#2**, but
+     never from a waiting alert: a waiting Timer keeps #2, and the count shows once a spot is free.
+   - Set spots are filled before ordinary activity, never before waiting alerts.
    - The other spot goes to the best-ranked other candidate. If two modules ask for #2, the better-ranked one
      gets it, and the other can still take #1 when Keep Awake doesn't and it outranks the remaining candidates.
-     Keep Awake and the Timer together fill both spots.
+     Keep Awake and the Timer together fill both spots unless something else waits for you.
 8. **A module alone:** one with an extra view fills both ears (Now Playing: art in #1, sound bars in #2). A #2
    module (the Timer on "Second spot" or while Done) stays in #2 and leaves #1 empty. Any other module takes #1.
 9. **Two showing:** each shows only its main view (Now Playing drops its sound bars).
@@ -54,7 +59,11 @@ own tests. If you change a rule, change this page, Help and the tests together.
 
 ## Opening from the ears
 
-11. Hovering (unless "Open on click only" is on) or clicking the ear of a module with `opensFromEar` (Timer, Keep
-    Awake) opens the notch on that module. Elsewhere it opens on the best-ranked module that wants focus (music
-    playing, an agent that needs you, a finished timer), else on the module used last.
-12. Peek strips are separate: a strip never changes who holds a spot.
+11. Hovering (unless "Open on click only" is on) or clicking **any module's ear**, or anywhere on a peek strip,
+    opens the notch on that module (`moduleUnderPointer()`). Over the hardware notch in the middle it opens on the
+    best-ranked module that `waitsForYou`, else the best-ranked that `wantsFocus` (music playing, or paused within
+    5 minutes), else on the module used last.
+12. If you switch away from a song while it plays, Now Playing stops wanting focus (`hasYielded`) until you open it
+    again or the music starts after a stop of 10 s or more; the short gap between songs doesn't count. Its ear
+    still shows while a song plays.
+13. Peek strips are separate: a strip never changes who holds a spot.

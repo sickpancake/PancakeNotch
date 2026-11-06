@@ -25,7 +25,7 @@ let package = Package(
             name: "PancakeNotch",
             dependencies: [
                 "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
-                "AgentsCore", "ModuleAgents", "ConvertKit", "TimerCore", "ModuleTimer",
+                "AgentsCore", "ModuleAgents", "ConvertKit", "TimerCore", "ModuleTimer", "KeepAwakeCore", "ModuleKeepAwake",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             swiftSettings: testing
@@ -81,9 +81,16 @@ let package = Package(
             name: "ModuleTimer",
             dependencies: ["NotchCore", "TimerCore"]
         ),
+        // Keep Awake: when the Mac stays awake, the power hold and the battery (ADR-0041). No UI.
+        .target(name: "KeepAwakeCore"),
+        .target(
+            name: "ModuleKeepAwake",
+            dependencies: ["NotchCore", "KeepAwakeCore"]
+        ),
         .testTarget(
             name: "PancakeNotchTests",
-            dependencies: ["PancakeNotch"]
+            dependencies: ["PancakeNotch"],
+            swiftSettings: testing
         ),
         .testTarget(
             name: "NotchCoreTests",
@@ -124,6 +131,10 @@ let package = Package(
         .testTarget(
             name: "ModuleNowPlayingTests",
             dependencies: ["ModuleNowPlaying", "NowPlayingCore", "NotchCore"]
+        ),
+        .testTarget(
+            name: "KeepAwakeTests",
+            dependencies: ["KeepAwakeCore", "ModuleKeepAwake", "NotchCore"]
         ),
         .testTarget(
             name: "ModuleAgentsTests",

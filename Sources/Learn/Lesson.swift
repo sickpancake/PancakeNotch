@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, nowPlaying, shelf, agents, aiUsage, timer
+    case basics, nowPlaying, shelf, agents, aiUsage, timer, keepAwake
 
     public var id: Self { self }
 }
@@ -16,7 +16,8 @@ public enum LessonSignal: Hashable, Sendable {
          moduleSwitched,
          agentAllowed, agentOpened, agentsCleared,
          usageAccountsOpened, usageAccountChosen, usageRangeChosen,
-         timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped
+         timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped,
+         keepAwakeTurnedOn, keepAwakeExtended, keepAwakeTurnedOff
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -60,7 +61,7 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage, timer] }
+    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage, timer, keepAwake] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
@@ -70,6 +71,7 @@ public struct Lesson: Identifiable, Sendable {
         case .agents: agents
         case .aiUsage: aiUsage
         case .timer: timer
+        case .keepAwake: keepAwake
         }
     }
 
@@ -340,6 +342,37 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Click Stopwatch at the top right, start it, then click the flag to mark a lap.", comment: "Lesson step detail"),
                 symbol: "flag.fill",
                 signal: .stopwatchLapped
+            ),
+        ]
+    )
+
+    /// Keep the Mac awake for a while, add half an hour, then turn it off.
+    public static let keepAwake = Lesson(
+        id: .keepAwake,
+        title: String(localized: "Keep Awake", comment: "Lesson title"),
+        summary: String(localized: "Stop your Mac falling asleep while something runs.", comment: "Lesson summary"),
+        symbol: "cup.and.heat.waves",
+        steps: [
+            LessonStep(
+                id: "keepAwake.on",
+                title: String(localized: "Keep your Mac awake for 30 minutes", comment: "Lesson step title"),
+                detail: String(localized: "Hover the notch to open it, then click 30 min under Keep awake for. It turns off when the time runs out, even if an agent is still working. A coffee cup shows beside the notch while it's on.", comment: "Lesson step detail"),
+                symbol: "cup.and.heat.waves.fill",
+                signal: .keepAwakeTurnedOn
+            ),
+            LessonStep(
+                id: "keepAwake.more",
+                title: String(localized: "Add half an hour", comment: "Lesson step title"),
+                detail: String(localized: "Click +30 min. The page says until when, and how long is left.", comment: "Lesson step detail"),
+                symbol: "plus",
+                signal: .keepAwakeExtended
+            ),
+            LessonStep(
+                id: "keepAwake.off",
+                title: String(localized: "Turn it off", comment: "Lesson step title"),
+                detail: String(localized: "Click Turn Off: your Mac sleeps as usual again. It also turns on by itself while an AI agent works or a file converts, if you leave that on in its settings.", comment: "Lesson step detail"),
+                symbol: "power",
+                signal: .keepAwakeTurnedOff
             ),
         ]
     )

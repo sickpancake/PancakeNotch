@@ -12,6 +12,7 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 - **Agents** — follow Claude Code and Codex threads, plus Cursor after Connect. See who is working, needs you, or finished; answer permission requests from the notch after Connect.
 - **AI Usage** — choose between accounts, check plan limits, and see tokens and estimated API value for today, 7 days, or 30 days. Both AI modules are optional and read files already on your Mac.
 - **Timer** — a timer and a stopwatch with laps; the time left shows beside the notch, and a sound plays when it ends.
+- **Keep Awake** — keeps your Mac awake for a while, or by itself while AI agents work or a file converts; stops on a low battery.
 - **Module Menu** — tabs for your favorite modules, a menu with all of them, or a two-finger swipe.
 - **The PancakeNotch window** — settings, favorites, statistics (listening, usage, and the app's own memory use), short hands-on lessons, and a Help page with quick fixes.
 

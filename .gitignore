@@ -52,3 +52,6 @@ update-public-key.txt
 web/node_modules/
 web/dist/
 web/dist-ssr/
+
+# Pretend-battery helper for trying Keep Awake by hand: kept locally, not published
+scripts/fake-battery.sh
