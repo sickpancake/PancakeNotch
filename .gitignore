@@ -28,7 +28,11 @@ AGENTS.md
 CLAUDE.md
 CONTEXT.md
 docs/adr/
-.claude/
+# Claude settings and skills stay local, except the shared UI skill
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/pancakenotch-ui/
 /.planning-backups/
 
 # Secrets: signing certificates and Sparkle keys must never be committed (ADR-0005)
