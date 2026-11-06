@@ -1,7 +1,7 @@
 # The notch
 
 How the notch is built, how a module's page is laid out, and the controls it uses. Read
-[Foundations](foundations.md) first for colours, type and motion.
+[Foundations](foundations.md) first for colours and type, and [Motion](motion.md) for how things move.
 
 - [States](#states)
 - [Sizes come from the screen](#sizes-come-from-the-screen)
@@ -26,7 +26,7 @@ How the notch is built, how a module's page is laid out, and the controls it use
 
 The outline is `NotchShape`, which flares out into the menu bar at the top ("ears" of the shape) and has
 rounded bottom corners. `NotchView` morphs it between states with the springs listed in
-[Foundations › Motion](foundations.md#motion); with Reduce Motion it cross-fades instead.
+[Motion](motion.md); with Reduce Motion it cross-fades instead.
 
 In the UI the compact ears are called **"the spots beside the notch"**: #1 (left) and #2 (right), swappable.
 Which module gets which spot is decided by the ear rules (`docs/ear-rules.md`), not by the module's view.

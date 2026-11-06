@@ -205,27 +205,21 @@ A second click to confirm a destructive action turns the button prominent and as
 
 ## Motion
 
-Short and springy, never slow or bouncy for its own sake. Reduce Motion always turns movement into a
-cross-fade.
+Almost everything in PancakeNotch moves: the notch grows and settles like one soft object, pages slide and blur
+into each other, numbers roll and icons morph. Motion is short (mostly 0.15–0.3 s) and springy without bouncing,
+it comes from where things live, and Reduce Motion always turns it into a cross-fade. The most used values:
 
 | What | Animation | Reduce Motion |
 | --- | --- | --- |
-| Notch opens | `.spring(response: 0.42, dampingFraction: 0.8)` | `.easeInOut(duration: 0.2)` |
-| Notch closes | `.spring(response: 0.45, dampingFraction: 1.0)` | `.easeInOut(duration: 0.2)` |
-| Panel grows taller | `.spring(response: 0.28, dampingFraction: 0.88)` | `.easeInOut(duration: 0.15)` |
-| Switching modules | new one slides in 34 pt from its side with a 6 pt blur; old one blurs away in place | `.opacity` |
-| Content appears in the opening panel | blur 10 → 0 and grows down from the top | `.opacity` |
-| Pages inside a module | `.opacity` + 24 pt offset, spring(0.32, 0.86) | `.opacity`, 0.15 s |
+| Notch opens / closes | `NotchViewModel.animation(opening:)`: spring(0.42, 0.8) / spring(0.45, 1.0) | `.easeInOut(duration: 0.2)` |
+| Switching modules and pages | `NotchViewModel.switchAnimation`: spring(0.32, 0.86) | `.easeInOut(duration: 0.15)` |
+| Panel grows taller | `NotchViewModel.tallAnimation`: spring(0.28, 0.88) | `.easeInOut(duration: 0.15)` |
 | Hover | `.easeOut(duration: 0.15)` | same |
-| Text that changes (new song) | `.opacity` + 3 pt rise, `.easeInOut(duration: 0.3)` | `.opacity` |
-| Switches and segments (app) | `.snappy(duration: 0.22)` | none |
-| Card sections opening (app) | `.easeInOut(duration: 0.25)` | 0.15 s |
+| Small changes inside a page | `.easeInOut(duration: 0.2)`–`0.25`, `.opacity` | same |
+| App window controls | `.snappy(duration: 0.22)` | none |
 
-Read Reduce Motion with `@Environment(\.accessibilityReduceMotion)` and pick the transition in place:
-`.transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 3)))`.
-
-Content in the notch is laid out at its final size and revealed by the growing outline, so nothing reflows while
-the notch animates. Don't make a view's size depend on the animation.
+Every curve, transition and technique, with Reduce Motion versions and how to check them, is in
+**[Motion](motion.md)**. Read it before adding anything that appears, disappears or changes.
 
 ## Accessibility
 

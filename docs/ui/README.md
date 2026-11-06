@@ -10,7 +10,8 @@ wins: fix the guide in the same change.
 
 | Page | What's in it |
 | --- | --- |
-| [Foundations](foundations.md) | The rules everything follows: colour, type, spacing, corners, motion, accessibility, wording, speed |
+| [Foundations](foundations.md) | The rules everything follows: colour, type, spacing, corners, accessibility, wording, speed |
+| [Motion](motion.md) | How things move: the curves, the transitions, how to wire them up, continuous motion, Reduce Motion |
 | [The notch](notch.md) | Notch states, the open panel's layout, ears, peek strips, and the notch's own controls |
 | [The app window](app-window.md) | Pages, cards, rows, the monochrome controls, module cards and practice notches |
 
@@ -21,8 +22,9 @@ black and exactly the size of the camera cutout, so it disappears into the hardw
 of it is still black, with white text and soft see-through white for controls (white at 6–20% opacity). The
 only real colour is the user's own content: album art, file previews, and a few small status marks (Agents'
 dots and AI Usage's gauges). The app window is always dark too, uses SF Pro **Rounded**, and builds every
-page from the same glass cards and capsule controls. Motion is springy but short, and turns into plain
-cross-fades when Reduce Motion is on.
+page from the same glass cards and capsule controls. Almost everything is animated: the notch grows, slides
+and settles like one soft object, with short springy motion that turns into plain cross-fades when Reduce
+Motion is on.
 
 ## Core principles
 
