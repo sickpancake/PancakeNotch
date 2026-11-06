@@ -17,6 +17,12 @@ IN="$WORK/in"
 FAILED=0
 CHECKED=0
 
+# Each run of the helper gets a time limit: a single stuck conversion on a CI machine once held this check
+# for 6 hours. A normal one takes seconds (the whole check about 4 minutes). Exit 142 means the limit hit.
+LIMIT="${CONVERT_TIME_LIMIT:-120}"
+TIMED_OUT=142
+limited() { perl -e 'alarm shift; exec @ARGV or die "cannot run $ARGV[0]: $!\n"' "$LIMIT" "$@"; }
+
 # check <format> <quality> <file>…
 check() {
     local format="$1" quality="$2"; shift 2
@@ -25,15 +31,24 @@ check() {
     request="$(python3 -c 'import json, sys; print(json.dumps({"sources": sys.argv[4:], "format": sys.argv[1], "quality": sys.argv[2], "outputFolder": sys.argv[3], "pageName": "Page"}))' "$format" "$quality" "$out" "$@")"
     local label="$format/$quality $(cd "$IN" && for f in "$@"; do basename "$f"; done | paste -sd+ -)"
     local estimate budget
-    read -r estimate budget < <("$HELPER" estimate "$request" | python3 -c 'import json, sys; e = json.load(sys.stdin); print(e.get("peak") or "-", e["budget"])')
+    read -r estimate budget < <(limited "$HELPER" estimate "$request" | python3 -c 'import json, sys; e = json.load(sys.stdin); print(e.get("peak") or "-", e["budget"])') || true
+    if [[ -z "${budget:-}" ]]; then
+        printf '  %-48s FAILED: no estimate (stuck for %ss or broken)\n' "$label" "$LIMIT"
+        FAILED=$((FAILED + 1)); return
+    fi
     if [[ "$estimate" != "-" ]] && python3 -c "import sys; sys.exit(0 if $estimate > $budget else 1)"; then
         printf '  %-48s Too big (estimate %.0f MiB): not offered\n' "$label" "$estimate"
         return
     fi
-    /usr/bin/time -l "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || true
+    local code=0
+    /usr/bin/time -l perl -e 'alarm shift; exec @ARGV or die' "$LIMIT" "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || code=$?
+    CHECKED=$((CHECKED + 1))
+    if (( code == TIMED_OUT )); then
+        printf '  %-48s TIMED OUT after %ss\n' "$label" "$LIMIT"
+        FAILED=$((FAILED + 1)); return
+    fi
     local result; result="$(tail -1 "$out.log")"
     local peak; peak="$(awk '/peak memory footprint/ { printf "%.1f", $1 / 1048576 }' "$out.time")"
-    CHECKED=$((CHECKED + 1))
     local status="ok"
     if ! python3 -c 'import json, sys; m = json.loads(sys.argv[1]); sys.exit(0 if m.get("outputs") and not m.get("errors") else 1)' "$result" 2>/dev/null; then
         status="FAILED to convert: $result"
@@ -111,7 +126,12 @@ PYFIXTURES
 for name in oversized.txt bomb.docx; do
     out="$(mktemp -d "$WORK/refused.XXXX")"
     request="$(python3 -c 'import json, sys; print(json.dumps({"sources": [sys.argv[1]], "format": "pdf", "quality": "balanced", "outputFolder": sys.argv[2], "pageName": "Page"}))' "$IN/$name" "$out")"
-    /usr/bin/time -l "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || true
+    code=0
+    /usr/bin/time -l perl -e 'alarm shift; exec @ARGV or die' "$LIMIT" "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || code=$?
+    if (( code == TIMED_OUT )); then
+        echo "  $name: TIMED OUT after ${LIMIT}s"
+        CHECKED=$((CHECKED + 1)); FAILED=$((FAILED + 1)); continue
+    fi
     peak="$(awk '/peak memory footprint/ { printf "%.1f", $1 / 1048576 }' "$out.time")"
     result="$(tail -1 "$out.log")"
     CHECKED=$((CHECKED + 1))
