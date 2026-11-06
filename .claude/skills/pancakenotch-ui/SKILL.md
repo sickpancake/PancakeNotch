@@ -137,6 +137,10 @@ check:
 
 - [ ] Nothing sits under the black cutout area; nothing clips or truncates badly at the panel's edges.
 - [ ] It lines up with its neighbours: same side padding, same baseline for the band, same row heights.
+- [ ] Centring and balance hold up when you zoom in on the picture: anything meant to sit in the middle is
+  centred on the whole panel, a capsule's padding is even (a pill inside a strip sits the same distance from its
+  top, bottom and end), icons and text in a row share one centre line, and when something new appears below a
+  centred group, the gaps above, between and below stay even instead of crowding one edge.
 - [ ] Every state from step 2 is on the sheet and looks intentional (empty and error states too).
 - [ ] Only black, white and grey, except allowed content and status colours.
 - [ ] Text sizes and weights match the tables; numbers use monospaced digits; no label is cut off, even the
