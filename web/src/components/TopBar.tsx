@@ -7,7 +7,8 @@ import { Logo } from './Logo'
    pure black, with the small concave corners where it meets the edge.
 
    - While the opening animation plays it's just a bare notch; as it ends, the notch wakes up and the
-     logo and the Download button slide out from under it (like the app's spots beside the notch).
+     logo, the GitHub button and the Download button slide out from under it (like the app's spots
+     beside the notch). On a very narrow phone the GitHub button waits in the open panel.
    - Hover it (tap on touch screens, Enter with the keyboard) and it opens with the app's springs into
      a panel with the links: Help, GitHub, What's new and Report a problem.
    - Scroll into a new part of the page and it briefly grows a line underneath with that part's name and
@@ -24,7 +25,7 @@ const REPORT = `${HELP}#report`
 
 const H = 40 // the closed notch's height
 const BARE = 196 // the bare notch's width, before it wakes up
-const COMPACT = 404
+const COMPACT = 452
 const OPEN_MAX = 640
 const PEEK = 30 // the extra height of the line underneath
 
@@ -70,6 +71,7 @@ export function TopBar() {
   const hoverLocked = useRef(false) // closed with a click: hovering opens it again only after leaving
 
   const narrow = vw < 560
+  const roomy = vw >= 420 // room for the GitHub button beside Download
   const compactWidth = Math.min(COMPACT, vw - 24)
   const openWidth = Math.min(OPEN_MAX, vw - 16)
   // Two columns of links, or one on a phone, then the line at the bottom.
@@ -309,6 +311,15 @@ export function TopBar() {
                   </m.span>
                 )}
               </AnimatePresence>
+              {roomy && (
+                <a
+                  href={REPO}
+                  className="pointer-events-auto inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white/10 pr-3.5 pl-3 text-[13px] font-semibold text-white/85 transition-[transform,background-color,color] duration-200 hover:scale-[1.04] hover:bg-white/16 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[.97]"
+                >
+                  <Glyph name="code" className="text-[13px]" />
+                  GitHub
+                </a>
+              )}
               <a
                 href={RELEASES}
                 className="pointer-events-auto inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white pr-3.5 pl-3 text-[13px] font-semibold text-black transition-[transform,background-color] duration-200 hover:scale-[1.04] hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[.97]"
