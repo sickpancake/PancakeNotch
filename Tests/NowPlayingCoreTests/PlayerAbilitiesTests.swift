@@ -254,6 +254,17 @@ struct SpotifyAdTests {
         let diff = Data((#"{"type":"data","diff":true,"payload":{"enabledCommands":null}}"# + "\n").utf8)
         #expect(try #require(parser.feed(diff, receivedAt: Date())?.track).enabledCommands == nil)
     }
+
+    @Test func mediaTypeComesFromTheHelper() throws {
+        var parser = AdapterStreamParser()
+        let line = Data((#"{"type":"data","diff":false,"payload":{"title":"V","bundleIdentifier":"com.example.player","playing":true,"mediaType":"MRMediaRemoteMediaTypeVideo"}}"# + "\n").utf8)
+        #expect(try #require(parser.feed(line, receivedAt: Date())?.track).mediaType == "MRMediaRemoteMediaTypeVideo")
+        let number = Data((#"{"type":"data","diff":true,"payload":{"mediaType":2}}"# + "\n").utf8)
+        #expect(try #require(parser.feed(number, receivedAt: Date())?.track).mediaType == "2")
+        // Chrome sends none.
+        let chrome = Data((#"{"type":"data","diff":false,"payload":{"title":"V","bundleIdentifier":"com.google.Chrome","playing":true}}"# + "\n").utf8)
+        #expect(try #require(parser.feed(chrome, receivedAt: Date())?.track).mediaType == nil)
+    }
 }
 
 // MARK: Center with AppleScript

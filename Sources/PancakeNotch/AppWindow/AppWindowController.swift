@@ -337,7 +337,7 @@ extension AppWindowController {
         }
     }
 
-    /// A week of made-up listening, notch use and memory samples, for the Statistics page snapshot.
+    /// A week of made-up listening, watching, notch use and memory samples, for the Statistics page snapshot.
     private static func sampleStatistics(_ store: StatsStore) {
         let songs: [(String, String, String)] = [
             ("Pancake Sunrise", "The Flipsides", "com.apple.Music"),
@@ -345,11 +345,20 @@ extension AppWindowController {
             ("Night Owl", "Syrup Static", "com.apple.Music"),
             ("Butter Blues", "The Flipsides", "com.spotify.client"),
         ]
+        let videos: [(String, String, String)] = [
+            ("Flipping the Perfect Pancake", "Kitchen Lab", "com.google.Chrome"),
+            ("Late Night Stream", "SyrupPlays", "com.apple.Safari"),
+            ("How Notches Are Made", "Tiny Factory", "com.google.Chrome"),
+        ]
         for day in 0..<7 {
             let date = Date().addingTimeInterval(-Double(day) * 86_400)
             for (index, song) in songs.enumerated() where (day + index) % 3 != 0 {
-                store.recordListening(title: song.0, artist: song.1, album: "", bundleID: song.2,
+                store.recordListening(title: song.0, artist: song.1, album: "", bundleID: song.2, kind: .listen,
                                       started: date.addingTimeInterval(-Double(index) * 600), seconds: Double(180 * (index + 1 + day % 3)))
+            }
+            for (index, video) in videos.enumerated() where (day + index) % 2 == 0 {
+                store.recordListening(title: video.0, artist: video.1, album: "", bundleID: video.2, kind: .watch,
+                                      started: date.addingTimeInterval(-Double(index + 5) * 900), seconds: Double(420 * (index + 1 + day % 2)))
             }
             for _ in 0..<(12 + day * 3) { store.recordNotchOpen(at: date) }
             for _ in 0..<(8 + day) { store.recordModuleShown("nowPlaying", at: date) }

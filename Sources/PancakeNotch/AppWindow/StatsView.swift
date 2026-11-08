@@ -4,7 +4,7 @@ import Charts
 import Stats
 import SwiftUI
 
-/// The Statistics page (ADR-0018): what was listened to, how the notch is used, and how much memory
+/// The Statistics page (ADR-0018): what was listened to and watched, how the notch is used, and how much memory
 /// and CPU PancakeNotch itself takes. Everything comes from the local statistics file; nothing is
 /// sent anywhere. The only thing that refreshes on its own is the live memory and CPU read-out,
 /// once a second and only while this page is on screen.
@@ -18,13 +18,15 @@ struct StatsView: View {
 
     @State private var range: StatsRange = .week
     @State private var summary: StatsSummary?
-    /// The listening and usage sections fade in once the first summary has loaded.
+    /// The listening, watching and usage sections fade in once the first summary has loaded.
     @State private var isShown = false
     /// Clear Statistics just ran: says so until the page is left.
     @State private var justCleared = false
     /// Bumped after Clear, so the summary loads again.
     @State private var generation = 0
     @State private var apps: [String: ListeningApp] = [:]
+    /// Which half of Media shows.
+    @State private var media: PlaysSection = .listening
     @State private var confirmingClear = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -32,7 +34,7 @@ struct StatsView: View {
         let data = summary ?? .empty
         AppPage(
             title: String(localized: "Statistics"),
-            subtitle: String(localized: "What you listened to and how you use the notch. Kept only on this Mac.")
+            subtitle: String(localized: "What you listened to and watched, and how you use the notch. Kept only on this Mac.")
         ) {
             // Up here because it sets the time for everything on the page, memory history included.
             MonochromeSegmented(
@@ -41,9 +43,20 @@ struct StatsView: View {
                 selection: $range
             )
         } content: {
-            StatsSection(title: String(localized: "Listening")) {
-                ListeningContent(summary: data, range: range, apps: apps)
+            // Listening and watching share one section, one at a time, so the page stays short.
+            StatsSection(title: String(localized: "Media")) {
+                MonochromeSegmented(
+                    title: String(localized: "Media"),
+                    options: PlaysSection.allCases.map { (value: $0, label: $0.label) },
+                    selection: $media
+                )
+            } content: {
+                PlaysContent(section: media, plays: media == .listening ? data.listening : data.watching,
+                             days: data.days, range: range, apps: apps)
+                    .id(media)
+                    .transition(.opacity)
             }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: media)
             .opacity(isShown ? 1 : 0)
             .accessibilityHidden(!isShown)
 
@@ -92,13 +105,17 @@ struct StatsView: View {
             let loaded = await store.summary(days: range.days)
             guard !Task.isCancelled else { return }
             var resolved = apps
-            for app in loaded.topApps where resolved[app.id] == nil {
+            for app in loaded.listening.topApps + loaded.watching.topApps where resolved[app.id] == nil {
                 resolved[app.id] = ListeningApp.resolve(app.id)
             }
             apps = resolved
             // The first summary fills the sections while they're still hidden, so their "Nothing yet"
-            // cards don't cross-fade with the real numbers as the page appears.
-            if summary == nil { summary = loaded }
+            // cards don't cross-fade with the real numbers as the page appears. Media starts on what
+            // there is: someone who only watches sees Watching.
+            if summary == nil {
+                summary = loaded
+                if loaded.listening.totalPlays == 0, loaded.watching.totalPlays > 0 { media = .watching }
+            }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                 summary = loaded
                 isShown = true
@@ -150,101 +167,172 @@ private struct LoadKey: Hashable {
     let generation: Int
 }
 
-// MARK: - Listening
+// MARK: - Listening and watching
 
-private struct ListeningContent: View {
-    let summary: StatsSummary
+/// Which half of Media shows (ads are never counted, so they have none).
+private enum PlaysSection: Hashable, CaseIterable {
+    case listening, watching
+
+    var label: String {
+        switch self {
+        case .listening: String(localized: "Listening")
+        case .watching: String(localized: "Watching")
+        }
+    }
+}
+
+/// The words that differ between the Listening and Watching sections; everything else is shared.
+private struct PlaysWording {
+    let empty: String
+    let emptySymbol: String
+    let timeLabel: String
+    let timeSymbol: String
+    let perDayHours: String
+    let perDayMinutes: String
+    let top: String
+    let creators: String
+    let noApp: String
+    /// "4 h 12 min listened"
+    let appTime: (String) -> String
+    let footnote: String
+
+    static func of(_ section: PlaysSection) -> PlaysWording {
+        switch section {
+        case .listening:
+            PlaysWording(
+                empty: String(localized: "Nothing yet. Play music, a podcast or an audiobook and it shows up here."),
+                emptySymbol: "music.note",
+                timeLabel: String(localized: "Time listened"),
+                timeSymbol: "headphones",
+                perDayHours: String(localized: "Hours listened per day"),
+                perDayMinutes: String(localized: "Minutes listened per day"),
+                top: String(localized: "Most played"),
+                creators: String(localized: "Top artists"),
+                noApp: String(localized: "No app known yet."),
+                appTime: { String(localized: "\($0) listened") },
+                footnote: String(localized: "Music, podcasts and audiobooks; videos are under Watching. A play is 5 seconds or more without a pause.")
+            )
+        case .watching:
+            PlaysWording(
+                empty: String(localized: "Nothing yet. Watch a video or a stream, like YouTube or Twitch, and it shows up here."),
+                emptySymbol: "play.rectangle",
+                timeLabel: String(localized: "Time watched"),
+                timeSymbol: "play.rectangle",
+                perDayHours: String(localized: "Hours watched per day"),
+                perDayMinutes: String(localized: "Minutes watched per day"),
+                top: String(localized: "Most watched"),
+                creators: String(localized: "Top channels"),
+                noApp: String(localized: "No app known yet."),
+                appTime: { String(localized: "\($0) watched") },
+                footnote: String(localized: "Videos and streams, like YouTube or Twitch. Music on the web that names its album (YouTube Music, Spotify) counts as Listening. A play is 5 seconds or more without a pause.")
+            )
+        }
+    }
+}
+
+/// One kind of plays: totals, time per day, the top songs or videos, artists or channels, and apps.
+private struct PlaysContent: View {
+    let section: PlaysSection
+    let plays: PlaySummary
+    let days: [Date]
     let range: StatsRange
     let apps: [String: ListeningApp]
 
     var body: some View {
-        if summary.totalPlays == 0 {
-            EmptyCard(symbol: "music.note", text: String(localized: "Nothing yet. Play music, a podcast or a video and it shows up here."))
+        let words = PlaysWording.of(section)
+        if plays.totalPlays == 0 {
+            EmptyCard(symbol: words.emptySymbol, text: words.empty)
         } else {
             HStack(spacing: 12) {
                 StatsTile(
-                    label: String(localized: "Time listened"),
-                    symbol: "headphones",
-                    value: StatsFormat.duration(summary.totalListeningSeconds),
+                    label: words.timeLabel,
+                    symbol: words.timeSymbol,
+                    value: StatsFormat.duration(plays.totalSeconds),
                     caption: range.caption
                 )
                 StatsTile(
                     label: String(localized: "Plays"),
-                    symbol: "music.note",
-                    value: summary.totalPlays.formatted(),
+                    symbol: section == .listening ? "music.note" : "play",
+                    value: plays.totalPlays.formatted(),
                     caption: range.caption
                 )
-                topAppTile
+                topAppTile(words)
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            let hours = (summary.listeningSecondsPerDay.max() ?? 0) > 3 * 3_600
+            let hours = (plays.secondsPerDay.max() ?? 0) > 3 * 3_600
             DailyBarCard(
-                title: hours ? String(localized: "Hours listened per day") : String(localized: "Minutes listened per day"),
-                days: summary.days,
-                values: summary.listeningSecondsPerDay.map { hours ? $0 / 3_600 : $0 / 60 },
+                title: hours ? words.perDayHours : words.perDayMinutes,
+                days: days,
+                values: plays.secondsPerDay.map { hours ? $0 / 3_600 : $0 / 60 },
                 range: range,
                 minimumTop: hours ? 4 : 10,
                 axisName: hours ? String(localized: "Hours") : String(localized: "Minutes"),
                 valueText: { value in StatsFormat.duration(hours ? value * 3_600 : value * 60) },
-                detail: String(localized: "About \(StatsFormat.duration(summary.totalListeningSeconds / Double(max(summary.days.count, 1)))) a day")
+                detail: String(localized: "About \(StatsFormat.duration(plays.totalSeconds / Double(max(days.count, 1)))) a day")
             )
 
+            // Three narrow lists side by side: the time goes under each title, beside the artist.
             HStack(alignment: .top, spacing: 12) {
-                RankedCard(title: String(localized: "Most played")) {
-                    ForEach(Array(summary.topSongs.enumerated()), id: \.element.id) { index, song in
+                RankedCard(title: words.top) {
+                    ForEach(Array(plays.top.enumerated()), id: \.element.id) { index, item in
                         RankedRow(
                             rank: index + 1,
-                            title: song.title,
-                            subtitle: song.subtitle,
-                            value: StatsFormat.duration(song.value),
-                            fraction: fraction(song, in: summary.topSongs)
+                            title: item.title,
+                            subtitle: item.subtitle,
+                            value: StatsFormat.duration(item.value),
+                            fraction: fraction(item, in: plays.top),
+                            compact: true
                         )
                     }
                 }
-                RankedCard(title: String(localized: "Top creators")) {
-                    ForEach(Array(summary.topArtists.enumerated()), id: \.element.id) { index, artist in
+                RankedCard(title: words.creators) {
+                    ForEach(Array(plays.topCreators.enumerated()), id: \.element.id) { index, creator in
                         RankedRow(
                             rank: index + 1,
-                            title: artist.title,
-                            subtitle: StatsFormat.plays(artist.count),
-                            value: StatsFormat.duration(artist.value),
-                            fraction: fraction(artist, in: summary.topArtists)
+                            title: creator.title,
+                            subtitle: StatsFormat.plays(creator.count),
+                            value: StatsFormat.duration(creator.value),
+                            fraction: fraction(creator, in: plays.topCreators),
+                            compact: true
                         )
                     }
                 }
-            }
-            .fixedSize(horizontal: false, vertical: true)
-
-            if !summary.topApps.isEmpty {
                 RankedCard(title: String(localized: "Top apps")) {
-                    ForEach(Array(summary.topApps.enumerated()), id: \.element.id) { index, app in
-                        let info = apps[app.id] ?? ListeningApp(name: app.id, icon: nil)
+                    if plays.topApps.isEmpty {
+                        Text(words.noApp)
+                            .font(.app(size: 12.5))
+                            .foregroundStyle(AppPalette.secondaryText)
+                    }
+                    ForEach(Array(plays.topApps.enumerated()), id: \.element.id) { index, app in
+                        let info = apps[app.id] ?? ListeningApp.named(app.id)
                         RankedRow(
                             rank: index + 1,
                             title: info.name,
                             subtitle: StatsFormat.plays(app.count),
                             value: StatsFormat.duration(app.value),
-                            fraction: fraction(app, in: summary.topApps),
+                            fraction: fraction(app, in: plays.topApps),
+                            compact: true,
                             icon: { ListeningAppIcon(image: info.icon) }
                         )
                     }
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
 
-            Footnote(String(localized: "A play is 5 seconds or more without a pause; playing again after a pause counts as a new one. Songs, podcasts and videos all count."))
+            Footnote(words.footnote)
         }
     }
 
     @ViewBuilder
-    private var topAppTile: some View {
-        if let top = summary.topApps.first {
-            let info = apps[top.id] ?? ListeningApp(name: top.id, icon: nil)
+    private func topAppTile(_ words: PlaysWording) -> some View {
+        if let top = plays.topApps.first {
+            let info = apps[top.id] ?? ListeningApp.named(top.id)
             StatsTile(
                 label: String(localized: "Top app"),
                 symbol: "play.circle",
                 value: info.name,
-                caption: String(localized: "\(StatsFormat.duration(top.value)) listened"),
+                caption: words.appTime(StatsFormat.duration(top.value)),
                 icon: info.icon
             )
         } else {
@@ -949,6 +1037,8 @@ private struct RankedRow<Icon: View>: View {
     let value: String
     /// 0…1, compared with the first entry.
     let fraction: Double
+    /// For narrow lists: the figure goes after the subtitle ("Artist · 4 min") so the title keeps the width.
+    var compact = false
     @ViewBuilder var icon: () -> Icon
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -968,21 +1058,30 @@ private struct RankedRow<Icon: View>: View {
                             .font(.app(size: 13.5, weight: .medium))
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if let subtitle {
+                        if compact {
+                            Text(subtitle.map { "\($0) · \(value)" } ?? value)
+                                .font(.app(size: 12))
+                                .foregroundStyle(AppPalette.secondaryText)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                        } else if let subtitle {
                             Text(subtitle)
                                 .font(.app(size: 12))
                                 .foregroundStyle(AppPalette.secondaryText)
                                 .lineLimit(1)
                         }
                     }
-                    Spacer(minLength: 6)
-                    Text(value)
-                        .font(.app(size: 12.5, weight: .medium))
-                        .foregroundStyle(AppPalette.secondaryText)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .fixedSize()
+                    if !compact {
+                        Spacer(minLength: 6)
+                        Text(value)
+                            .font(.app(size: 12.5, weight: .medium))
+                            .foregroundStyle(AppPalette.secondaryText)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule().fill(AppPalette.hover)
@@ -1004,8 +1103,8 @@ private struct RankedRow<Icon: View>: View {
 }
 
 extension RankedRow where Icon == EmptyView {
-    init(rank: Int, title: String, subtitle: String?, value: String, fraction: Double) {
-        self.init(rank: rank, title: title, subtitle: subtitle, value: value, fraction: fraction) { EmptyView() }
+    init(rank: Int, title: String, subtitle: String?, value: String, fraction: Double, compact: Bool = false) {
+        self.init(rank: rank, title: title, subtitle: subtitle, value: value, fraction: fraction, compact: compact) { EmptyView() }
     }
 }
 
@@ -1097,11 +1196,38 @@ private struct ListeningApp {
     @MainActor
     static func resolve(_ bundleID: String) -> ListeningApp {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return ListeningApp(name: bundleID, icon: nil)
+            return named(bundleID)
         }
         var name = FileManager.default.displayName(atPath: url.path)
         if name.hasSuffix(".app") { name = String(name.dropLast(4)) }
         return ListeningApp(name: name, icon: NSWorkspace.shared.icon(forFile: url.path))
+    }
+
+    /// Without the app on this Mac (uninstalled, or not looked up yet): its usual name, never the bundle ID
+    /// ("com.spotify.client"), which means nothing to people.
+    static func named(_ bundleID: String) -> ListeningApp {
+        ListeningApp(name: knownNames[bundleID] ?? readableName(bundleID), icon: nil)
+    }
+
+    private static let knownNames: [String: String] = [
+        "com.spotify.client": "Spotify", "com.apple.Music": "Music", "com.apple.podcasts": "Podcasts",
+        "com.apple.iBooksX": "Books", "com.apple.TV": "TV", "com.apple.QuickTimePlayerX": "QuickTime Player",
+        "com.apple.Safari": "Safari", "com.google.Chrome": "Google Chrome", "org.mozilla.firefox": "Firefox",
+        "company.thebrowser.Browser": "Arc", "com.microsoft.edgemac": "Microsoft Edge", "com.brave.Browser": "Brave",
+        "com.colliderli.iina": "IINA", "org.videolan.vlc": "VLC", "com.tidal.desktop": "TIDAL",
+        "com.deezer.deezer-desktop": "Deezer", "com.amazon.music": "Amazon Music",
+    ]
+
+    /// "com.example.coolPlayer" → "Cool Player": the last part of the ID, in words.
+    private static func readableName(_ bundleID: String) -> String {
+        let last = bundleID.split(separator: ".").last.map(String.init) ?? bundleID
+        var words = ""
+        for character in last {
+            if character.isUppercase, let previous = words.last, previous.isLowercase { words.append(" ") }
+            words.append(character == "-" || character == "_" ? " " : character)
+        }
+        guard let first = words.first else { return bundleID }
+        return first.uppercased() + words.dropFirst()
     }
 }
 

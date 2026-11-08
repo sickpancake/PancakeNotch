@@ -34,7 +34,7 @@ struct SQLRow {
 /// store on the main thread never waits on the disk.
 final class Database: @unchecked Sendable {
     /// Bumped when the tables change; `migrate()` brings older files up to date.
-    static let schemaVersion: Int64 = 2
+    static let schemaVersion: Int64 = 3
 
     private let url: URL?
     private var handle: OpaquePointer?
@@ -146,7 +146,7 @@ final class Database: @unchecked Sendable {
             """) { return false }
         // Version 2: AI token counts per message (ADR-0037) and how far each AI tool's log has been read.
         // `cost` is NULL for models without a known price.
-        return exec(db, """
+        if version < 2, !exec(db, """
             BEGIN;
             CREATE TABLE IF NOT EXISTS ai_usage (
                 account TEXT NOT NULL,
@@ -169,9 +169,38 @@ final class Database: @unchecked Sendable {
             ) WITHOUT ROWID;
             PRAGMA user_version = 2;
             COMMIT;
-            """)
+            """) { return false }
+        // Version 3: whether each play was listened to or watched (`PlayKind`). Plays saved before it are
+        // sorted by app and album, the clues they kept; ads that slipped in are marked, so they no longer
+        // show (and go after 90 days like everything else).
+        guard exec(db, "BEGIN; ALTER TABLE plays ADD COLUMN kind TEXT NOT NULL DEFAULT 'listen';") else { return false }
+        var sorted: [(app: String, album: String, kind: PlayKind)] = []
+        let read = withStatement(db, "SELECT DISTINCT app, album FROM plays WHERE app IS NOT NULL", []) { statement in
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let row = SQLRow(statement: statement)
+                let app = row.text(0)
+                let album = row.text(1)
+                let kind = PlayKind.of(app: app, album: album)
+                if kind != .listen { sorted.append((app, album, kind)) }
+            }
+            return true
+        }
+        guard read == true else {
+            exec(db, "ROLLBACK")
+            return false
+        }
+        for play in sorted {
+            let done = withStatement(db, "UPDATE plays SET kind = ? WHERE app = ? AND album = ?",
+                                     [.text(play.kind.rawValue), .text(play.app), .text(play.album)]) { sqlite3_step($0) == SQLITE_DONE }
+            guard done == true else {
+                exec(db, "ROLLBACK")
+                return false
+            }
+        }
+        return exec(db, "PRAGMA user_version = 3; COMMIT;")
     }
 
+    @discardableResult
     private func exec(_ db: OpaquePointer, _ sql: String) -> Bool {
         guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
             logger.error("SQLite: \(String(cString: sqlite3_errmsg(db)), privacy: .public)")
@@ -207,6 +236,10 @@ final class Database: @unchecked Sendable {
 
     private func withStatement<T>(_ sql: String, _ values: [SQLValue], _ body: (OpaquePointer) -> T) -> T? {
         guard let db = connection else { return nil }
+        return withStatement(db, sql, values, body)
+    }
+
+    private func withStatement<T>(_ db: OpaquePointer, _ sql: String, _ values: [SQLValue], _ body: (OpaquePointer) -> T) -> T? {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             logger.error("SQLite prepare: \(String(cString: sqlite3_errmsg(db)), privacy: .public)")

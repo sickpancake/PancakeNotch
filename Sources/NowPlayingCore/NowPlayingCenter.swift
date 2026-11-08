@@ -484,7 +484,9 @@ public final class NowPlayingCenter {
             onSongChange?(visible)
             songChanged(visible)
         }
-        if let record = listening.update(visible, at: now()) { onListened?(record) }
+        // The picture's shape helps the statistics tell a video (wide thumbnail) from a song (square cover).
+        let aspect = newArtwork.flatMap { $0.size.height > 0 ? Double($0.size.width / $0.size.height) : nil }
+        if let record = listening.update(visible, artworkAspect: aspect, at: now()) { onListened?(record) }
     }
 
     /// A new song: look at its modes if a notch shows it, and check Spotify for an ad (without asking).

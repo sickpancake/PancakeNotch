@@ -9,6 +9,8 @@ struct ListeningTracker: Sendable {
     private struct Stretch: Sendable {
         var track: NowPlayingTrack
         var started: Date
+        /// The newest artwork's width ÷ height while this song played (it often arrives after the title).
+        var artworkAspect: Double?
     }
 
     private var stretch: Stretch?
@@ -16,7 +18,8 @@ struct ListeningTracker: Sendable {
     var isListening: Bool { stretch != nil }
 
     /// Tells the tracker what's shown now; returns the stretch that just ended, if it counts.
-    mutating func update(_ track: NowPlayingTrack?, at date: Date) -> ListeningRecord? {
+    /// - Parameter artworkAspect: the shown artwork's width divided by its height; nil without artwork.
+    mutating func update(_ track: NowPlayingTrack?, artworkAspect: Double? = nil, at date: Date) -> ListeningRecord? {
         // An ad isn't listening: it ends the song's stretch and starts none.
         let track = track?.isAdvertisement == true ? nil : track
         var record: ListeningRecord?
@@ -27,9 +30,13 @@ struct ListeningTracker: Sendable {
                 end = max(current.started, min(date, track.elapsedDate))
             }
             record = flush(at: end)
+        } else if let track, stretch != nil {
+            // Still the same song: keep what arrived since (media type, artwork), not when it started.
+            stretch?.track = track
+            if let artworkAspect { stretch?.artworkAspect = artworkAspect }
         }
         if stretch == nil, let track, track.isPlaying {
-            stretch = Stretch(track: track, started: date)
+            stretch = Stretch(track: track, started: date, artworkAspect: artworkAspect)
         }
         return record
     }
@@ -42,6 +49,7 @@ struct ListeningTracker: Sendable {
         guard seconds >= Self.minimumSeconds else { return nil }
         let track = current.track
         return ListeningRecord(title: track.title, artist: track.artist, album: track.album,
-                               bundleID: track.bundleID, started: current.started, seconds: seconds)
+                               bundleID: track.bundleID, started: current.started, seconds: seconds,
+                               mediaType: track.mediaType, artworkAspect: current.artworkAspect)
     }
 }
