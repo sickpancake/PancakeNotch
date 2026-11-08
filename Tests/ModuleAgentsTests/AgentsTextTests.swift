@@ -72,4 +72,17 @@ struct AgentsTextTests {
         pending.approval = PendingApproval(requestID: 1, review: review)
         #expect(AgentsText.spoken(pending, now: now).contains(", " + command + ", "))
     }
+
+    @Test func harnessNamesTheToolAndTheAppItRunsIn() {
+        var running = thread(.working)
+        #expect(AgentsText.harness(running) == "Claude Code")
+        running.hostName = "T3 Code"
+        #expect(AgentsText.harness(running) == "Claude Code in T3 Code")
+        #expect(AgentsText.spoken(running, now: now).hasPrefix("Fix the login redirect, Claude Code in T3 Code, "))
+        // The tool's own app, or a blank name, isn't said twice.
+        running.hostName = "claude code"
+        #expect(AgentsText.harness(running) == "Claude Code")
+        running.hostName = "  "
+        #expect(AgentsText.harness(running) == "Claude Code")
+    }
 }

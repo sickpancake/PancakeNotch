@@ -86,6 +86,9 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     var helperTitle: String?
     /// The app it runs in is known, so a click can bring it forward.
     public var canOpen: Bool
+    /// The name of the app it runs in ("Terminal", "T3 Code", "Codex"), when known: the row's preview
+    /// shows it.
+    public var hostName: String?
     /// The user has seen it finished (the list was on screen).
     public var isSeen: Bool
     /// The helpers it started that are still working, oldest first. Shown under it, never as threads.
@@ -95,8 +98,8 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
 
     public init(id: String, tool: AgentTool, accountID: String? = nil, title: String, project: String,
                 status: AgentStatus, statusSince: Date, workStarted: Date? = nil, step: String? = nil,
-                request: String? = nil, approval: PendingApproval? = nil, canOpen: Bool = false, isSeen: Bool = false,
-                subagents: [AgentSubagent] = [], lastMessage: String? = nil, branch: String? = nil) {
+                request: String? = nil, approval: PendingApproval? = nil, canOpen: Bool = false, hostName: String? = nil,
+                isSeen: Bool = false, subagents: [AgentSubagent] = [], lastMessage: String? = nil, branch: String? = nil) {
         self.id = id
         self.tool = tool
         self.accountID = accountID
@@ -109,6 +112,7 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
         self.request = request
         self.approval = approval
         self.canOpen = canOpen
+        self.hostName = hostName
         self.isSeen = isSeen
         self.subagents = subagents
         self.lastMessage = lastMessage

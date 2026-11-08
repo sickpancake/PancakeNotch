@@ -34,6 +34,15 @@ enum AgentsText {
         return [thread.byline ?? thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    /// The row's preview: the tool and the app it runs in, "Claude Code in T3 Code". Just the tool when
+    /// the app isn't known or is the tool's own ("Codex", "Cursor").
+    static func harness(_ thread: AgentThread) -> String {
+        let tool = thread.tool.name
+        guard let host = thread.hostName?.trimmingCharacters(in: .whitespacesAndNewlines), !host.isEmpty,
+              host.caseInsensitiveCompare(tool) != .orderedSame else { return tool }
+        return String(localized: "\(tool) in \(host)", comment: "Agent row preview: the AI tool and the app it runs in, e.g. Claude Code in Terminal")
+    }
+
     /// What a request the notch can answer asks for, ahead of the command or change itself: "Wants to
     /// run:", "Wants to change Button.tsx".
     static func asks(_ review: AgentReview) -> String {
@@ -117,10 +126,10 @@ enum AgentsText {
             : String(localized: "\(count) subagents", comment: "Agent row: helpers the thread started")
     }
 
-    /// For VoiceOver, one row: "Fix the login redirect, Claude Code, web-app · Running tests, Working · 4m,
+    /// For VoiceOver, one row: "Fix the login redirect, Claude Code in T3 Code, web-app · Running tests, Working · 4m,
     /// 2 subagents".
     static func spoken(_ thread: AgentThread, now: Date) -> String {
-        [thread.title, thread.tool.name, subtitle(thread), thread.approval?.review.text ?? "",
+        [thread.title, harness(thread), subtitle(thread), thread.approval?.review.text ?? "",
          statusLine(thread.status, since: thread.statusSince, now: now),
          thread.subagents.isEmpty ? "" : subagents(thread.subagents.count)]
             .filter { !$0.isEmpty }.joined(separator: ", ")

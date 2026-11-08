@@ -315,7 +315,11 @@ public final class AgentsCenter {
                 seenAt[update.id] = nil
             }
         }
-        if !isPractice { thread.canOpen = hostApp(for: update.id) != nil }
+        if !isPractice {
+            let host = hostApp(for: update.id)
+            thread.canOpen = host != nil
+            thread.hostName = host?.localizedName ?? thread.hostName
+        }
         storage[update.id] = thread
         if !update.quietly {
             if deferFinishAlert, thread.status.isFinished, let previous, previous.status != thread.status { pendingFinishAlerts[thread.id] = previous }

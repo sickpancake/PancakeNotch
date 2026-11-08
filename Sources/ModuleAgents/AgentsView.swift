@@ -32,10 +32,20 @@ struct AgentsView: View {
         .onChange(of: reviewed(threads) == nil) { _, gone in
             if gone { module.closeReview() }
         }
+        // Here rather than in the list, which the "No agents" note replaces when the last thread goes.
+        .onChange(of: rowSpots(threads)) { old, new in module.rowsMoved(from: old, to: new) }
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Agents"))
+    }
+
+    /// Every row the list shows, top to bottom, with what makes it taller.
+    private func rowSpots(_ threads: [AgentThread]) -> [AgentsModule.RowSpot] {
+        threads.flatMap { thread in
+            [AgentsModule.RowSpot(id: thread.id, extraLines: AgentsText.rowLines(thread.approval?.review).count)]
+                + (module.openSubagents.contains(thread.id) ? thread.subagents.map { AgentsModule.RowSpot(id: $0.id) } : [])
+        }
     }
 
     /// The thread and change on the review screen, while that very request still waits.
@@ -118,15 +128,37 @@ private struct ClearFinishedButton: View {
 // MARK: List
 
 private struct AgentsList: View {
+    static let space = "AgentsList"
+
     let module: AgentsModule
     let threads: [AgentThread]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The list's visible height, and where the opened row ends in it.
+    @State private var visibleHeight: CGFloat = 0
+    @State private var previewedBottom: CGFloat = 0
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                .coordinateSpace(.named(Self.space))
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { visibleHeight = $0 }
+                // An opened row that runs past the bottom scrolls up just enough to show it all; the pointer
+                // stays on it (the row grew downward by at least that much).
+                .task(id: module.previewed) {
+                    guard let id = module.previewed, !module.isSnapshot else { return }
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 220))
+                    guard !Task.isCancelled, module.previewed == id,
+                          previewedBottom > visibleHeight - AgentsLayout.bottomPadding + 0.5 else { return }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) }
+                }
+        }
+    }
+
+    private var list: some View {
         PanelScroll(isSnapshot: module.isSnapshot, bottomMargin: AgentsLayout.bottomPadding) {
             VStack(spacing: 0) {
                 ForEach(threads) { thread in
-                    AgentRow(module: module, thread: thread)
+                    AgentRow(module: module, thread: thread) { previewedBottom = $0 }
                         .transition(.opacity)
                     if module.openSubagents.contains(thread.id) {
                         ForEach(thread.subagents) { subagent in
@@ -139,6 +171,11 @@ private struct AgentsList: View {
             // The rows' highlight reaches 10 pt past their content, so the content lines up with the band.
             .padding(.horizontal, AgentsLayout.sidePadding - AgentRow.inset)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: shownIDs)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: module.previewed)
+        }
+        // Scrolled by the user (not by the reveal above, which keeps the pointer on the opened row).
+        .onScrollPhaseChange { _, phase in
+            if phase == .tracking || phase == .interacting || phase == .decelerating { module.listScrolled() }
         }
     }
 
@@ -151,19 +188,22 @@ private struct AgentsList: View {
 }
 
 /// One thread: its status mark, tool and title, what it's doing, and on the right how long (or, when it
-/// asks and can be answered here, Open / Deny / Allow). It opens the thread's app only if it can.
+/// asks and can be answered here, Open / Deny / Allow). It opens the thread's app only if it can. When
+/// the pointer rests on it, it opens a little downward: the whole title, the whole of what it's doing,
+/// and the app it runs in.
 private struct AgentRow: View {
     static let inset: CGFloat = 10
 
     let module: AgentsModule
     let thread: AgentThread
+    /// Where the row ends in the list, told only while it's opened.
+    let previewedBottom: (CGFloat) -> Void
     @State private var isHovered = false
 
     var body: some View {
         let lines = AgentsText.rowLines(thread.approval?.review)
         VStack(alignment: .leading, spacing: 0) {
             summary
-                .frame(height: 40)
             // A command or a file to read, whole, under the title: Allow approves exactly this.
             if !lines.isEmpty {
                 RequestLines(lines: lines)
@@ -174,34 +214,84 @@ private struct AgentRow: View {
         .padding(.horizontal, Self.inset)
         .background(.white.opacity(isHovered && thread.canOpen ? 0.08 : 0), in: .rect(cornerRadius: 9, style: .continuous))
         .contentShape(.rect(cornerRadius: 9, style: .continuous))
-        .onHover { isHovered = $0 }
+        .onHover { inside in
+            isHovered = inside
+            module.hoverChanged(thread.id, isInside: inside)
+        }
+        .modifier(ReportsBottom(isOn: isPreviewed, report: previewedBottom))
         .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
         .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
         .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
     }
 
+    private var isPreviewed: Bool { module.previewed == thread.id }
+
+    /// The mark, the words and what's on the right, each in the first 40 pt; an open row's words carry on
+    /// below, so nothing else moves.
     private var summary: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             AgentMark(status: thread.status, size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Image(systemName: thread.tool.symbol)
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                        // One column for every tool's mark, so the titles line up.
-                        .frame(width: 18, alignment: .leading)
-                    Text(thread.title)
-                        .font(.system(size: 13, weight: .semibold))
+                .frame(height: 40)
+            words
+                .frame(maxWidth: .infinity, alignment: .leading)
+            trailing
+                .frame(height: 40)
+        }
+    }
+
+    /// Title and what it's doing, on one line each. Opened, the whole of both and the app it runs in,
+    /// starting where the one-line words start (the one-line copy, hidden, holds that place).
+    private var words: some View {
+        ZStack(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+            lines(lineLimit: 1)
+                .frame(height: 40)
+                .opacity(isPreviewed ? 0 : 1)
+            if isPreviewed {
+                VStack(alignment: .leading, spacing: 1) {
+                    lines(lineLimit: Self.previewLineLimit)
+                    Text(AgentsText.harness(thread))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .padding(.top, 2)
                 }
-                Text(AgentsText.subtitle(thread))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                .padding(.bottom, 9)
+                .transition(.opacity)
+                // VoiceOver reads all of this in the row's label already.
+                .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The most lines an opened title or step takes, so a very long one can't fill the list.
+    private static let previewLineLimit = 4
+
+    private func lines(lineLimit: Int) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Image(systemName: thread.tool.symbol)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    // One column for every tool's mark, so the titles line up.
+                    .frame(width: 18, alignment: .leading)
+                Text(thread.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(lineLimit)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(AgentsText.subtitle(thread))
+                .font(.system(size: 11.5))
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(lineLimit)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var trailing: some View {
+        HStack(spacing: 10) {
             if !thread.subagents.isEmpty {
                 SubagentsToggle(module: module, thread: thread, isOpen: module.openSubagents.contains(thread.id))
             }
@@ -304,6 +394,19 @@ private struct SubagentRow: View {
         .frame(height: 26)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(AgentsText.spoken(subagent, now: .now)))
+    }
+}
+
+/// Tells where the view ends in the list, while `isOn`: only the opened row is followed. One shape
+/// either way, so the row keeps its state (hover, Allow's wait) when it opens.
+private struct ReportsBottom: ViewModifier {
+    let isOn: Bool
+    let report: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGFloat?.self, of: { isOn ? $0.frame(in: .named(AgentsList.space)).maxY : nil }) { bottom in
+            if let bottom { report(bottom) }
+        }
     }
 }
 

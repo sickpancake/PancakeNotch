@@ -32,7 +32,8 @@ public enum AgentsSnapshot {
             rows.append(model)
         }
 
-        // Agents: the ear for a thread that needs you, the list (one thread's subagents shown), the strip under the notch, nothing running.
+        // Agents: the ear for a thread that needs you, the list (one thread's subagents shown), the strip under the notch, a row
+        // opened by the pointer, nothing running.
         row(.compact, agents())
         let withSubagents = agents()
         if let parent = withSubagents.center.threads.first(where: { !$0.subagents.isEmpty }) { withSubagents.toggleSubagents(of: parent) }
@@ -40,6 +41,12 @@ public enum AgentsSnapshot {
         let asking = agents()
         asking.peekAlert = asking.center.threads.first { $0.status.needsYou }.map { AgentAlert(kind: .needsYou, thread: $0) }
         row(.compact, asking) { $0.peekForSnapshot(asking) }
+        // The pointer rests on the working thread: its row opens to show all of it and the app it runs in.
+        // (Set once the notch has opened: opening ends any preview.)
+        let previewing = agents()
+        row(.expanded, previewing) { _ in
+            if let thread = previewing.center.threads.first(where: { $0.status == .working }) { previewing.previewForSnapshot(thread.id) }
+        }
         row(.expanded, agents(AgentsCenter(settings: emptySettings)))
         // A request to change a file: Review in the list, then the whole change in the taller notch.
         row(.expanded, agents(.practiceWithEdit()))
