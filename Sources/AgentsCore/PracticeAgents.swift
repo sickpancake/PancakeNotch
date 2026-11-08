@@ -35,7 +35,8 @@ final class PracticeAgents {
                            project: "web-app", status: .needsYou(.permission), statusSince: now.addingTimeInterval(-20),
                            workStarted: now.addingTimeInterval(-3 * 60),
                            request: String(localized: "Wants to edit Button.tsx", comment: "Practice agent request"),
-                           approval: PendingApproval(requestID: 1, review: AgentReview(content: .edit(change))), canOpen: true)
+                           approval: PendingApproval(requestID: 1, review: AgentReview(content: .edit(change))), canOpen: true,
+                           hostName: "Terminal")
     }
 
     static func threads(now: Date) -> [AgentThread] {
@@ -43,7 +44,7 @@ final class PracticeAgents {
             AgentThread(id: workingID, tool: .claude, title: String(localized: "Fix the login redirect", comment: "Practice agent thread"),
                         project: "web-app", status: .working, statusSince: now.addingTimeInterval(-4 * 60),
                         workStarted: now.addingTimeInterval(-4 * 60),
-                        step: String(localized: "Running tests", comment: "Practice agent step"), canOpen: true,
+                        step: String(localized: "Running tests", comment: "Practice agent step"), canOpen: true, hostName: "T3 Code",
                         subagents: [
                             AgentSubagent(id: "claude:practice-cookie", title: String(localized: "Check the session cookie", comment: "Practice subagent"),
                                           status: .working, statusSince: now.addingTimeInterval(-3 * 60)),
@@ -55,9 +56,10 @@ final class PracticeAgents {
                         workStarted: now.addingTimeInterval(-6 * 60),
                         request: String(localized: "Wants to run: rm -rf build", comment: "Practice agent request"),
                         approval: PendingApproval(requestID: 0, review: AgentReview(content: .command(lines: ["rm -rf build"]))),
-                        canOpen: true),
+                        canOpen: true, hostName: "Codex"),
             AgentThread(id: doneID, tool: .cursor, title: String(localized: "Update the README", comment: "Practice agent thread"),
-                        project: "docs", status: .done, statusSince: now.addingTimeInterval(-2 * 60), canOpen: true, isSeen: true),
+                        project: "docs", status: .done, statusSince: now.addingTimeInterval(-2 * 60), canOpen: true,
+                        hostName: "Cursor", isSeen: true),
         ]
     }
 

@@ -20,6 +20,15 @@ public final class AgentsModule: NotchModule {
     /// The request whose change is on the review screen (the notch is taller meanwhile). Only the very
     /// request Review was clicked for: once it's answered or replaced, the list comes back.
     private(set) var reviewing: (threadID: String, approval: PendingApproval)?
+    /// The thread whose row is open a little to show its whole title, what it's doing and where it runs:
+    /// the one the pointer rested on. At most one, and never while the list isn't on screen.
+    private(set) var previewed: String?
+    /// The row the pointer is over, and the wait before it opens.
+    @ObservationIgnored private var hovered: String?
+    @ObservationIgnored private(set) var previewWait: Task<Void, Never>?
+    /// How long the pointer rests on a row before it opens, so sweeping across the list doesn't make
+    /// rows jump.
+    static let previewDelay: Duration = .milliseconds(350)
     /// Whether this copy peeks for alerts. The center tells one module, so Home's live copy doesn't.
     @ObservationIgnored private let peeks: Bool
     /// Rendering off-screen: a plain list instead of a scroll view.
@@ -79,6 +88,8 @@ public final class AgentsModule: NotchModule {
     }
 
     public func notchDidOpen() {
+        // A hover that reached the list after it left the screen can't leave a row open for this showing.
+        endPreview()
         guard !isShowingList else { return }
         isShowingList = true
         center.listShown()
@@ -95,6 +106,7 @@ public final class AgentsModule: NotchModule {
     private func hideList() {
         openSubagents = []
         reviewing = nil
+        endPreview()
         guard isShowingList else { return }
         isShowingList = false
         center.listHidden()
@@ -128,6 +140,7 @@ public final class AgentsModule: NotchModule {
     func review(_ thread: AgentThread) {
         guard let approval = thread.approval, case .edit = approval.review.content else { return }
         reviewing = (thread.id, approval)
+        endPreview()
         notch?.setTall(true)
     }
 
@@ -136,6 +149,68 @@ public final class AgentsModule: NotchModule {
         guard reviewing != nil else { return }
         reviewing = nil
         notch?.setTall(false)
+    }
+
+    /// The pointer came onto a row or left it. A row opens after the pointer rests on it for
+    /// `previewDelay`; it closes as soon as the pointer leaves, or another row is hovered.
+    func hoverChanged(_ threadID: String, isInside: Bool) {
+        if isInside {
+            // A real notch's list that isn't showing (closing, another module) takes no new hover. Practice
+            // notches have no notch and are always taken to be showing.
+            guard hovered != threadID, notch == nil || isShowingList else { return }
+            hovered = threadID
+            if previewed != threadID { previewed = nil }
+            previewWait?.cancel()
+            guard previewed == nil else { return }
+            previewWait = Task { [weak self] in
+                try? await Task.sleep(for: Self.previewDelay)
+                guard !Task.isCancelled, let self, self.hovered == threadID, self.reviewing == nil,
+                      self.center.threads.contains(where: { $0.id == threadID }) else { return }
+                self.previewed = threadID
+            }
+        } else {
+            if hovered == threadID {
+                hovered = nil
+                previewWait?.cancel()
+                previewWait = nil
+            }
+            if previewed == threadID { previewed = nil }
+        }
+    }
+
+    /// The rows changed (a thread came, went, changed place or grew, subagents shown): if anything above
+    /// the pointer's row changed, or the row itself went, that row was moved out from under the pointer.
+    /// It doesn't stay open, and a wait for it is dropped. `AgentsView` tells this, so it's told also when
+    /// the last thread goes and the "No agents" note takes the list's place.
+    func rowsMoved(from old: [RowSpot], to new: [RowSpot]) {
+        guard let id = hovered ?? previewed else { return }
+        func above(_ rows: [RowSpot]) -> ArraySlice<RowSpot>? { rows.firstIndex { $0.id == id }.map { rows[..<$0] } }
+        if above(old) != above(new) { endPreview() }
+    }
+
+    /// The user scrolled the list: the rows moved under a pointer that stayed put.
+    func listScrolled() {
+        endPreview()
+    }
+
+    /// For the off-screen snapshot: this thread's row open, as if the pointer rested on it.
+    func previewForSnapshot(_ threadID: String) {
+        hovered = threadID
+        previewed = threadID
+    }
+
+    /// One row of the list, as far as where the rows below it sit: a thread's row (taller with a command's
+    /// lines) or a subagent's.
+    struct RowSpot: Equatable {
+        let id: String
+        var extraLines = 0
+    }
+
+    private func endPreview() {
+        previewWait?.cancel()
+        previewWait = nil
+        hovered = nil
+        previewed = nil
     }
 
     func toggleSubagents(of thread: AgentThread) {
