@@ -44,9 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_PLAYER"] == "practice" { return .practice() }
         let center = NowPlayingCenter.live(settings: nowPlayingSettings)
         center.onListened = { [weak self] record in
+            // Music taste and videos are counted apart: YouTube in Chrome isn't a song.
+            let kind = PlayKind.of(app: record.bundleID, album: record.album,
+                                   mediaType: record.mediaType, artworkAspect: record.artworkAspect)
             self?.statistics.recordListening(
                 title: record.title, artist: record.artist, album: record.album,
-                bundleID: record.bundleID, started: record.started, seconds: record.seconds
+                bundleID: record.bundleID, kind: kind, started: record.started, seconds: record.seconds
             )
         }
         return center
