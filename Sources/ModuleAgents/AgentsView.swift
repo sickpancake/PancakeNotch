@@ -128,7 +128,7 @@ private struct ClearFinishedButton: View {
 // MARK: List
 
 private struct AgentsList: View {
-    static let space = "AgentsList"
+    nonisolated static let space = "AgentsList"
 
     let module: AgentsModule
     let threads: [AgentThread]
