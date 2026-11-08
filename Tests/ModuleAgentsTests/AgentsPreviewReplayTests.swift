@@ -24,9 +24,11 @@ struct AgentsPreviewReplayTests {
         ids.map { AgentsModule.RowSpot(id: $0) }
     }
 
-    /// Longer than the delay, so a wait that was going to fire has.
-    func pastTheDelay() async throws {
+    /// Longer than the delay, so a wait that was going to fire has. On a busy machine (CI) the wait can
+    /// get its turn after the test does, so it's also awaited: the check sees what the wait left.
+    func pastTheDelay(_ agents: AgentsModule) async throws {
         try await Task.sleep(for: AgentsModule.previewDelay + .milliseconds(250))
+        await agents.previewWait?.value
     }
 
     func part(of delay: Double) async throws {
@@ -39,7 +41,7 @@ struct AgentsPreviewReplayTests {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
         #expect(agents.previewed == nil)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
     }
 
@@ -50,7 +52,7 @@ struct AgentsPreviewReplayTests {
             try await part(of: 0.2)
             agents.hoverChanged(id, isInside: false)
         }
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -64,6 +66,7 @@ struct AgentsPreviewReplayTests {
         try await part(of: 0.7)       // 1.4 delays since the first visit, 0.7 since this one
         #expect(agents.previewed == nil)
         try await part(of: 0.7)
+        await agents.previewWait?.value
         #expect(agents.previewed == working)
     }
 
@@ -79,7 +82,7 @@ struct AgentsPreviewReplayTests {
         agents.hoverChanged(working, isInside: true)
         try await part(of: 0.5)                               // 1.1 delays since the first visit, 0.5 since this one
         #expect(agents.previewed == nil)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
     }
 
@@ -88,7 +91,7 @@ struct AgentsPreviewReplayTests {
     @Test func leavingARowClosesItAtOnce() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.hoverChanged(working, isInside: false)
         #expect(agents.previewed == nil)
     }
@@ -97,7 +100,7 @@ struct AgentsPreviewReplayTests {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
         agents.hoverChanged(working, isInside: false)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -105,13 +108,13 @@ struct AgentsPreviewReplayTests {
     @Test func enteringTheNextRowBeforeTheExitOfTheLastLeavesOnlyTheNext() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
         agents.hoverChanged(asking, isInside: true)
         #expect(agents.previewed == nil)                       // A closes at once
         agents.hoverChanged(working, isInside: false)          // the late exit of A
         #expect(agents.previewed == nil)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == asking)
     }
 
@@ -121,7 +124,7 @@ struct AgentsPreviewReplayTests {
         try await part(of: 0.5)
         agents.hoverChanged(asking, isInside: true)
         agents.hoverChanged(working, isInside: false)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == asking)
     }
 
@@ -131,7 +134,7 @@ struct AgentsPreviewReplayTests {
         let agents = module()
         agents.notchDidOpen()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.notchDidClose()
         #expect(agents.previewed == nil)
         agents.notchDidOpen()
@@ -143,7 +146,7 @@ struct AgentsPreviewReplayTests {
         agents.notchDidOpen()
         agents.hoverChanged(working, isInside: true)
         agents.notchDidClose()
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -151,10 +154,10 @@ struct AgentsPreviewReplayTests {
         let agents = module()
         agents.notchDidOpen()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.hoverChanged(asking, isInside: true)
         agents.userSwitchedAway()
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -163,13 +166,13 @@ struct AgentsPreviewReplayTests {
         let agents = module(center)
         let editing = try #require(center.threads.first { $0.id == PracticeAgents.editingID })
         agents.hoverChanged(editing.id, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == editing.id)
         agents.review(editing)
         #expect(agents.previewed == nil)
         // A row entered while the review screen is up never opens.
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -180,7 +183,7 @@ struct AgentsPreviewReplayTests {
         agents.hoverChanged(editing.id, isInside: true)
         agents.review(editing)
         agents.closeReview()
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -189,7 +192,7 @@ struct AgentsPreviewReplayTests {
     @Test func aRowMovedOutFromUnderThePointerCloses() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: rows(asking, working, done), to: rows(asking, done, working))   // it changed place
         #expect(agents.previewed == nil)
     }
@@ -197,7 +200,7 @@ struct AgentsPreviewReplayTests {
     @Test func aRowPushedDownByAThreadAboveItCloses() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: rows(working, done), to: rows("claude:new", working, done))
         #expect(agents.previewed == nil)
     }
@@ -206,14 +209,14 @@ struct AgentsPreviewReplayTests {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
         agents.rowsMoved(from: rows(asking, working), to: rows(working))
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
     @Test func subagentsShownAboveARowPushItAndClose() async throws {
         let agents = module()
         agents.hoverChanged(done, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: rows(working, done), to: rows(working, "claude:practice-cookie", done))
         #expect(agents.previewed == nil)
     }
@@ -221,7 +224,7 @@ struct AgentsPreviewReplayTests {
     @Test func aThreadGoingAwayThatIsNotTheOpenOneKeepsItOpen() async throws {
         let agents = module()
         agents.hoverChanged(asking, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: rows(asking, working, done), to: rows(asking, working))
         #expect(agents.previewed == asking)
     }
@@ -229,7 +232,7 @@ struct AgentsPreviewReplayTests {
     @Test func theOpenRowGoingAwayCloses() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: rows(asking, working), to: rows(asking))
         #expect(agents.previewed == nil)
     }
@@ -238,7 +241,7 @@ struct AgentsPreviewReplayTests {
     @Test func aRowAboveGrowingPushesTheOpenRowAndCloses() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: [.init(id: asking), .init(id: working)], to: [.init(id: asking, extraLines: 1), .init(id: working)])
         #expect(agents.previewed == nil)
     }
@@ -247,7 +250,7 @@ struct AgentsPreviewReplayTests {
     @Test func theOpenRowGrowingKeepsItOpen() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.rowsMoved(from: [.init(id: asking), .init(id: working)], to: [.init(id: asking), .init(id: working, extraLines: 2)])
         #expect(agents.previewed == working)
     }
@@ -256,12 +259,12 @@ struct AgentsPreviewReplayTests {
     @Test func scrollingClosesTheOpenRowAndDropsAWait() async throws {
         let agents = module()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         agents.listScrolled()
         #expect(agents.previewed == nil)
         agents.hoverChanged(asking, isInside: true)
         agents.listScrolled()
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -274,7 +277,7 @@ struct AgentsPreviewReplayTests {
         let center = AgentsCenter.practice()
         let agents = module(center)
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
         for id in [asking, working, done] { center.forget(id) }
         agents.rowsMoved(from: rows(asking, working, done), to: [])          // AgentsView, now showing the note
@@ -289,7 +292,7 @@ struct AgentsPreviewReplayTests {
         let agents = module(center)
         agents.hoverChanged(working, isInside: true)
         for id in [asking, working, done] { center.forget(id) }
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
     }
 
@@ -303,7 +306,7 @@ struct AgentsPreviewReplayTests {
         center.reset()
         agents.notchDidOpen()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
     }
 
@@ -318,15 +321,15 @@ struct AgentsPreviewReplayTests {
         notch.modules = [agents]
         defer { notch.modules = [] }
         agents.hoverChanged(working, isInside: true)                    // the notch never opened
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
         agents.notchDidOpen()
         agents.hoverChanged(working, isInside: true)
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == working)
         agents.notchDidClose()                                           // the close starts
         agents.hoverChanged(asking, isInside: true)                     // a hover during the animation
-        try await pastTheDelay()
+        try await pastTheDelay(agents)
         #expect(agents.previewed == nil)
         agents.notchDidOpen()                                            // and nothing left over on reopening
         #expect(agents.previewed == nil)

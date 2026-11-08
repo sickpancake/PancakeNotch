@@ -25,7 +25,7 @@ public final class AgentsModule: NotchModule {
     private(set) var previewed: String?
     /// The row the pointer is over, and the wait before it opens.
     @ObservationIgnored private var hovered: String?
-    @ObservationIgnored private var previewWait: Task<Void, Never>?
+    @ObservationIgnored private(set) var previewWait: Task<Void, Never>?
     /// How long the pointer rests on a row before it opens, so sweeping across the list doesn't make
     /// rows jump.
     static let previewDelay: Duration = .milliseconds(350)
