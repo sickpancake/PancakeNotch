@@ -87,18 +87,21 @@ public final class StatsStore: Sendable {
         }
     }
 
-    /// One song listened to: `seconds` is the time it actually played, counted on the day it
-    /// started. Each call counts as one play; plays shorter than a second are ignored.
-    /// The caller decides what's worth a play (for example, skipped after a few seconds).
-    public func recordListening(title: String, artist: String, album: String, bundleID: String?, started: Date, seconds: Double) {
-        guard seconds.isFinite, seconds >= 1 else { return }
+    /// One song listened to, or one video watched: `seconds` is the time it actually played, counted on
+    /// the day it started. Each call counts as one play; plays shorter than a second are ignored.
+    /// The caller decides what's worth a play (for example, skipped after a few seconds) and, with
+    /// `PlayKind.of`, whether it was listened to or watched.
+    public func recordListening(title: String, artist: String, album: String, bundleID: String?, kind: PlayKind,
+                                started: Date, seconds: Double) {
+        guard seconds.isFinite, seconds >= 1, kind != .ad else { return }
         let day = dayKey(started)
         let clamped = min(seconds, 24 * 60 * 60)
         let app: SQLValue = bundleID.map { $0.isEmpty ? .null : .text($0) } ?? .null
         queue.async { [database] in
             database.run(
-                "INSERT INTO plays (day, started, seconds, title, artist, album, app) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [.text(day), .real(started.timeIntervalSince1970), .real(clamped), .text(title), .text(artist), .text(album), app]
+                "INSERT INTO plays (day, started, seconds, title, artist, album, app, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [.text(day), .real(started.timeIntervalSince1970), .real(clamped), .text(title), .text(artist), .text(album), app,
+                 .text(kind.rawValue)]
             )
         }
     }
@@ -204,65 +207,9 @@ public final class StatsStore: Sendable {
         let to = keys[keys.count - 1]
         let range: [SQLValue] = [.text(from), .text(to)]
         let index = Dictionary(uniqueKeysWithValues: keys.enumerated().map { ($1, $0) })
-        var summary = StatsSummary(
-            days: dayStarts,
-            listeningSecondsPerDay: Array(repeating: 0, count: keys.count),
-            playsPerDay: Array(repeating: 0, count: keys.count),
-            opensPerDay: Array(repeating: 0, count: keys.count)
-        )
-
-        // Listening.
-        database.query(
-            "SELECT day, SUM(seconds), COUNT(*) FROM plays WHERE day >= ? AND day <= ? GROUP BY day",
-            range
-        ) { row in
-            guard let position = index[row.text(0)] else { return }
-            summary.listeningSecondsPerDay[position] = row.real(1)
-            summary.playsPerDay[position] = Int(row.integer(2))
-        }
-        summary.totalListeningSeconds = summary.listeningSecondsPerDay.reduce(0, +)
-        summary.totalPlays = summary.playsPerDay.reduce(0, +)
-
-        database.query(
-            """
-            SELECT title, artist, SUM(seconds) AS total, COUNT(*) FROM plays
-            WHERE day >= ? AND day <= ? AND title != ''
-            GROUP BY title, artist ORDER BY total DESC, title LIMIT \(topCount)
-            """,
-            range
-        ) { row in
-            let title = row.text(0)
-            let artist = row.text(1)
-            summary.topSongs.append(RankedItem(
-                id: title + "\u{1F}" + artist,
-                title: title,
-                subtitle: artist.isEmpty ? nil : artist,
-                value: row.real(2),
-                count: Int(row.integer(3))
-            ))
-        }
-        database.query(
-            """
-            SELECT artist, SUM(seconds) AS total, COUNT(*) FROM plays
-            WHERE day >= ? AND day <= ? AND artist != ''
-            GROUP BY artist ORDER BY total DESC, artist LIMIT \(topCount)
-            """,
-            range
-        ) { row in
-            let artist = row.text(0)
-            summary.topArtists.append(RankedItem(id: artist, title: artist, value: row.real(1), count: Int(row.integer(2))))
-        }
-        database.query(
-            """
-            SELECT app, SUM(seconds) AS total, COUNT(*) FROM plays
-            WHERE day >= ? AND day <= ? AND app IS NOT NULL AND app != ''
-            GROUP BY app ORDER BY total DESC, app LIMIT \(topCount)
-            """,
-            range
-        ) { row in
-            let app = row.text(0)
-            summary.topApps.append(RankedItem(id: app, title: app, value: row.real(1), count: Int(row.integer(2))))
-        }
+        var summary = StatsSummary(days: dayStarts, opensPerDay: Array(repeating: 0, count: keys.count))
+        summary.listening = plays(database, kind: .listen, range: range, index: index)
+        summary.watching = plays(database, kind: .watch, range: range, index: index)
 
         // Usage.
         database.query(
@@ -284,6 +231,67 @@ public final class StatsStore: Sendable {
         // App health.
         summary.health = health(database, since: dayStarts[0])
         return summary
+    }
+
+    /// One kind's plays over the range. Runs on the queue.
+    private static func plays(_ database: Database, kind: PlayKind, range: [SQLValue], index: [String: Int]) -> PlaySummary {
+        let values = range + [.text(kind.rawValue)]
+        var result = PlaySummary(
+            secondsPerDay: Array(repeating: 0, count: index.count),
+            playsPerDay: Array(repeating: 0, count: index.count)
+        )
+        database.query(
+            "SELECT day, SUM(seconds), COUNT(*) FROM plays WHERE day >= ? AND day <= ? AND kind = ? GROUP BY day",
+            values
+        ) { row in
+            guard let position = index[row.text(0)] else { return }
+            result.secondsPerDay[position] = row.real(1)
+            result.playsPerDay[position] = Int(row.integer(2))
+        }
+        result.totalSeconds = result.secondsPerDay.reduce(0, +)
+        result.totalPlays = result.playsPerDay.reduce(0, +)
+
+        database.query(
+            """
+            SELECT title, artist, SUM(seconds) AS total, COUNT(*) FROM plays
+            WHERE day >= ? AND day <= ? AND kind = ? AND title != ''
+            GROUP BY title, artist ORDER BY total DESC, title LIMIT \(topCount)
+            """,
+            values
+        ) { row in
+            let title = row.text(0)
+            let artist = row.text(1)
+            result.top.append(RankedItem(
+                id: title + "\u{1F}" + artist,
+                title: title,
+                subtitle: artist.isEmpty ? nil : artist,
+                value: row.real(2),
+                count: Int(row.integer(3))
+            ))
+        }
+        database.query(
+            """
+            SELECT artist, SUM(seconds) AS total, COUNT(*) FROM plays
+            WHERE day >= ? AND day <= ? AND kind = ? AND artist != ''
+            GROUP BY artist ORDER BY total DESC, artist LIMIT \(topCount)
+            """,
+            values
+        ) { row in
+            let artist = row.text(0)
+            result.topCreators.append(RankedItem(id: artist, title: artist, value: row.real(1), count: Int(row.integer(2))))
+        }
+        database.query(
+            """
+            SELECT app, SUM(seconds) AS total, COUNT(*) FROM plays
+            WHERE day >= ? AND day <= ? AND kind = ? AND app IS NOT NULL AND app != ''
+            GROUP BY app ORDER BY total DESC, app LIMIT \(topCount)
+            """,
+            values
+        ) { row in
+            let app = row.text(0)
+            result.topApps.append(RankedItem(id: app, title: app, value: row.real(1), count: Int(row.integer(2))))
+        }
+        return result
     }
 
     private static func ranked(_ database: Database, kind: String, from: String, to: String) -> [RankedItem] {

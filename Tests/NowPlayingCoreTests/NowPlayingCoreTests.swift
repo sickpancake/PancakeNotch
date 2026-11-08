@@ -252,6 +252,24 @@ struct ListeningTrackerTests {
         #expect(result10 == nil)
     }
 
+    /// The statistics sort a play by its media type and picture, which often come after the title.
+    @Test func whatArrivesLaterIsKept() throws {
+        var tracker = ListeningTracker()
+        let video = NowPlayingTrack(title: "Video", artist: "Channel", isPlaying: true, bundleID: "com.google.Chrome")
+        _ = tracker.update(video, at: start)
+        var described = video
+        described.mediaType = "MRMediaRemoteMediaTypeVideo"
+        #expect(tracker.update(described, artworkAspect: 16.0 / 9, at: start.addingTimeInterval(2)) == nil)
+        // The picture is gone for a moment: the last one known still counts.
+        #expect(tracker.update(described, artworkAspect: nil, at: start.addingTimeInterval(3)) == nil)
+        let ended = tracker.update(nil, at: start.addingTimeInterval(60))
+        let record = try #require(ended)
+        #expect(record.started == start)
+        #expect(record.seconds == 60)
+        #expect(record.mediaType == "MRMediaRemoteMediaTypeVideo")
+        #expect(record.artworkAspect == 16.0 / 9)
+    }
+
     @Test func aNewSongEndsTheOldOne() throws {
         var tracker = ListeningTracker()
         _ = tracker.update(song, at: start)

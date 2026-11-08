@@ -6,6 +6,8 @@ so write them for people using the app: short, plain, no code talk.
 ## Unreleased
 
 - **Peek at an agent.** Rest the pointer on an agent in the Agents list and its row opens a little to show its whole name, everything it's doing, and the app it runs in (like "Claude Code in T3 Code"), before you click into it.
+- **Listening and watching, kept apart.** Statistics has a new Media section with a Listening | Watching switch: your music, podcasts and audiobooks on one side, videos and streams (like YouTube or Twitch in your browser) on the other, each with time per day and its top songs or videos, artists or channels, and apps, side by side. Plays from before the update are sorted too, and apps show by name.
+- **No more ads in your music.** Spotify ads no longer count as songs in Statistics.
 - **What shows beside the notch.** A new Help section explains which modules get the two spots beside the notch and why, and the Modules page now shows where each one goes, including the Timer's second spot.
 
 ## 0.3.0 — beta

@@ -41,6 +41,8 @@ struct AdapterState: Equatable, Sendable {
         "timestampEpochMicros", "shuffleMode", "repeatMode", "isAdvertisement", "prohibitsSkip",
         // Added by our small patch to the adapter (Vendor/mediaremote-adapter/VERSION).
         "enabledCommands",
+        // Statistics only: tells a video from music when the app says.
+        "mediaType",
     ]
 
     var values: [String: AdapterValue] = [:]
@@ -101,6 +103,9 @@ struct AdapterState: Equatable, Sendable {
         let duration = double("durationMicros").flatMap { $0 > 0 ? $0 / 1_000_000 : nil }
         let elapsed = (double("elapsedTimeMicros") ?? 0) / 1_000_000
         let elapsedDate = double("timestampEpochMicros").map { Date(timeIntervalSince1970: $0 / 1_000_000) } ?? receivedAt
+        // A name ("…MediaTypeVideo") or a number; only ever compared, so a short piece is plenty.
+        let mediaType = string("mediaType").map { String($0.prefix(64)) }
+            ?? double("mediaType").flatMap { Int(exactly: $0) }.map(String.init)
         return NowPlayingTrack(
             title: title,
             artist: string("artist") ?? "",
@@ -117,7 +122,8 @@ struct AdapterState: Equatable, Sendable {
             artworkID: artworkID,
             processID: double("processIdentifier").flatMap { $0 > 0 ? Int32(exactly: $0) : nil },
             isAdvertisement: bool("isAdvertisement") == true || bool("prohibitsSkip") == true,
-            enabledCommands: numbers("enabledCommands").map(Set.init)
+            enabledCommands: numbers("enabledCommands").map(Set.init),
+            mediaType: mediaType
         )
     }
 }

@@ -43,6 +43,9 @@ public struct NowPlayingTrack: Equatable, Sendable {
     /// The MediaRemote commands the player accepts right now (see `MediaCommand`); nil when unknown,
     /// which counts as "accepts everything".
     public var enabledCommands: Set<Int>?
+    /// What the app tells macOS it plays (e.g. "MRMediaRemoteMediaTypeVideo"); nil when it doesn't say.
+    /// Only the statistics use it, to tell watching from listening.
+    public var mediaType: String?
 
     public init(
         title: String,
@@ -60,7 +63,8 @@ public struct NowPlayingTrack: Equatable, Sendable {
         artworkID: String? = nil,
         processID: Int32? = nil,
         isAdvertisement: Bool = false,
-        enabledCommands: Set<Int>? = nil
+        enabledCommands: Set<Int>? = nil,
+        mediaType: String? = nil
     ) {
         self.title = title
         self.artist = artist
@@ -80,6 +84,7 @@ public struct NowPlayingTrack: Equatable, Sendable {
         self.processID = processID
         self.isAdvertisement = isAdvertisement
         self.enabledCommands = enabledCommands
+        self.mediaType = mediaType
     }
 
     /// Title, artist, album and app together: when this changes, a different song is on.
@@ -127,7 +132,8 @@ public enum NowPlayingCommand: Equatable, Sendable {
     case setRepeat(RepeatMode)
 }
 
-/// One stretch of listening, reported when playback of a song stops (pause, song change, app quit, stop()).
+/// One stretch of listening (or watching), reported when playback of a song stops (pause, song change,
+/// app quit, stop()).
 public struct ListeningRecord: Equatable, Sendable {
     public var title: String
     public var artist: String
@@ -137,13 +143,20 @@ public struct ListeningRecord: Equatable, Sendable {
     public var started: Date
     /// Wall-clock seconds actually playing.
     public var seconds: TimeInterval
+    /// What the app said it plays; nil when it didn't say.
+    public var mediaType: String?
+    /// The artwork's width divided by its height; nil without artwork. Video thumbnails are wide.
+    public var artworkAspect: Double?
 
-    public init(title: String, artist: String, album: String, bundleID: String?, started: Date, seconds: TimeInterval) {
+    public init(title: String, artist: String, album: String, bundleID: String?, started: Date, seconds: TimeInterval,
+                mediaType: String? = nil, artworkAspect: Double? = nil) {
         self.title = title
         self.artist = artist
         self.album = album
         self.bundleID = bundleID
         self.started = started
         self.seconds = seconds
+        self.mediaType = mediaType
+        self.artworkAspect = artworkAspect
     }
 }

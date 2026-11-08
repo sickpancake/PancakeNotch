@@ -21,15 +21,15 @@ public struct HealthSample: Sendable, Equatable {
     public var totalFootprintBytes: UInt64 { footprintBytes + helperFootprintBytes }
 }
 
-/// One entry in a top list: a song, an artist, an app or a module.
+/// One entry in a top list: a song or video, an artist or channel, an app or a module.
 public struct RankedItem: Sendable, Equatable, Identifiable {
-    /// Stable key: "title<US>artist" for songs, the artist, the bundle ID, or the module ID.
+    /// Stable key: "title<US>artist" for songs and videos, the artist or channel, the bundle ID, or the module ID.
     public var id: String
     public var title: String
     public var subtitle: String?
     /// What the list is ranked by: seconds listened, or a count for modules.
     public var value: Double
-    /// How many times: plays for songs, artists and apps; uses for modules.
+    /// How many times: plays for songs, videos, creators and apps; uses for modules.
     public var count: Int
 
     public init(id: String, title: String, subtitle: String? = nil, value: Double, count: Int) {
@@ -41,22 +41,51 @@ public struct RankedItem: Sendable, Equatable, Identifiable {
     }
 }
 
+/// What was listened to, or what was watched, over a range of days (see `PlayKind`).
+public struct PlaySummary: Sendable, Equatable {
+    /// Seconds on each day, aligned with `StatsSummary.days`.
+    public var secondsPerDay: [Double]
+    /// Plays on each day, aligned with `StatsSummary.days`.
+    public var playsPerDay: [Int]
+    public var totalSeconds: Double
+    public var totalPlays: Int
+    /// Songs or videos, at most five, most time first. `subtitle` is the artist or channel.
+    public var top: [RankedItem]
+    /// Artists or channels.
+    public var topCreators: [RankedItem]
+    /// `id` and `title` are the app's bundle ID; the page looks up its name and icon.
+    public var topApps: [RankedItem]
+
+    public init(
+        secondsPerDay: [Double] = [],
+        playsPerDay: [Int] = [],
+        totalSeconds: Double = 0,
+        totalPlays: Int = 0,
+        top: [RankedItem] = [],
+        topCreators: [RankedItem] = [],
+        topApps: [RankedItem] = []
+    ) {
+        self.secondsPerDay = secondsPerDay
+        self.playsPerDay = playsPerDay
+        self.totalSeconds = totalSeconds
+        self.totalPlays = totalPlays
+        self.top = top
+        self.topCreators = topCreators
+        self.topApps = topApps
+    }
+
+    public static let empty = PlaySummary()
+}
+
 /// Everything the Statistics page shows for a range of days. Small on purpose: per-day arrays,
 /// top fives and at most ~300 health samples, never whole tables.
 public struct StatsSummary: Sendable, Equatable {
     /// The start of each local calendar day in the range, oldest first; the last one is today.
     public var days: [Date]
-    /// Seconds listened on each day, aligned with `days`.
-    public var listeningSecondsPerDay: [Double]
-    /// Songs played on each day, aligned with `days`.
-    public var playsPerDay: [Int]
-    public var totalListeningSeconds: Double
-    public var totalPlays: Int
-    /// At most five, most listened first. `subtitle` is the artist.
-    public var topSongs: [RankedItem]
-    public var topArtists: [RankedItem]
-    /// `id` and `title` are the app's bundle ID; the page looks up its name and icon.
-    public var topApps: [RankedItem]
+    /// Music, podcasts and audiobooks.
+    public var listening: PlaySummary
+    /// Videos and streams.
+    public var watching: PlaySummary
     /// Notch opens on each day, aligned with `days`.
     public var opensPerDay: [Int]
     public var totalOpens: Int
@@ -71,13 +100,8 @@ public struct StatsSummary: Sendable, Equatable {
 
     public init(
         days: [Date] = [],
-        listeningSecondsPerDay: [Double] = [],
-        playsPerDay: [Int] = [],
-        totalListeningSeconds: Double = 0,
-        totalPlays: Int = 0,
-        topSongs: [RankedItem] = [],
-        topArtists: [RankedItem] = [],
-        topApps: [RankedItem] = [],
+        listening: PlaySummary = .empty,
+        watching: PlaySummary = .empty,
         opensPerDay: [Int] = [],
         totalOpens: Int = 0,
         moduleUses: [RankedItem] = [],
@@ -86,13 +110,8 @@ public struct StatsSummary: Sendable, Equatable {
         health: [HealthSample] = []
     ) {
         self.days = days
-        self.listeningSecondsPerDay = listeningSecondsPerDay
-        self.playsPerDay = playsPerDay
-        self.totalListeningSeconds = totalListeningSeconds
-        self.totalPlays = totalPlays
-        self.topSongs = topSongs
-        self.topArtists = topArtists
-        self.topApps = topApps
+        self.listening = listening
+        self.watching = watching
         self.opensPerDay = opensPerDay
         self.totalOpens = totalOpens
         self.moduleUses = moduleUses
