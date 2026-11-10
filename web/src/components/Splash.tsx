@@ -6,7 +6,7 @@ import { DitherSwirl } from './DitherSwirl'
 import { FloatingIcon } from './FloatingIcon'
 
 /* The first screen. The intro takes 5 seconds: the name fades in at the centre, slides to its place,
-   then the swirl, the subtitle and the icon fade in together. Everything moves on a long glide: it
+   then the swirl, the subtitle (the tagline and a plain line on what it is) and the icon fade in together. Everything moves on a long glide: it
    starts right away and slows into a long, soft landing. With Reduce Motion everything simply fades
    in and the swirl holds still.
 
@@ -133,6 +133,10 @@ export function Splash({ progress, flight, onSkip }: Props) {
             className="mt-[.75em] text-[clamp(1.0625rem,.9rem+.75vw,1.75rem)] font-medium tracking-[-0.01em] text-soft"
           >
             Give your notch a job.
+            {/* What it is, in plain words, for anyone who's never heard of it. */}
+            <span className="mt-[.7em] block text-[clamp(.9375rem,.85rem+.3vw,1.125rem)] font-normal tracking-normal text-balance">
+              A free, open-source app for your MacBook’s notch.
+            </span>
           </p>
         </div>
         <div ref={iconRef}>

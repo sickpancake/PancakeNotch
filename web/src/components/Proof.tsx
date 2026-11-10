@@ -5,7 +5,8 @@ import { useOnceInView } from '@/lib/useOnceInView'
 /* The "light, and measured" proof: three big numbers that count up (or down) when they come into view,
    and a terminal that types out the two memory checks the project runs. The numbers are the limits
    those checks enforce (README and the memory scripts), not a reading, so nothing here is made up.
-   Reduce Motion: everything is there from the start. */
+   Reduce Motion, and the copy written into the built page for search engines: everything is there
+   from the start. */
 
 const STATS = [
   { say: 'under', mark: '<', from: 0, to: 50, unit: 'MB', label: 'of memory when idle' },
@@ -91,7 +92,7 @@ function Stat({ say, mark, from, to, unit, label, play, instant }: StatProps) {
 
 /** A whole number that eases from `from` to `to` once `play` turns true. */
 function useCount(from: number, to: number, ms: number, play: boolean, instant: boolean) {
-  const [value, setValue] = useState(instant ? to : from)
+  const [value, setValue] = useState(instant || import.meta.env.SSR ? to : from)
 
   useEffect(() => {
     if (instant) {
@@ -115,7 +116,7 @@ function useCount(from: number, to: number, ms: number, play: boolean, instant: 
 
 /** A Mac-style terminal window that types its commands and prints their results. */
 function Terminal({ play, instant }: { play: boolean; instant: boolean }) {
-  const [elapsed, setElapsed] = useState(instant ? TOTAL_MS + 1 : 0)
+  const [elapsed, setElapsed] = useState(instant || import.meta.env.SSR ? TOTAL_MS + 1 : 0)
 
   useEffect(() => {
     if (instant) {

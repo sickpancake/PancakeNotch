@@ -32,7 +32,7 @@ type Props = {
 
 /** What the notch is showing, in a sentence. */
 function describe({ open, module, item }: NotchStatus) {
-  if (!open) return 'It’s playing a song and watching your AI agents and limits: the cover sits on the left of the notch, the sound, an agent count and a gauge for an account that’s nearly out on the right.'
+  if (!open) return 'A song is playing and your AI agents are at work. The cover sits left of the notch; the sound, an agent count and a limit that’s nearly used up sit on the right.'
   if (module === 'np') return 'Pause, skip or drag through the song, without leaving the app you’re in.'
   if (module === 'agents') return 'Every AI agent at work, in one list. When one asks for permission, answer it right here.'
   if (module === 'usage') return 'How much of your Claude and Codex limits are left, and the tokens you’ve used, for each account. Pick one, or all of them.'

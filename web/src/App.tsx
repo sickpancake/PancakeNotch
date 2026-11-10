@@ -4,6 +4,7 @@ import { FeatureRow } from '@/components/FeatureRow'
 import { Footer } from '@/components/Footer'
 import { Journey } from '@/components/Journey'
 import { Proof } from '@/components/Proof'
+import { Questions } from '@/components/Questions'
 import { ScrollWords } from '@/components/ScrollWords'
 import { TopBar } from '@/components/TopBar'
 
@@ -17,6 +18,7 @@ export function App() {
         <ScrollWords />
         <FeatureRow />
         <Proof />
+        <Questions />
         <BetaNote />
         <Footer />
       </main>

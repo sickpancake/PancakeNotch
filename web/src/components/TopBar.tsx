@@ -51,6 +51,7 @@ const LINKS = [
 const PARTS = [
   { selector: 'section[aria-labelledby="features-title"]', title: 'What it does', caption: 'Features' },
   { selector: 'section[aria-labelledby="proof-title"]', title: 'Light, and measured', caption: 'Speed and memory' },
+  { selector: 'section[aria-labelledby="questions-title"]', title: 'Questions', caption: 'Before you download' },
   { selector: 'footer', title: 'Get PancakeNotch', caption: 'Download' },
 ]
 
