@@ -6,7 +6,8 @@ import { useOnceInView } from '@/lib/useOnceInView'
 /* A line of text that decodes itself: when it comes into view every letter starts out as a random
    symbol, and the letters lock into place one after another, left to right. Each unlocked symbol sits
    in the width of the letter it will become, so nothing shifts while it runs. Screen readers get the
-   plain text from the start; with Reduce Motion the text is just there. */
+   plain text from the start; with Reduce Motion the text is just there. The copy written into the
+   built page for search engines (scripts/prerender.mjs) holds the plain text only. */
 
 const SYMBOLS = '01<>/\\|_-+=*#'
 const SHUFFLE_MS = 55 // how often the unlocked symbols change
@@ -48,6 +49,7 @@ export function ScrambleText({ text, pace = 20, className, scrambledClassName }:
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the letters follow `text`
   }, [seen, reduce, pace, text])
 
+  if (import.meta.env.SSR) return <span className={className}>{text}</span>
   const done = reduce ? letters.length : locked
   // Where each word starts among all the letters (a space counts as one).
   let start = 0

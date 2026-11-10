@@ -12,8 +12,8 @@ import { EXAMPLES, type ThreadState } from './notch/data'
 type Feature = { title: string; line: string; art: ReactNode; top?: boolean; fresh?: boolean }
 
 const FEATURES: Feature[] = [
-  { title: 'Now Playing', line: 'The cover, the song and the sound bars, right in the notch.', art: <NowPlayingArt />, top: true },
-  { title: 'Shelf', line: 'Drop files, notes and links. Pick them up later.', art: <ShelfArt /> },
+  { title: 'Now Playing', line: 'Music from any app: the cover and sound bars beside the notch, the controls inside.', art: <NowPlayingArt />, top: true },
+  { title: 'Shelf', line: 'Drop files, notes and links on the notch. Pick them up later.', art: <ShelfArt /> },
   { title: 'Convert', line: 'Turn pictures, PDFs, sound and video into another format in one click.', art: <ConvertArt />, fresh: true },
   { title: 'Timer and Stopwatch', line: 'Count down or keep laps. The time left waits beside the notch.', art: <TimerArt />, top: true, fresh: true },
   { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt />, fresh: true },
