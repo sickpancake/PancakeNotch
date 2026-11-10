@@ -24,8 +24,7 @@ const QUESTIONS: { question: string; answer: ReactNode }[] = [
     question: 'Is it really free?',
     answer: (
       <>
-        Yes: no price, no paid tier, no account and no ads. It’s open source under GPL-3.0, so it has to stay
-        free. <More href={REPO}>The code is on GitHub.</More>
+        Yes: no price, no paid tier, no account and no ads. It’s open source under GPL-3.0. <More href={REPO}>The code is on GitHub.</More>
       </>
     ),
   },
