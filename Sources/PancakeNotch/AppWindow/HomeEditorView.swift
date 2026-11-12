@@ -14,6 +14,8 @@ struct HomeEditorView: View {
     @State private var history = HomeHistory()
     @State private var page = 0
     @State private var drag: HomeEditorDrag?
+    /// Where a cancelled drag started: the rest of that same gesture is ignored, so it can't come back or land.
+    @State private var cancelledDragStart: CGPoint?
     @State private var gridFrame: CGRect = .zero
     @State private var tabFrames: [Int: CGRect] = [:]
     @State private var note: String?
@@ -48,9 +50,13 @@ struct HomeEditorView: View {
             home.hasSeenIntro = true // the notch's "Home is new" hint has done its job
         }
         .onDisappear {
+            cancelDrag()
             practice.close()
             noteTask?.cancel()
         }
+        // Escape, or the window going to the background, drops a drag without changing anything.
+        .onExitCommand { cancelDrag() }
+        .onChange(of: appearsActive) { _, active in if !active { cancelDrag() } }
         .onChange(of: Self.practiceKinds(for: context)) { _, kinds in practice.update(kinds) }
         .confirmationDialog(
             String(localized: "Reset Home to the default layout?"),
@@ -283,6 +289,7 @@ struct HomeEditorView: View {
     private func dragGesture(kind: HomeWidgetKind, size: HomeWidgetSize, origin: CGRect?, fromGallery: Bool) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.space))
             .onChanged { value in
+                if value.startLocation == cancelledDragStart { return }
                 if drag == nil {
                     let cell = HomeWidgetMetrics.cellSize(in: gridFrame.size)
                     let widget = HomeWidgetMetrics.frame(column: 0, row: 0, size: size, cell: cell).size
@@ -290,11 +297,25 @@ struct HomeEditorView: View {
                     let grab = origin.map { CGPoint(x: value.startLocation.x - gridFrame.minX - $0.minX,
                                                     y: value.startLocation.y - gridFrame.minY - $0.minY) }
                         ?? CGPoint(x: widget.width / 2, y: widget.height / 2)
-                    drag = HomeEditorDrag(kind: kind, size: size, fromGallery: fromGallery, grab: grab, location: value.location)
+                    drag = HomeEditorDrag(kind: kind, size: size, fromGallery: fromGallery, start: value.startLocation,
+                                          grab: grab, location: value.location)
                 }
                 dragMoved(to: value.location)
             }
-            .onEnded { _ in dragEnded() }
+            .onEnded { value in
+                if value.startLocation == cancelledDragStart {
+                    cancelledDragStart = nil
+                    return
+                }
+                dragEnded()
+            }
+    }
+
+    /// Drops the widget being dragged back where it was: nothing is saved and Undo gains nothing.
+    private func cancelDrag() {
+        guard let current = drag else { return }
+        cancelledDragStart = current.start
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25)) { drag = nil }
     }
 
     private func dragMoved(to location: CGPoint) {
@@ -410,6 +431,8 @@ private struct HomeEditorDrag {
     let kind: HomeWidgetKind
     let size: HomeWidgetSize
     let fromGallery: Bool
+    /// Where the gesture began, which tells it apart from the next one.
+    let start: CGPoint
     /// Where the pointer holds the widget, from its top-left corner.
     let grab: CGPoint
     var location: CGPoint
