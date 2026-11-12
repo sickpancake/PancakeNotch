@@ -19,10 +19,12 @@ public final class NotchWindowController {
     public init(
         initialState: NotchState? = nil,
         arrangement: ModuleArrangement = ModuleArrangement(),
+        home: HomeSettings = HomeSettings(),
         isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
     ) {
         self.initialState = initialState
         self.arrangement = arrangement
+        self.home = home
         self.isMissionControlActive = isMissionControlActive
         // Drops on any notch (this one or a preview) and drags out of a module end unseen by the watcher.
         dragSettledObserver = NotificationCenter.default.addObserver(
@@ -90,9 +92,22 @@ public final class NotchWindowController {
     /// Ranking, favorites, ear sides and navigation, shared with the app window.
     public let arrangement: ModuleArrangement
 
-    /// The Module Menu's gear: opens the app window.
+    /// Home's layout and options, shared with the app window's editor.
+    public let home: HomeSettings
+
+    /// Home's gear: opens the app window.
     public var openSettings: (() -> Void)? {
         didSet { model?.openSettings = openSettings }
+    }
+
+    /// Opens a page of the app window from Home (the editor, Modules, Statistics).
+    public var openAppPage: ((NotchAppPage) -> Void)? {
+        didSet { model?.openAppPage = openAppPage }
+    }
+
+    /// Draws Home's Battery and Statistics widgets.
+    public var homeExtras: HomeExtraWidgets? {
+        didSet { model?.homeExtras = homeExtras }
     }
 
     /// A module's view appeared in the open notch (statistics).
@@ -232,7 +247,7 @@ public final class NotchWindowController {
             model?.dragApproached(pasteboard)
         }
         dragWatcher.onMove = { [weak self, weak model] pasteboard, location in
-            guard let self, let model, model.state == .expanded, !model.showsMenu else { return }
+            guard let self, let model, model.state == .expanded, !model.showsHome else { return }
             model.selectedModule?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
         }
         dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
@@ -241,11 +256,13 @@ public final class NotchWindowController {
 
     private func createPanel(layout: NotchLayout) {
         let model = NotchViewModel(layout: layout, state: initialState ?? .closed, behavior: behavior, arrangement: arrangement,
-                                   isMissionControlActive: isMissionControlActive)
+                                   home: home, isMissionControlActive: isMissionControlActive)
         model.isPinned = initialState != nil
         model.onOpen = onOpen
         model.onModuleShown = onModuleShown
         model.openSettings = openSettings
+        model.openAppPage = openAppPage
+        model.homeExtras = homeExtras
         model.automaticPeeksAvailable = hasGeometry && !isSuppressed && isEnabled
         model.prepareAutomaticPeek = { [weak self] reveal in
             guard let self, self.hasGeometry, self.isEnabled, !self.isSuppressed else { return false }

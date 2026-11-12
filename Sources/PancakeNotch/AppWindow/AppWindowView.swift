@@ -5,13 +5,14 @@ import SwiftUI
 
 /// The pages of the app window, in sidebar order.
 enum AppSection: String, CaseIterable, Identifiable {
-    case home, modules, learn, statistics, general, notch, keyboard, help, about
+    case overview, modules, home, learn, statistics, general, notch, keyboard, help, about
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .home: String(localized: "Home")
+        case .overview: String(localized: "Overview")
+        case .home: String(localized: "Home", comment: "The page that edits the notch's Home")
         case .modules: String(localized: "Modules")
         case .learn: String(localized: "Learn")
         case .statistics: String(localized: "Statistics")
@@ -25,6 +26,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .overview: "rectangle.3.group"
         case .home: "house"
         case .modules: "square.grid.2x2"
         case .learn: "graduationcap"
@@ -37,13 +39,15 @@ enum AppSection: String, CaseIterable, Identifiable {
         }
     }
 
-    /// ⌘1, ⌘2, … in sidebar order.
-    var shortcutKey: KeyEquivalent {
-        KeyEquivalent(Character(String((Self.allCases.firstIndex(of: self) ?? 0) + 1)))
+    /// ⌘1 … ⌘9 in sidebar order; pages after the ninth have none (there is no ⌘10).
+    var shortcut: KeyboardShortcut? {
+        let number = (Self.allCases.firstIndex(of: self) ?? 0) + 1
+        guard number <= 9 else { return nil }
+        return KeyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: .command)
     }
 }
 
-/// The app window: a dark sidebar and the page it points at. It opens on Home, a small dashboard
+/// The app window: a dark sidebar and the page it points at. It opens on Overview, a small dashboard
 /// with the notch's on/off switch; settings are one section of it (ADR-0017). Until the welcome has
 /// been seen, the welcome fills the window instead (ADR-0020).
 struct AppWindowView: View {
@@ -68,11 +72,11 @@ struct AppWindowView: View {
             }
         }
         .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.3), value: progress.onboardingDone)
-        // The welcome ends on Home (also when it was replayed from About), or on Learn if asked.
+        // The welcome ends on Overview (also when it was replayed from About), or on Learn if asked.
         .onChange(of: progress.onboardingDone) { _, done in
             guard done else { return }
             navigation.section = navigation.sectionAfterWelcome
-            navigation.sectionAfterWelcome = .home
+            navigation.sectionAfterWelcome = .overview
         }
         .appWindowStyle()
     }
@@ -89,10 +93,12 @@ struct AppWindowView: View {
 
             Group {
                 switch navigation.section {
-                case .home:
-                    HomeView(context: context, section: $navigation.section, openLesson: navigation.open)
+                case .overview:
+                    OverviewView(context: context, section: $navigation.section, openLesson: navigation.open)
                 case .modules:
                     ModulesView(context: context, openLesson: navigation.open)
+                case .home:
+                    HomeEditorView(context: context)
                 case .learn:
                     LearnView(context: context, lesson: $navigation.lesson)
                 case .statistics:
@@ -143,8 +149,9 @@ private struct AppSidebar: View {
             .accessibilityAddTraits(.isHeader)
 
             VStack(alignment: .leading, spacing: 2) {
-                row(.home)
+                row(.overview)
                 row(.modules)
+                row(.home)
                 row(.learn)
                 row(.statistics)
             }
@@ -182,7 +189,7 @@ private struct AppSidebar: View {
         SidebarRow(title: section.title, symbol: section.symbol, isSelected: section == selection) {
             selection = section
         }
-        .keyboardShortcut(section.shortcutKey, modifiers: .command)
+        .keyboardShortcut(section.shortcut)
     }
 }
 
@@ -230,13 +237,13 @@ private struct SidebarRow: View {
     }
 }
 
-/// Quits the whole app, notch included. Turning only the notch off is on Home.
+/// Quits the whole app, notch included. Turning only the notch off is on Overview.
 private struct QuitRow: View {
     var body: some View {
         SidebarRow(title: String(localized: "Quit PancakeNotch"), symbol: "power") {
             NSApp.terminate(nil)
         }
         .help(Text("Quits the app. The notch goes away until you open PancakeNotch again."))
-        .accessibilityHint(Text("Quits the app. To only hide the notch, use the switch on Home."))
+        .accessibilityHint(Text("Quits the app. To only hide the notch, use the switch on Overview."))
     }
 }

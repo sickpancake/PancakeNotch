@@ -4,18 +4,18 @@ import SwiftUI
 /// A feature that lives in the notch: Now Playing, the Shelf (ADR-0014).
 ///
 /// The notch hosts several modules (`NotchViewModel.modules`). The open notch shows one at a time
-/// (the selected one) or the Module Menu (ADR-0010); the compact ears go to the top two active
+/// (the selected one) or Home (ADR-0042); the compact ears go to the top two active
 /// modules by ranking (ADR-0011), and pointing at an ear or a strip opens the notch on its module.
 /// Attaching a module calls `attach(to:)`.
 @MainActor
 public protocol NotchModule: AnyObject {
     /// Stable identifier: the ranking, favorites and statistics key on it ("nowPlaying", "shelf").
     var moduleID: String { get }
-    /// The module's name in tabs, the Module Menu and VoiceOver.
+    /// The module's name in tabs, Home and VoiceOver.
     var title: String { get }
-    /// SF Symbol for tabs and the Module Menu.
+    /// SF Symbol for tabs and Home.
     var symbol: String { get }
-    /// One short line for the Module Menu's list (e.g. "Playing", "3 items"); `nil` for none.
+    /// One short line for Home's All Modules widget (e.g. "Playing", "3 items"); `nil` for none.
     var menuStatus: String? { get }
 
     /// Called with the notch model when the module is attached, and with `nil` when it's removed.
@@ -58,7 +58,7 @@ public protocol NotchModule: AnyObject {
     var holdsOpen: Bool { get }
 
     /// The module's open view appeared (the notch opened on it, or the user switched to it), or went
-    /// away (the notch closed, or the user switched to another module or the Menu). Heavy resources
+    /// away (the notch closed, or the user switched to another module or Home). Heavy resources
     /// should be released when it goes away.
     func notchDidOpen()
     func notchDidClose()
@@ -95,6 +95,13 @@ public protocol NotchModule: AnyObject {
 
     /// The notch lost the keyboard (another window took it): anything typed into the module ends.
     func keyFocusLost()
+
+    /// One of this module's Home widgets at a size, or `nil` if it has none for that kind (ADR-0042).
+    /// Widgets read the module's shared center, tick only while `context.isLive`, and never ask for a
+    /// permission just by being on Home.
+    func homeWidget(_ kind: HomeWidgetKind, size: HomeWidgetSize, context: HomeWidgetContext) -> AnyView?
+    /// A click on one of its widgets opened this module (the Timer shows its stopwatch for Stopwatch).
+    func openedFromHome(_ kind: HomeWidgetKind)
 }
 
 public extension NotchModule {
@@ -124,6 +131,8 @@ public extension NotchModule {
     func handleKey(_ event: NSEvent) -> Bool { false }
     func clickedOutsidePreview() {}
     func keyFocusLost() {}
+    func homeWidget(_ kind: HomeWidgetKind, size: HomeWidgetSize, context: HomeWidgetContext) -> AnyView? { nil }
+    func openedFromHome(_ kind: HomeWidgetKind) {}
 }
 
 /// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.

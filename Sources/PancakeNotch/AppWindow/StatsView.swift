@@ -945,7 +945,7 @@ private struct ChartHeading: View {
     }
 }
 
-/// A big number with a label above and a grey caption below, like the tiles on Home.
+/// A big number with a label above and a grey caption below, like the tiles on Overview.
 private struct StatsTile: View {
     let label: String
     let symbol: String
@@ -1231,7 +1231,7 @@ private struct ListeningApp {
     }
 }
 
-private enum StatsFormat {
+enum StatsFormat {
     /// The idle memory budget (ADR-0006), in the same MB (MiB) the memory check uses.
     static let idleBudgetBytes: UInt64 = 50 * 1_048_576
 

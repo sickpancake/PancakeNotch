@@ -121,6 +121,11 @@ public final class AgentsCenter {
         return center
     }
 
+    /// No threads at all: pictures of the empty states.
+    public static func practiceEmpty() -> AgentsCenter {
+        AgentsCenter(practiceSettings: AgentsSettings(defaults: UserDefaults(suiteName: "PancakeNotch.practice.agents") ?? .standard))
+    }
+
     /// The practice threads plus one asking to change a file (the off-screen snapshot's review screen).
     public static func practiceWithEdit(now: Date = .now) -> AgentsCenter {
         let center = practice(now: now)

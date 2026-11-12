@@ -7,7 +7,7 @@ public enum NotchNavigation: String, CaseIterable, Sendable {
     case tabsAndMenu
     /// Tabs for every module, no Menu.
     case tabs
-    /// Only the current module's name: click it for the Menu.
+    /// Only the current module's name: click it for Home.
     case menu
 }
 
@@ -19,7 +19,7 @@ public final class ModuleArrangement {
     /// Module IDs by rank, #1 first. #1 gets the left compact ear and #2 the right (or swapped).
     /// Modules missing from it rank after the listed ones.
     public var order: [String] { didSet { defaults?.set(order, forKey: Keys.order) } }
-    /// Modules shown as tabs beside the Menu button and in the Menu's Favorites grid.
+    /// Modules shown as tabs beside the Home button.
     public var favorites: Set<String> { didSet { defaults?.set(favorites.sorted(), forKey: Keys.favorites) } }
     /// #1 takes the right ear instead of the left.
     public var swapsEarSides: Bool { didSet { defaults?.set(swapsEarSides, forKey: Keys.swapsEarSides) } }

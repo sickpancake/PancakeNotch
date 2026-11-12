@@ -40,7 +40,7 @@ final class NotchDropRouter: NotchDropDelegate {
     func dragUpdated(_ info: any NSDraggingInfo, at contentPoint: CGPoint) -> NSDragOperation {
         guard let (model, module) = target(info) else { return [] }
         let operation = module.dragUpdated(info, at: Self.bodyPoint(contentPoint, layout: model.layout))
-        if !operation.isEmpty, model.state != .expanded || model.selectedModule !== module || model.showsMenu {
+        if !operation.isEmpty, model.state != .expanded || model.selectedModule !== module || model.showsHome {
             model.dragEntered(focusing: module.moduleID)
         }
         return operation

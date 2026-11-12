@@ -252,7 +252,7 @@ private struct PresetGrid: View {
     }
 }
 
-private struct PresetButton: View {
+struct PresetButton: View {
     let preset: TimerPreset
     let action: () -> Void
     @State private var isHovered = false

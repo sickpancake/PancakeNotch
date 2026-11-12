@@ -47,7 +47,7 @@ struct AboutView: View {
                 }
                 SettingsRow(
                     title: String(localized: "Your data stays here"),
-                    subtitle: String(localized: "The numbers on Home and Statistics are counted on this Mac and never sent anywhere.")
+                    subtitle: String(localized: "The numbers on Overview and Statistics are counted on this Mac and never sent anywhere.")
                 ) {
                     Image(systemName: "lock")
                         .font(.app(size: 14, weight: .semibold))

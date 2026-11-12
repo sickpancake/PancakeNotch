@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Which lessons are done, and the one-time Home box / onboarding flags. Stored on this Mac only.
+/// Which lessons are done, and the one-time Overview box / onboarding flags. Stored on this Mac only.
 @MainActor
 @Observable
 public final class LearnProgress {
@@ -14,7 +14,7 @@ public final class LearnProgress {
         }
     }
 
-    /// The user closed the "Learn the basics" box on the Home page.
+    /// The user closed the "Learn the basics" box on the Overview page.
     public var homeBoxHidden: Bool { didSet { defaults.set(homeBoxHidden, forKey: Keys.homeBoxHidden) } }
     /// The first-launch onboarding was seen through (or skipped).
     public var onboardingDone: Bool { didSet { defaults.set(onboardingDone, forKey: Keys.onboardingDone) } }

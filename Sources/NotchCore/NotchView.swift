@@ -79,8 +79,8 @@ struct NotchView: View {
             let barWidth = model.showsModuleBar ? NotchModuleBar.width(for: model) : 0
             ZStack(alignment: .topLeading) {
                 Group {
-                    if model.showsMenu {
-                        NotchMenuView(model: model, layout: layout)
+                    if model.showsHome {
+                        NotchHomeView(model: model, layout: layout)
                             .transition(reduceMotion ? .opacity : .menuReveal)
                     } else if let module = model.selectedModule {
                         module.expandedView(layout: layout)
@@ -190,7 +190,7 @@ private extension AnyTransition {
         )
     }
 
-    /// The Module Menu grows a little from the top-left corner, where its button is.
+    /// Home grows a little from the top-left corner, where its button is.
     static var menuReveal: AnyTransition {
         .modifier(
             active: SlideBlurModifier(offset: 0, blur: 5, opacity: 0, scale: 0.96),

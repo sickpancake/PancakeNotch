@@ -192,25 +192,30 @@ struct NotchModulesTests {
     @Test func theMenuReplacesTheModuleAndEscLeavesIt() throws {
         let (model, music, _) = makeModel()
         model.open()
-        model.toggleMenu()
-        #expect(model.showsMenu)
+        model.toggleHome()
+        #expect(model.showsHome)
         #expect(music.closes == 1)
         let escape = try #require(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
             context: nil, characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: 53
         ))
         #expect(model.handleKey(escape))
-        #expect(!model.showsMenu)
+        #expect(!model.showsHome)
         #expect(model.state == .expanded)
         #expect(music.opens == 2)
     }
 
-    @Test func removingAModuleFromUnderTheMenuShowsTheOtherOne() {
+    /// Home doesn't go away when a module is switched off under it (ADR-0042); leaving Home then shows
+    /// the module that's left.
+    @Test func removingAModuleUnderHomeKeepsHome() {
         let (model, _, shelf) = makeModel()
         model.open()
-        model.toggleMenu()
+        model.toggleHome()
         model.modules = [shelf]
-        #expect(!model.showsMenu)
+        #expect(model.showsHome)
+        #expect(model.selectedModule === shelf)
+        model.toggleHome()
+        #expect(!model.showsHome)
         #expect(model.selectedModule === shelf)
         #expect(shelf.opens == 1)
     }
@@ -240,9 +245,9 @@ struct NotchModulesTests {
     @Test func picksFromTheMenuCloseIt() {
         let (model, _, shelf) = makeModel()
         model.open()
-        model.toggleMenu()
+        model.toggleHome()
         model.select("shelf")
-        #expect(!model.showsMenu)
+        #expect(!model.showsHome)
         #expect(model.selectedModule === shelf)
         #expect(shelf.opens == 1)
     }

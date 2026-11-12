@@ -42,8 +42,32 @@ public final class NotchViewModel {
 
     /// The module the open notch shows (or would show).
     public private(set) var selectedID: String?
-    /// The open notch shows the Module Menu instead of a module.
-    public private(set) var showsMenu = false
+    /// The open notch shows Home (the widget grid) instead of a module (ADR-0042).
+    public private(set) var showsHome = false {
+        didSet {
+            guard showsHome, !oldValue else { return }
+            homeVisit &+= 1
+            onHomeEvent?(.opened)
+        }
+    }
+    /// Counts the times Home has come up, so what's read once per opening (Statistics) knows a new one.
+    public private(set) var homeVisit = 0
+    /// Told when Home comes up and when a widget click opens something (Learn's Home lesson).
+    @ObservationIgnored public var onHomeEvent: ((NotchHomeEvent) -> Void)?
+    /// Home's layout, the "When the notch opens" choice and the one-time hint. Memory-only unless the
+    /// app hands in the saved one.
+    public var home: HomeSettings
+    /// Which of Home's non-empty pages shows (0 = the first). Home always opens on the first. Always a
+    /// real page: when the layout loses pages (a widget removed in the editor), it falls back to the last.
+    public var homePage: Int { min(chosenHomePage, max(0, homePages.count - 1)) }
+    private var chosenHomePage = 0
+    /// The last page change went to a later page, for the slide.
+    public private(set) var homePageForward = true
+    @ObservationIgnored private var homeScroll = HomePageScrollTracker()
+    /// Draws the Battery and Statistics widgets (the app has their data). `nil` shows plain tiles.
+    @ObservationIgnored public var homeExtras: HomeExtraWidgets?
+    /// Set for off-screen snapshots: Home's widgets show this time and never tick.
+    @ObservationIgnored public var snapshotClock: Date?
     /// Which way the last module switch went, for the slide (forward = towards later modules).
     public private(set) var switchedForward = true
     /// The module whose strip shows under the compact notch right now (see `peek`).
@@ -79,8 +103,11 @@ public final class NotchViewModel {
     @ObservationIgnored public var onOpen: (() -> Void)?
     /// Called when a module's view appears in the open notch (statistics), with its ID.
     @ObservationIgnored public var onModuleShown: ((String) -> Void)?
-    /// The Menu's gear: opens the app window. `nil` hides the gear (previews).
+    /// Home's gear: opens the app window. `nil` hides the gear (previews).
     @ObservationIgnored public var openSettings: (() -> Void)?
+    /// Opens a page of the app window from Home (the editor, Modules, Statistics). `nil` in previews,
+    /// where those links are hidden.
+    @ObservationIgnored public var openAppPage: ((NotchAppPage) -> Void)?
 
     /// The latest state change came from a click on the notch (or Esc), not hover, a drag or a timer.
     /// Lessons count only those for "click to keep it small" and "click again to close".
@@ -141,6 +168,7 @@ public final class NotchViewModel {
         state: NotchState = .closed,
         behavior: NotchBehavior = NotchBehavior(),
         arrangement: ModuleArrangement? = nil,
+        home: HomeSettings? = nil,
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
     ) {
@@ -149,8 +177,10 @@ public final class NotchViewModel {
         self.earsAsleep = state == .closed
         self.behavior = behavior
         self.arrangement = arrangement ?? ModuleArrangement()
+        self.home = home ?? HomeSettings()
         self.pointerLocation = pointerLocation
         self.isMissionControlActive = isMissionControlActive
+        watchNavigation()
     }
 
     // MARK: Modules
@@ -159,19 +189,24 @@ public final class NotchViewModel {
         let removed = oldModules.filter { old in !modules.contains { $0 === old } }
         let added = modules.filter { new in !oldModules.contains { $0 === new } }
         let selectedBefore = oldModules.first { $0.moduleID == selectedID } ?? arrangement.sorted(oldModules) { $0.moduleID }.first
-        let wasMenu = showsMenu
+        let wasMenu = showsHome
         for module in removed {
-            if state == .expanded, module === selectedBefore, !showsMenu { module.notchDidClose() }
+            if state == .expanded, module === selectedBefore, !showsHome { module.notchDidClose() }
             module.attach(to: nil)
         }
         if selectedID == nil || !modules.contains(where: { $0.moduleID == selectedID }) {
             selectedID = rankedModules.first?.moduleID
         }
-        if modules.count < 2 { showsMenu = false }
+        if !homeIsAvailable { showsHome = false }
+        // The last module went away while it showed: Home takes its place.
+        if modules.isEmpty, state == .expanded, homeIsAvailable, !showsHome {
+            chosenHomePage = 0 // Home always comes up on its first page.
+            showsHome = true
+        }
         for module in added { module.attach(to: self) }
-        // Attached while already open (e.g. pinned with PANCAKENOTCH_DEBUG_STATE=expanded), or the Menu
+        // Attached while already open (e.g. pinned with PANCAKENOTCH_DEBUG_STATE=expanded), or Home
         // went away with the module before last.
-        if state == .expanded, !showsMenu, let selected = selectedModule,
+        if state == .expanded, !showsHome, let selected = selectedModule,
            wasMenu || selected !== selectedBefore || added.contains(where: { $0 === selected }) {
             selected.notchDidOpen()
         }
@@ -187,18 +222,18 @@ public final class NotchViewModel {
         if restingState != resting { restingState = resting }
     }
 
-    /// Shows a module in the open notch (a tab, the Menu, a swipe). Only the user switches; opening
+    /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
     /// picks the module itself (`open`).
     public func select(_ moduleID: String) {
         guard let target = modules.first(where: { $0.moduleID == moduleID }) else { return }
         cancelAttentionClose()
         let previous = selectedModule
-        let wasMenu = showsMenu
+        let wasMenu = showsHome
         if let previous, previous !== target {
             switchedForward = arrangement.rank(of: moduleID) >= arrangement.rank(of: previous.moduleID)
         }
         withAnimation(Self.switchAnimation) {
-            showsMenu = false
+            showsHome = false
             selectedID = moduleID
         }
         guard previous !== target || wasMenu else { return }
@@ -210,25 +245,94 @@ public final class NotchViewModel {
         if previous !== target { previous?.userSwitchedAway() }
     }
 
-    /// Opens or closes the Module Menu in the open notch.
-    public func toggleMenu() {
-        guard state == .expanded, modules.count > 1, !isHeld else { return }
+    /// Opens or closes Home in the open notch. With no module to go back to, Home stays.
+    public func toggleHome() {
+        guard state == .expanded, homeIsAvailable, !isHeld else { return }
+        let opening = !showsHome
+        guard opening || selectedModule != nil else { return }
         cancelAttentionClose()
-        let opening = !showsMenu
-        withAnimation(Self.switchAnimation) { showsMenu = opening }
+        withAnimation(Self.switchAnimation) {
+            showsHome = opening
+            if opening { chosenHomePage = 0 }
+        }
         if opening { selectedModule?.notchDidClose() } else { selectedModule?.notchDidOpen() }
     }
 
-    /// The modules the tabs show: favorites (or all, without a Menu), plus the current one.
+    /// Home is there unless the person chose tabs only (Notch settings).
+    public var homeIsAvailable: Bool { arrangement.navigation != .tabs }
+
+    /// Follows the navigation setting, so choosing tabs only while Home shows goes back to a module.
+    /// Observation only: nothing runs until the setting changes.
+    private func watchNavigation() {
+        withObservationTracking { _ = arrangement.navigation } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.navigationChanged()
+                self?.watchNavigation()
+            }
+        }
+    }
+
+    private func navigationChanged() {
+        guard showsHome, !homeIsAvailable else { return }
+        withAnimation(Self.switchAnimation) { showsHome = false }
+        if state == .expanded { selectedModule?.notchDidOpen() }
+    }
+
+    /// Whether the widgets on this layout page may tick: Home shows in the open notch, on screen, and this
+    /// is the page that shows (one sliding away stops at once). Never in a snapshot.
+    public func homeIsLive(onPage page: Int) -> Bool {
+        guard state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
+        return homePages.indices.contains(homePage) && homePages[homePage] == page
+    }
+
+    /// Home's pages that hold something, in order: the ones the open notch scrolls through.
+    public var homePages: [Int] { homeLayout.nonEmptyPages }
+
+    /// Practice notches (Settings, Learn) leave out the widgets of modules they don't have, instead of
+    /// showing them as turned off.
+    public var homeLeavesOutMissing = false
+
+    /// The layout Home draws: the saved one, less missing modules' widgets in a practice notch.
+    public var homeLayout: HomeLayout {
+        guard homeLeavesOutMissing else { return home.layout }
+        let present = Set(modules.map(\.moduleID))
+        var layout = home.layout
+        layout.placements.removeAll { placement in placement.kind.moduleID.map { !present.contains($0) } ?? false }
+        return layout
+    }
+
+    /// Shows another of Home's pages (scrolling, the page dots, the arrow keys, VoiceOver).
+    public func showHomePage(_ index: Int) {
+        guard showsHome, homePages.indices.contains(index), index != homePage else { return }
+        cancelAttentionClose()
+        homePageForward = index > homePage
+        withAnimation(Self.switchAnimation) { chosenHomePage = index }
+    }
+
+    /// A click on a widget, away from its buttons: opens what it belongs to. Stopwatch opens the Timer,
+    /// Statistics the app window's Statistics page; Clock and Battery do nothing.
+    public func openFromHome(_ kind: HomeWidgetKind) {
+        if kind == .statistics {
+            openAppPage?(.statistics)
+            return
+        }
+        guard let moduleID = kind.moduleID, let module = modules.first(where: { $0.moduleID == moduleID }) else { return }
+        select(moduleID)
+        module.openedFromHome(kind)
+        onHomeEvent?(.widgetOpened(kind))
+    }
+
+    /// The modules the tabs show: favorites (or all, with tabs only), plus the current one.
     public var tabModules: [any NotchModule] {
         let ranked = rankedModules
         guard arrangement.navigation == .tabsAndMenu else { return ranked }
         return ranked.filter { arrangement.isFavorite($0.moduleID) || $0.moduleID == selectedModule?.moduleID }
     }
 
-    /// Whether the tabs/Menu bar shows: several modules, and nothing holding the current one open.
+    /// Whether the tabs and Home button show: several modules or Home to go to, and nothing holding the
+    /// current module open.
     public var showsModuleBar: Bool {
-        modules.count > 1 && !isHeld
+        (modules.count > 1 || homeIsAvailable) && !isHeld
     }
 
     /// Moves to the next or previous module by ranking (two-finger swipe).
@@ -245,12 +349,16 @@ public final class NotchViewModel {
     /// something inside the module. `point` is in notch-body coordinates. Returns whether it was used.
     @discardableResult
     public func handleScroll(_ event: NSEvent, at point: CGPoint) -> Bool {
+        if state == .expanded, showsHome {
+            swipe.ignoreCurrentGesture()
+            return scrollHome(event)
+        }
         guard state == .expanded, modules.count > 1 else {
             // A gesture that started before the notch opened scrolls something else, not the modules.
             swipe.ignoreCurrentGesture()
             return false
         }
-        if event.phase == .began, selectedModule?.scrollsHorizontally(at: point) == true || showsMenu {
+        if event.phase == .began, selectedModule?.scrollsHorizontally(at: point) == true || showsHome {
             swipe.ignoreCurrentGesture()
             return false
         }
@@ -266,19 +374,36 @@ public final class NotchViewModel {
         return true
     }
 
-    /// Picks the module to open on: the one asked for (its ear or strip was pointed at, a drag), else the
-    /// first by ranking that waits for you (an agent's question, a finished timer), else the first that
-    /// wants it (music playing), otherwise the one used last (ADR-0010, ADR-0011 amendment 2026-11-03).
+    /// Picks what to open on: the module asked for (its ear or strip was pointed at, a drag), else the
+    /// first by ranking that waits for you (an agent's question, a finished timer), else Home when the
+    /// person chose it in Settings, else the first module that wants it (music playing), otherwise the one
+    /// used last; Home when there's no module at all (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
     private func chooseModuleForOpening(_ moduleID: String?) {
-        showsMenu = false
+        showsHome = false
+        chosenHomePage = 0
         let ranked = rankedModules
         if let moduleID, modules.contains(where: { $0.moduleID == moduleID }) {
             selectedID = moduleID
         } else if let waiting = ranked.first(where: { $0.waitsForYou }) {
             selectedID = waiting.moduleID
+        } else if homeIsAvailable, home.opening == .home || modules.isEmpty {
+            showsHome = true
         } else if let focused = ranked.first(where: { $0.wantsFocus }) {
             selectedID = focused.moduleID
         }
+    }
+
+    /// Scrolling up or down on Home moves one whole page per gesture (or per wheel step).
+    private func scrollHome(_ event: NSEvent) -> Bool {
+        guard let step = homeScroll.handle(
+            phase: NotchSwipeTracker.Phase(event),
+            deltaY: event.scrollingDeltaY,
+            deltaX: event.scrollingDeltaX,
+            isPrecise: event.hasPreciseScrollingDeltas,
+            time: event.timestamp
+        ) else { return false }
+        showHomePage(homePage + step)
+        return true
     }
 
     /// The module that takes this drag: the current one if it does, else the first by ranking.
@@ -414,7 +539,7 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         if state != .expanded {
             open(focusing: moduleID)
-        } else if let moduleID, moduleID != selectedModule?.moduleID || showsMenu, !isHeld {
+        } else if let moduleID, moduleID != selectedModule?.moduleID || showsHome, !isHeld {
             select(moduleID)
         }
     }
@@ -498,14 +623,18 @@ public final class NotchViewModel {
         scheduleCloseIfIdle()
     }
 
-    /// A key press while the notch has keyboard focus: the module first, then Escape leaves the Menu
+    /// A key press while the notch has keyboard focus: the module first, then Escape leaves Home
     /// or closes.
     public func handleKey(_ event: NSEvent) -> Bool {
         cancelAttentionClose()
-        if !showsMenu, selectedModule?.handleKey(event) == true { return true }
-        if event.keyCode == 53 { // Escape: leave the Menu, else close all the way
-            if showsMenu {
-                toggleMenu()
+        if !showsHome, selectedModule?.handleKey(event) == true { return true }
+        if showsHome, event.keyCode == 125 || event.keyCode == 126 { // Down and Up arrows: Home's pages
+            showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
+            return true
+        }
+        if event.keyCode == 53 { // Escape: leave Home for the module, else close all the way
+            if showsHome, selectedModule != nil {
+                toggleHome()
                 return true
             }
             staysCompact = false
@@ -791,7 +920,7 @@ public final class NotchViewModel {
         }
         if opening {
             onOpen?()
-            if !showsMenu, let selected = selectedModule {
+            if !showsHome, let selected = selectedModule {
                 selected.notchDidOpen()
                 onModuleShown?(selected.moduleID)
             }
@@ -801,8 +930,8 @@ public final class NotchViewModel {
 
     private func leftExpanded() {
         releaseKeyFocus?()
-        if !showsMenu { selectedModule?.notchDidClose() }
-        showsMenu = false
+        if !showsHome { selectedModule?.notchDidClose() }
+        showsHome = false
         swipe.reset()
     }
 
@@ -838,7 +967,7 @@ public final class NotchViewModel {
             : .spring(response: 0.28, dampingFraction: 0.88)
     }
 
-    /// Switching modules or showing the Menu: a quick slide, or a cross-fade with Reduce Motion.
+    /// Switching modules or showing Home: a quick slide, or a cross-fade with Reduce Motion.
     static var switchAnimation: Animation {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             ? .easeInOut(duration: 0.15)

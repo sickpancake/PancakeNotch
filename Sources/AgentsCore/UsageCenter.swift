@@ -408,6 +408,11 @@ public final class UsageCenter {
         return center
     }
 
+    /// No accounts at all: pictures of the empty states.
+    public static func practiceEmpty() -> UsageCenter {
+        UsageCenter(practiceSettings: AgentsSettings(defaults: UserDefaults(suiteName: "PancakeNotch.practice.usage") ?? .standard))
+    }
+
     /// Picks an account in the practice notch (for the lesson), like the dropdown does.
     public func choose(_ selection: AccountSelection) {
         self.selection = selection

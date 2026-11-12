@@ -6,7 +6,7 @@ import SwiftUI
 
 /// The window's first page: a greeting, the notch's on/off switch with a live preview, a few
 /// usage numbers and tips.
-struct HomeView: View {
+struct OverviewView: View {
     let context: AppContext
     @Binding var section: AppSection
     let openLesson: (LessonID) -> Void
@@ -40,7 +40,8 @@ struct HomeView: View {
                 shortcuts: context.shortcuts,
                 showsNowPlayingTips: context.nowPlayingSettings.isEnabled,
                 showsShelfTips: context.shelfSettings.isEnabled,
-                showsConvertTip: context.shelfSettings.isEnabled && context.shelfSettings.convertEnabled
+                showsConvertTip: context.shelfSettings.isEnabled && context.shelfSettings.convertEnabled,
+                showsHomeTip: context.arrangement.navigation != .tabs
             ) { section = .keyboard }
                 .padding(.top, 14)
         }
@@ -140,7 +141,7 @@ private struct LearnBox: View {
             Spacer(minLength: 12)
             if progress.allDone {
                 Button(String(localized: "Hide"), action: hide)
-                    .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+                    .accessibilityHint(Text("Removes this box from Overview. Lessons stay in Learn."))
             } else {
                 Button(done == 0 ? String(localized: "Start") : String(localized: "Continue")) {
                     openLesson(LessonID.allCases.first { !progress.isDone($0) } ?? .basics)
@@ -156,7 +157,7 @@ private struct LearnBox: View {
                 .buttonStyle(.plain)
                 .help(Text("Hide"))
                 .accessibilityLabel(Text("Hide"))
-                .accessibilityHint(Text("Removes this box from Home. Lessons stay in Learn."))
+                .accessibilityHint(Text("Removes this box from Overview. Lessons stay in Learn."))
             }
         }
         .padding(.horizontal, AppMetrics.cardInset)
@@ -190,7 +191,7 @@ private struct ProgressSegments: View {
 /// The big switch: a pretend screen with the live notch on top, its state and the toggle below.
 private struct NotchHero: View {
     let context: AppContext
-    /// What the real notch shows (Now Playing, the Shelf), on the user's real data, while Home is up.
+    /// What the real notch shows (Now Playing, the Shelf), on the user's real data, while Overview is up.
     @State private var liveModules: [any NotchModule] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -399,6 +400,7 @@ private struct TipsCard: View {
     let showsNowPlayingTips: Bool
     let showsShelfTips: Bool
     var showsConvertTip = false
+    var showsHomeTip = false
     let openKeyboardSettings: () -> Void
 
     var body: some View {
@@ -479,7 +481,10 @@ private struct TipsCard: View {
                    String(localized: "Rest the pointer on the notch and it slides open.")),
             ("hand.tap", String(localized: "Click to keep it small"),
              String(localized: "Click the open notch and it stays small: hover or click to open it, then click again to close it fully.")),
-        ] + nowPlaying + shelf + [
+        ] + nowPlaying + shelf + (!showsHomeTip ? [] : [
+            ("house", String(localized: "Your widgets, on Home"),
+             String(localized: "Click the house in the open notch to see every module at a glance. Arrange it on the Home page here.")),
+        ]) + [
             preferences.showMenuBarIcon
                 ? ("menubar.rectangle", String(localized: "Switch it off from the menu bar"),
                    String(localized: "The PancakeNotch menu bar icon turns the notch on or off."))

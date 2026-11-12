@@ -102,7 +102,7 @@ public struct KeepAwakeStatus: Equatable, Sendable {
         }
     }
 
-    /// One short line for the Module Menu and the menu bar menu, or `nil` when it's off.
+    /// One short line for Home's All Modules widget and the menu bar menu, or `nil` when it's off.
     @MainActor
     public static func short(_ center: KeepAwakeCenter) -> String? {
         let status = KeepAwakeStatus(center)

@@ -5,14 +5,17 @@ import SwiftUI
 /// Triggered by `PANCAKENOTCH_SNAPSHOT=/path/out.png`.
 @MainActor
 public enum NotchSnapshot {
-    /// - Parameter moduleRows: extra rows, each a notch model already set up with a module in some state.
+    /// - Parameters:
+    ///   - includesStates: start with the bare closed, compact and open notch.
+    ///   - moduleRows: extra rows, each a notch model already set up with a module in some state.
     public static func write(
         geometry: NotchGeometry,
         to url: URL,
+        includesStates: Bool = true,
         moduleRows: (NotchLayout) -> [NotchViewModel] = { _ in [] }
     ) throws {
         let layout = NotchLayout(geometry: geometry)
-        let models = NotchState.allCases.map { NotchViewModel(layout: layout, state: $0) } + moduleRows(layout)
+        let models = (includesStates ? NotchState.allCases.map { NotchViewModel(layout: layout, state: $0) } : []) + moduleRows(layout)
         let view = VStack(spacing: 12) {
             ForEach(models.indices, id: \.self) { index in
                 let window = models[index].layout.windowFrame(for: .expanded).size
