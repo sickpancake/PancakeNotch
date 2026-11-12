@@ -62,7 +62,7 @@ struct NotchHomeView: View {
         let area = HomeWidgetMetrics.gridArea(in: layout)
         let pages = model.homePages
         let index = min(model.homePage, max(0, pages.count - 1))
-        let showsIntro = !model.home.hasSeenIntro && !model.homeLayout.isEmpty && model.openAppPage != nil
+        let showsIntro = !model.isEditingHome && !model.home.hasSeenIntro && !model.homeLayout.isEmpty && model.openAppPage != nil
         VStack(spacing: 0) {
             // The band beside the hardware notch: the bar sits on the left (drawn by NotchView), the gear right.
             HStack(spacing: 0) {
@@ -70,6 +70,11 @@ struct NotchHomeView: View {
                 Color.clear.frame(width: notch.width)
                 HStack(spacing: 6) {
                     Spacer(minLength: 0)
+                    if model.isEditingHome {
+                        NotchPill(title: model.showsHomePicker ? String(localized: "Back") : String(localized: "Add"),
+                                  symbol: model.showsHomePicker ? "chevron.left" : "plus") { model.showsHomePicker.toggle() }
+                        NotchPill(title: String(localized: "Done"), symbol: "checkmark", prominent: true) { model.endHomeEditing() }
+                    }
                     // Once, until it's used or dismissed: a pointer to the editor (the empty note has its own).
                     if showsIntro, let open = model.openAppPage {
                         HomeIntroHint {
@@ -80,7 +85,13 @@ struct NotchHomeView: View {
                         }
                         .transition(.opacity)
                     }
-                    if let openSettings = model.openSettings {
+                    if !model.isEditingHome, let open = model.openAppPage {
+                        HomeGearButton(compact: showsIntro, symbol: "slider.horizontal.3", title: String(localized: "Edit")) {
+                            model.home.hasSeenIntro = true
+                            open(.homeEditor)
+                        }
+                    }
+                    if !model.isEditingHome, let openSettings = model.openSettings {
                         HomeGearButton(compact: showsIntro, action: openSettings)
                     }
                 }
@@ -91,7 +102,9 @@ struct NotchHomeView: View {
             .padding(.horizontal, HomeWidgetMetrics.sidePadding)
 
             ZStack {
-                if pages.indices.contains(index) {
+                if model.isEditingHome {
+                    NotchHomeEditingGrid(model: model, area: area)
+                } else if pages.indices.contains(index) {
                     HomePageGrid(model: model, page: pages[index], area: area)
                         .id(pages[index])
                         .transition(pageTransition)
@@ -102,6 +115,8 @@ struct NotchHomeView: View {
             }
             .frame(width: area.width, height: area.height, alignment: .topLeading)
             .contentShape(Rectangle())
+            .highPriorityGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in model.beginHomeEditing() },
+                                 including: model.isEditingHome ? .none : .all)
             .contextMenu {
                 if let open = model.openAppPage {
                     Button(String(localized: "Edit Home…")) {
@@ -115,7 +130,7 @@ struct NotchHomeView: View {
         .frame(width: size.width, height: size.height, alignment: .top)
         .overlay(alignment: .trailing) {
             if pages.count > 1 {
-                HomePageDots(count: pages.count, current: index) { model.showHomePage($0) }
+                HomePageDots(count: pages.count, current: index, newPage: model.isEditingHome ? pages.firstIndex(where: { model.homeLayout.isPageEmpty($0) }) : nil) { model.showHomePage($0) }
                     .padding(.top, notch.height)
                     .frame(width: HomeWidgetMetrics.sidePadding)
                     .transition(.opacity)
@@ -125,6 +140,7 @@ struct NotchHomeView: View {
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Home"))
+        .accessibilityAction(named: Text("Edit Home")) { model.beginHomeEditing() }
         .accessibilityAction(named: Text("Next page")) { model.showHomePage(index + 1) }
         .accessibilityAction(named: Text("Previous page")) { model.showHomePage(index - 1) }
     }
@@ -428,20 +444,26 @@ private struct HomeEmptyNote: View {
 private struct HomePageDots: View {
     let count: Int
     let current: Int
+    var newPage: Int? = nil
     let select: (Int) -> Void
 
     var body: some View {
         VStack(spacing: 5) {
             ForEach(0..<count, id: \.self) { index in
                 Button { select(index) } label: {
-                    Circle()
-                        .fill(.white.opacity(index == current ? 0.9 : 0.3))
-                        .frame(width: 5, height: 5)
+                    Group {
+                        if newPage == index {
+                            Image(systemName: "plus").font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.white.opacity(index == current ? 0.9 : 0.45))
+                        } else {
+                            Circle().fill(.white.opacity(index == current ? 0.9 : 0.3)).frame(width: 5, height: 5)
+                        }
+                    }
                         .frame(width: 14, height: 11)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Page \(index + 1) of \(count)"))
+                .accessibilityLabel(newPage == index ? Text("New page") : Text("Page \(index + 1) of \(count)"))
                 .accessibilityAddTraits(index == current ? [.isSelected] : [])
             }
         }
@@ -460,7 +482,10 @@ struct HomeIntroHint: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(action: customize) {
-                Text("Home is new. Customize it")
+                ViewThatFits(in: .horizontal) {
+                    Text("Home is new. Customize it").fixedSize()
+                    Text("Customize").fixedSize()
+                }
                     .font(.system(size: 11.5, weight: .semibold))
                     .lineLimit(1)
                     .foregroundStyle(.white.opacity(isHovered ? 1 : 0.85))
@@ -490,16 +515,18 @@ struct HomeIntroHint: View {
 struct HomeGearButton: View {
     /// Just the gear, to leave room for the intro hint.
     var compact = false
+    var symbol = "gearshape"
+    var title = String(localized: "Settings")
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "gearshape")
+                Image(systemName: symbol)
                     .font(.system(size: 11, weight: .semibold))
                 if !compact {
-                    Text("Settings")
+                    Text(title)
                         .font(.system(size: 11.5, weight: .semibold))
                 }
             }
@@ -510,8 +537,9 @@ struct HomeGearButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(compact ? Text("Settings") : Text(""))
-        .accessibilityLabel(Text("Settings"))
+        .help(Text(title))
+        .accessibilityLabel(Text(title))
+        .fixedSize()
         .onHover { isHovered = $0 }
         .accessibilityHint(Text("Opens the PancakeNotch window."))
     }

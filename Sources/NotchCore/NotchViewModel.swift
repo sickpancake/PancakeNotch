@@ -45,6 +45,7 @@ public final class NotchViewModel {
     /// The open notch shows Home (the widget grid) instead of a module (ADR-0042).
     public private(set) var showsHome = false {
         didSet {
+            if !showsHome { endHomeEditing() }
             guard showsHome, !oldValue else { return }
             homeVisit &+= 1
             onHomeEvent?(.opened)
@@ -160,7 +161,7 @@ public final class NotchViewModel {
     /// notch rests (measured). Every way out of Closed wakes them before it animates.
     public private(set) var earsAsleep = false
     /// The window is on screen (set by the window controller): hidden, nothing in it needs to tick.
-    public var isOnScreen = true
+    public var isOnScreen = true { didSet { if !isOnScreen { endHomeEditing() } } }
     @ObservationIgnored private var swipe = NotchSwipeTracker()
 
     public init(
@@ -225,6 +226,7 @@ public final class NotchViewModel {
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
     /// picks the module itself (`open`).
     public func select(_ moduleID: String) {
+        endHomeEditing()
         guard let target = modules.first(where: { $0.moduleID == moduleID }) else { return }
         cancelAttentionClose()
         let previous = selectedModule
@@ -281,12 +283,62 @@ public final class NotchViewModel {
     /// Whether the widgets on this layout page may tick: Home shows in the open notch, on screen, and this
     /// is the page that shows (one sliding away stops at once). Never in a snapshot.
     public func homeIsLive(onPage page: Int) -> Bool {
-        guard state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
+        guard !isEditingHome, state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
         return homePages.indices.contains(homePage) && homePages[homePage] == page
     }
 
     /// Home's pages that hold something, in order: the ones the open notch scrolls through.
-    public var homePages: [Int] { homeLayout.nonEmptyPages }
+    public var homePages: [Int] {
+        let pages = homeLayout.nonEmptyPages
+        guard isEditingHome else { return pages }
+        if let free = (0..<HomeLayout.pageCount).first(where: { !pages.contains($0) }) {
+            return (pages + [free]).sorted()
+        }
+        return pages
+    }
+
+    public private(set) var isEditingHome = false
+    public var showsHomePicker = false
+    @ObservationIgnored private var homeOutsideLocal: Any?
+    @ObservationIgnored private var homeOutsideGlobal: Any?
+
+    public func beginHomeEditing() {
+        guard state == .expanded, showsHome, isOnScreen, !isEditingHome else { return }
+        let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
+        cancelAttentionClose()
+        hoverTask?.cancel()
+        isEditingHome = true
+        chosenHomePage = homePages.firstIndex(of: shownPage) ?? 0
+        home.hasSeenIntro = true
+        requestKeyFocus?()
+        // Snapshot models never install native input observers.
+        guard snapshotClock == nil else { return }
+        homeOutsideLocal = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.homeOutsideClick()
+            return event
+        }
+        homeOutsideGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.homeOutsideClick()
+        }
+    }
+
+    private func homeOutsideClick() {
+        if !layout.outline(for: state, contains: pointerLocation()) { endHomeEditing() }
+    }
+
+    public func endHomeEditing() {
+        guard isEditingHome else { return }
+        let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
+        isEditingHome = false
+        chosenHomePage = homePages.firstIndex(of: shownPage) ?? 0
+        showsHomePicker = false
+        if let monitor = homeOutsideLocal { NSEvent.removeMonitor(monitor) }
+        if let monitor = homeOutsideGlobal { NSEvent.removeMonitor(monitor) }
+        homeOutsideLocal = nil
+        homeOutsideGlobal = nil
+        releaseKeyFocus?()
+        holdReleased()
+    }
 
     /// Practice notches (Settings, Learn) leave out the widgets of modules they don't have, instead of
     /// showing them as turned off.
@@ -312,6 +364,7 @@ public final class NotchViewModel {
     /// A click on a widget, away from its buttons: opens what it belongs to. Stopwatch opens the Timer,
     /// Statistics the app window's Statistics page; Clock and Battery do nothing.
     public func openFromHome(_ kind: HomeWidgetKind) {
+        guard !isEditingHome else { return }
         if kind == .statistics {
             openAppPage?(.statistics)
             return
@@ -332,7 +385,7 @@ public final class NotchViewModel {
     /// Whether the tabs and Home button show: several modules or Home to go to, and nothing holding the
     /// current module open.
     public var showsModuleBar: Bool {
-        (modules.count > 1 || homeIsAvailable) && !isHeld
+        (modules.count > 1 || homeIsAvailable) && (isEditingHome || !isHeld)
     }
 
     /// Moves to the next or previous module by ranking (two-finger swipe).
@@ -608,6 +661,7 @@ public final class NotchViewModel {
 
     /// The panel stopped being the key window: key presses go elsewhere now.
     public func keyFocusLost() {
+        endHomeEditing()
         modules.forEach { $0.keyFocusLost() }
     }
 
@@ -630,6 +684,7 @@ public final class NotchViewModel {
     /// or closes.
     public func handleKey(_ event: NSEvent) -> Bool {
         cancelAttentionClose()
+        if isEditingHome, event.keyCode == 53 { endHomeEditing(); return true }
         if !showsHome, selectedModule?.handleKey(event) == true { return true }
         if showsHome, event.keyCode == 125 || event.keyCode == 126 { // Down and Up arrows: Home's pages
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
@@ -650,7 +705,7 @@ public final class NotchViewModel {
     }
 
     /// True while any module needs the notch to stay open.
-    var isHeld: Bool { modules.contains { $0.holdsOpen } }
+    var isHeld: Bool { isEditingHome || modules.contains { $0.holdsOpen } }
 
     private func closeIfPointerOutside() {
         guard !layout.outline(for: state, contains: pointerLocation()) else { return }
@@ -736,6 +791,7 @@ public final class NotchViewModel {
     /// the window controller (`presentAttention`), or right here in a preview.
     public func requestAttention(from module: any NotchModule, revealsInFullScreen: Bool) {
         guard modules.contains(where: { $0 === module }) else { return }
+        if isEditingHome { endHomeEditing(); select(module.moduleID) }
         if let presentAttention {
             presentAttention(module.moduleID, revealsInFullScreen)
         } else {
@@ -758,6 +814,11 @@ public final class NotchViewModel {
     /// Opens on `moduleID` for an alert. Left untouched for `attentionCloseDelay` with the pointer away,
     /// it closes again; the module's ear keeps showing what happened. Does nothing while already open.
     public func openForAttention(focusing moduleID: String) {
+        if isEditingHome {
+            endHomeEditing()
+            select(moduleID)
+            return
+        }
         guard !isPinned, state != .expanded else { return }
         open(focusing: moduleID)
         guard state == .expanded else { return }
@@ -932,6 +993,7 @@ public final class NotchViewModel {
     }
 
     private func leftExpanded() {
+        endHomeEditing()
         releaseKeyFocus?()
         if !showsHome { selectedModule?.notchDidClose() }
         showsHome = false

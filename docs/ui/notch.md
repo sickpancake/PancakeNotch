@@ -291,3 +291,25 @@ Every module page has to be drawable without real data, for two reasons:
    fixed clock so pictures don't change between runs.
 
 When you add a state to a page, add it to the snapshot too, render, and look at it.
+
+## Editing Home in the notch
+
+Hold Home's widget area for half a second to edit, including the gaps or the empty Home note. A short
+click keeps its usual action. While editing, Home stays open, takes keyboard focus and draws every
+widget with a still context. Gentle independent wiggles stop when hidden, when dragging, or with
+Reduce Motion. The shared `HomeWiggle` modifier returns cards to level when disabled.
+
+The band replaces Settings and Edit with Add (Back while choosing a widget) and a prominent Done pill.
+Outside editing, Edit beside the gear opens the window's Home editor. Compact icons leave room for
+the one-time intro hint. The hardware notch remains clear.
+
+Each widget has the window editor's minus badge at its top-left corner and a size capsule at the
+bottom right. Click the size capsule to step through supported sizes. A private drag lifts immediately;
+a dashed outline shows the drop and neighbours preview the same `HomeLayout` edit used on release.
+The gesture owner stays mounted across previews and page turns. Page dots include one empty destination
+while editing; drag into the dot gutter to change pages. Changes save immediately through HomeSettings.
+A refused edit shows a short fading note. VoiceOver offers removal, four move directions, sizes and pages.
+
+Done, Escape, an outside mouse-down, losing keyboard focus, selecting a module, hiding or closing the
+notch all end editing and release its hold. An attention request ends editing and selects its module.
+Outside-click monitors exist only for the edit session; there is no polling or clipboard drag.

@@ -33,6 +33,8 @@ enum HomeSnapshot {
         let larges: [HomeWidgetKind] = HomeWidgetKind.allCases.filter { $0.supports(.large) }
         return [
             home(layout, .default, modules: live(), intro: true),
+            home(layout, .default, modules: live()) { $0.beginHomeEditing() },
+            home(layout, HomeLayout(), modules: live()) { $0.beginHomeEditing() },
             home(layout, .default, modules: [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 3)]),
             home(layout, HomeLayout(), modules: live()),
             home(layout, twoPages, modules: live()) { $0.showHomePage(1) },
@@ -54,6 +56,7 @@ enum HomeSnapshot {
         model.snapshotClock = clock
         model.homeExtras = HomeExtras.practice(home: settings)
         model.openAppPage = { _ in } // shows the empty Home's Customize button
+        model.openSettings = {} // include the complete band when checking the intro and Edit button
         model.modules = modules
         model.toggleHome()
         setUp(model)
