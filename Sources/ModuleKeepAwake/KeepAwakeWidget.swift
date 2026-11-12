@@ -36,7 +36,7 @@ struct KeepAwakeWidget: View {
             .accessibilityLabel(Text(KeepAwakeStatus.spoken(center)))
         case .medium:
             HStack(spacing: 10) {
-                KeepAwakeDial(module: module, size: 34, lineWidth: 3)
+                KeepAwakeDial(module: module, size: 34, lineWidth: 3, isLive: isLive)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(center.isHolding ? String(localized: "On", comment: "Keep Awake widget") : String(localized: "Off", comment: "Keep Awake widget"))
                         .font(.system(size: 15, weight: .semibold))

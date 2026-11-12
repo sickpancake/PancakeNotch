@@ -281,11 +281,14 @@ struct KeepAwakeDial: View {
     let size: CGFloat
     let lineWidth: CGFloat
     var cupScale: CGFloat = 0.34
+    /// False holds the ring where it is (Home's widget while it can't be seen), so nothing animates.
+    var isLive = true
 
     var body: some View {
         let center = module.center
+        let plan = Self.plan(center)
         ZStack {
-            DrainingRing(plan: Self.plan(center), epoch: center.clockEpoch, lineWidth: lineWidth, isSnapshot: module.isSnapshot, now: { center.now })
+            DrainingRing(plan: isLive ? plan : .still(plan.fraction(at: center.now)), epoch: center.clockEpoch, lineWidth: lineWidth, isSnapshot: module.isSnapshot, now: { center.now })
             Image(systemName: Self.symbol(center))
                 .font(.system(size: size * cupScale, weight: .semibold))
                 .foregroundStyle(.white.opacity(center.isHolding ? 0.9 : 0.45))

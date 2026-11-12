@@ -49,3 +49,56 @@ import Testing
         #expect(m.homePage == 1)
     }
 }
+
+extension HomeReplayNotch {
+    /// FirstPage trace: open Home, second page, module, remove last module.
+    @Test func lastModuleRemovalStartsHomeOnFirstPage() {
+        let m = model()
+        m.home.layout = HomeLayout(placements: [
+            HomePlacement(kind: .clock, size: .small, slot: .init(page: 0, column: 0, row: 0)),
+            HomePlacement(kind: .battery, size: .small, slot: .init(page: 1, column: 0, row: 0))
+        ])
+        m.open(); m.showHomePage(1); m.toggleHome(); m.modules = []
+        #expect(m.showsHome)
+        #expect(m.homePage == 0)
+    }
+    @Test func waitingWinsAndWidgetOpensModule() {
+        let m = model(), waiting = WaitingModule("agents")
+        waiting.waitsForYou = true
+        m.modules.append(waiting)
+        m.open()
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "agents")
+        m.toggleHome(); m.openFromHome(.stopwatch)
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "timer")
+        m.close(); m.home.opening = .lastModule; waiting.waitsForYou = false
+        m.open(); #expect(!m.showsHome)
+    }
+    @Test func tabsWithNoModulesShowsPlaceholder() {
+        let m = model(); m.arrangement.navigation = .tabs; m.modules = []; m.open()
+        #expect(!m.showsHome); #expect(m.selectedModule == nil)
+    }
+}
+
+extension HomeReplayNotch {
+    @Test func callbacksBalanceAcrossHomeAndRemoval() {
+        let m = model(), a = RankedModule("timer"), b = RankedModule("shelf")
+        m.modules = [a,b]; m.home.opening = .lastModule
+        m.open(); #expect(a.opens - a.closes == 1)
+        m.toggleHome(); #expect(a.opens == a.closes)
+        m.openFromHome(.shelf); #expect(b.opens - b.closes == 1)
+        m.select("timer"); #expect(b.opens == b.closes); #expect(a.opens - a.closes == 1)
+        m.modules = [b]; #expect(a.opens == a.closes); #expect(b.opens - b.closes == 1)
+        m.close(); #expect(b.opens == b.closes)
+    }
+    @Test func reopenAndToggleStartOnFirstPage() {
+        let m = model()
+        m.home.layout = HomeLayout(placements: [
+            HomePlacement(kind: .clock, size: .small, slot: .init(page: 0, column: 0, row: 0)),
+            HomePlacement(kind: .battery, size: .small, slot: .init(page: 2, column: 0, row: 0))
+        ])
+        m.open(); m.showHomePage(1); m.close(); m.open(); #expect(m.homePage == 0)
+        m.showHomePage(1); m.toggleHome(); m.toggleHome(); #expect(m.homePage == 0)
+    }
+}

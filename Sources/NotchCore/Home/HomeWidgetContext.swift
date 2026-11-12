@@ -14,9 +14,13 @@ public struct HomeWidgetContext {
     public var isPractice: Bool
     /// The time to show when the widget must not read the clock (snapshots); `nil` reads the clock.
     public var fixedNow: Date?
+    /// Which time Home has come up (counts up each time it does): for what's read once per opening.
+    public var visit: Int
 
-    public init(size: CGSize, isLive: Bool, isSnapshot: Bool = false, isPractice: Bool = false, fixedNow: Date? = nil) {
+    public init(size: CGSize, isLive: Bool, isSnapshot: Bool = false, isPractice: Bool = false, fixedNow: Date? = nil,
+                visit: Int = 0) {
         self.size = size
+        self.visit = visit
         self.isLive = isLive
         self.isSnapshot = isSnapshot
         self.isPractice = isPractice

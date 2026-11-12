@@ -58,14 +58,15 @@ enum HomeStatisticsMetric: String, CaseIterable, Identifiable {
 enum HomeExtras {
     /// The real ones: the battery from IOKit, the statistics from the app's database.
     static func live(statistics: StatsStore, home: HomeSettings, readPower: @escaping () -> PowerState) -> HomeExtraWidgets {
-        { kind, size, context in
+        let reading = HomeStatisticsReading { await statistics.summary(days: 7) }
+        return { kind, size, context in
             switch kind {
             case .battery:
                 AnyView(HomeBatteryWidget(size: size, isLive: context.isLive, read: readPower))
             case .statistics:
                 AnyView(HomeStatisticsWidget(size: size, isLive: context.isLive,
                                              metric: HomeStatisticsMetric(saved: home.layout.statisticsMetric),
-                                             load: { await statistics.summary(days: 7) }))
+                                             visit: context.visit, reading: reading))
             default:
                 nil
             }
@@ -188,27 +189,54 @@ private struct HomeBatteryWidget: View {
 
 // MARK: Statistics
 
+/// The Statistics widget's summary, read once each time Home opens (ADR-0042). It outlives the widget's
+/// view, so changing pages or sizes doesn't read the database again.
+@MainActor
+@Observable
+final class HomeStatisticsReading {
+    private(set) var summary: StatsSummary?
+    /// The Home opening the summary was read for, or is being read for.
+    private(set) var visit: Int?
+    /// How many times it has read: once per opening, however often the widget comes and goes.
+    private(set) var reads = 0
+    @ObservationIgnored private let load: @Sendable () async -> StatsSummary
+
+    init(load: @escaping @Sendable () async -> StatsSummary) {
+        self.load = load
+    }
+
+    /// Reads for this opening of Home, unless that's done (or under way) already.
+    func refresh(for visit: Int) async {
+        guard self.visit != visit else { return }
+        self.visit = visit
+        reads += 1
+        let next = await load()
+        // A newer opening started its own read meanwhile: that one wins.
+        if self.visit == visit { summary = next }
+    }
+}
+
 /// One number from the Statistics page, read each time Home opens (no repeating reads, ADR-0042).
 private struct HomeStatisticsWidget: View {
     let size: HomeWidgetSize
     let isLive: Bool
     let metric: HomeStatisticsMetric
-    var load: (@Sendable () async -> StatsSummary)?
+    var visit = 0
+    var reading: HomeStatisticsReading?
     var fixed: StatsSummary?
 
-    @State private var summary: StatsSummary?
-
-    init(size: HomeWidgetSize, isLive: Bool, metric: HomeStatisticsMetric,
-         load: (@Sendable () async -> StatsSummary)? = nil, fixed: StatsSummary? = nil) {
+    init(size: HomeWidgetSize, isLive: Bool, metric: HomeStatisticsMetric, visit: Int = 0,
+         reading: HomeStatisticsReading? = nil, fixed: StatsSummary? = nil) {
         self.size = size
         self.isLive = isLive
         self.metric = metric
-        self.load = load
+        self.visit = visit
+        self.reading = reading
         self.fixed = fixed
-        _summary = State(initialValue: fixed)
     }
 
     var body: some View {
+        let summary = fixed ?? reading?.summary
         let value = summary.map(metric.value(in:)) ?? "–"
         Group {
             switch size {
@@ -248,10 +276,9 @@ private struct HomeStatisticsWidget: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(metric.caption): \(value)"))
         .accessibilityHint(Text("Opens the Statistics page."))
-        .task(id: isLive) {
-            guard isLive, fixed == nil, let load else { return }
-            let next = await load()
-            if !Task.isCancelled { summary = next }
+        .task(id: isLive ? visit : nil) {
+            guard isLive, fixed == nil, let reading else { return }
+            await reading.refresh(for: visit)
         }
     }
 }
