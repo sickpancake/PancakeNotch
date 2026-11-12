@@ -157,6 +157,19 @@ in `Sources/NotchCore/Home/`. Sizes: small 1×1, medium 2×1, large 2×2. Cards 
 (0.1 under the pointer when a click opens something) with a 0.06 hairline and 12 pt corners, 8 pt apart, 10 pt
 padding, 18 pt from the panel's sides. A switched-off module's widget is a dashed `HomeGhost`. A small widget
 with a reading uses `HomeSmallFace` (symbol and caption on top, value below), a plain one `HomeWidgetTile`.
+A medium or large widget with a title row uses `HomeWidgetHeader` (symbol in a 14 pt column, name, optional
+trailing count), and "nothing here" text is a `HomeWidgetEmptyLine`, centred in the room under the title.
+
+Keep widgets of one size looking alike:
+
+| | Small | Medium | Large |
+| --- | --- | --- | --- |
+| Value | 17 semibold | 19 semibold, caption 10 medium white 0.55, 1 pt apart | as Medium (a hero reading may be bigger) |
+| Ring | 13, line 2 | 30, line 3 | — |
+| Caption | 9.5 medium white 0.55, one line, cut off with "…", never shrunk | | |
+
+A small caption must fit beside the symbol (about 9 characters): say "Battery", not "On battery", and leave it
+out when the symbol already says it (an idle Stopwatch, the Clock).
 
 - A module draws its widgets in `homeWidget(_:size:context:)`; `context.isLive` is true only while the open
   notch shows Home's visible page. Anything that ticks (a `TimelineView`, a progress bar) must pause when it's

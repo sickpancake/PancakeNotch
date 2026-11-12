@@ -296,20 +296,74 @@ public struct HomeWidgetTile: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .truncationMode(.tail)
             if let line {
                 Text(line)
                     .font(.system(size: 9.5, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .truncationMode(.tail)
                     .contentTransition(.opacity)
                     .animation(.easeInOut(duration: 0.2), value: line)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The title row of a Medium or Large widget: the symbol in a fixed 14 pt column and the name, so every
+/// widget's name starts at the same place, with room on the right (the Shelf's count).
+public struct HomeWidgetHeader<Trailing: View>: View {
+    let symbol: String
+    let title: String
+    let trailing: Trailing
+
+    public init(symbol: String, title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.symbol = symbol
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    public var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            trailing
+        }
+        .foregroundStyle(.white.opacity(0.85))
+        .frame(height: 14)
+    }
+}
+
+extension HomeWidgetHeader where Trailing == EmptyView {
+    public init(symbol: String, title: String) {
+        self.init(symbol: symbol, title: title) { EmptyView() }
+    }
+}
+
+/// A widget's "nothing here" line, centred in the room under its title row (as the Shelf's drop zone is).
+public struct HomeWidgetEmptyLine: View {
+    let text: String
+
+    public init(_ text: String) {
+        self.text = text
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -333,11 +387,12 @@ public struct HomeSmallFace<Icon: View, Value: View>: View {
                     .frame(height: 14, alignment: .leading)
                     .accessibilityHidden(true)
                 if let caption {
+                    // Every caption the same size: a long one is cut off, never shrunk.
                     Text(caption)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .truncationMode(.tail)
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.2), value: caption)
                 }
@@ -475,33 +530,36 @@ struct HomeClockWidget: View {
         }
     }
 
-    private func face(_ date: Date) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if size == .small {
+    @ViewBuilder private func face(_ date: Date) -> some View {
+        if size == .small {
+            HomeSmallFace(caption: nil) {
                 Image(systemName: HomeWidgetKind.clock.symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                    .frame(height: 16, alignment: .leading)
-                    .accessibilityHidden(true)
-                Spacer(minLength: 0)
+            } value: {
+                time(date, size: 17)
             }
-            Text(date, format: .dateTime.hour().minute())
-                .font(.system(size: size == .small ? 19 : 24, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.25), value: date)
-            if size == .medium {
+            .accessibilityElement(children: .combine)
+        } else {
+            VStack(alignment: .leading, spacing: 1) {
+                time(date, size: 19)
                 Text(date, format: .dateTime.weekday(.wide).month().day())
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: size == .small ? .topLeading : .leading)
-        .accessibilityElement(children: .combine)
+    }
+
+    private func time(_ date: Date, size: CGFloat) -> some View {
+        Text(date, format: .dateTime.hour().minute())
+            .font(.system(size: size, weight: .semibold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .contentTransition(.numericText())
+            .animation(.easeInOut(duration: 0.25), value: date)
     }
 }
 

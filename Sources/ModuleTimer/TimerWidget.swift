@@ -81,9 +81,7 @@ struct TimerWidget: View {
     }
 
     private func header(_ title: String) -> some View {
-        Label(title, systemImage: "timer")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.85))
+        HomeWidgetHeader(symbol: "timer", title: title)
     }
 
     /// The first presets, two to a row.
@@ -106,14 +104,14 @@ struct TimerWidget: View {
         switch size {
         case .small:
             HomeSmallFace(caption: statusText) {
-                ring(size: 14, lineWidth: 2)
+                ring(size: 13, lineWidth: 2)
             } value: {
-                digits(time, size: 18)
+                digits(time, size: 17)
             }
         case .medium:
             HStack(spacing: 10) {
                 ring(size: 30, lineWidth: 3)
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 1) {
                     digits(time, size: 19)
                     status
                 }
@@ -204,17 +202,18 @@ struct StopwatchWidget: View {
         let time = TimerText.elapsed(stopwatch.elapsed(at: date))
         switch size {
         case .small:
-            HomeSmallFace(caption: statusText) {
+            // Before it starts, the symbol says what it is ("Stopwatch" doesn't fit beside it).
+            HomeSmallFace(caption: stopwatch.isRunning || stopwatch.isStopped ? statusText : nil) {
                 Image(systemName: "stopwatch")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
             } value: {
-                digits(time, size: 18)
+                digits(time, size: 17)
             }
         case .medium:
             HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 0) {
-                    digits(time, size: 21)
+                VStack(alignment: .leading, spacing: 1) {
+                    digits(time, size: 19)
                     status
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

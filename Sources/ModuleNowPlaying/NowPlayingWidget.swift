@@ -71,11 +71,7 @@ struct NowPlayingWidget: View {
                 Spacer(minLength: 2)
                 controls(track)
             } else {
-                Text("Play something and it shows here.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .lineLimit(2)
-                Spacer(minLength: 0)
+                HomeWidgetEmptyLine(String(localized: "Play something and it shows here."))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
