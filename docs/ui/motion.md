@@ -187,6 +187,10 @@ Things that move all the time (the draining ring, the sound bars) must not wake 
   the jump is a normal step first; after a seek, jump straight there.
 - A SwiftUI `.repeatForever` is acceptable only for a tiny indicator that lives briefly and only while visible
   (the recording dot in the shortcut recorder). Nothing that stays on screen.
+- **The Home editor's wiggle** is the one continuous SwiftUI motion that stays on screen (ADR-0042). It is a
+  `TimelineView(.animation(paused:))` whose tilt is a sine of the clock (`WiggleMotion`), so no other animation
+  (hover, popovers) can freeze it. It's paused unless the window is active, nothing is dragged and Reduce Motion
+  is off, and it eases to 0° before pausing.
 - No `Timer`, `DispatchSource` or polling loops to drive animation. `TimelineView(.animation(paused:))` is fine
   for short bursts, paused the rest of the time (`DrumText` runs it only while a digit rolls).
 
