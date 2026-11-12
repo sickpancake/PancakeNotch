@@ -108,6 +108,15 @@ enum AgentsText {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// One short part for a Small Home widget: who needs you first, else how many are working.
+    static func shortSummary(_ threads: [AgentThread]) -> String? {
+        let needing = threads.count { $0.status.needsYou }
+        if needing == 1 { return String(localized: "1 needs you", comment: "Agents summary") }
+        if needing > 1 { return String(localized: "\(needing) need you", comment: "Agents summary") }
+        let working = threads.count { $0.status == .working }
+        return working > 0 ? String(localized: "\(working) working", comment: "Agents summary") : nil
+    }
+
     /// The strip under the notch: who it is and what happened ("Claude · web-app", "needs you").
     static func peek(_ alert: AgentAlert) -> (subject: String, verb: String) {
         let thread = alert.thread

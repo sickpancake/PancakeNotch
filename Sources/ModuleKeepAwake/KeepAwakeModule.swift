@@ -114,7 +114,7 @@ public final class KeepAwakeModule: NotchModule {
             userInfo: [.announcement: Self.stripText(reason, comesBack: comesBack).spoken, .priority: NSAccessibilityPriorityLevel.medium.rawValue]
         )
         if notch.state == .expanded {
-            endPending = !(notch.selectedModule === self && !notch.showsMenu)
+            endPending = !(notch.selectedModule === self && !notch.showsHome)
         } else {
             notch.requestPeek(from: self, for: stripTime, revealsInFullScreen: false)
         }

@@ -449,7 +449,7 @@ private struct ControlsRow: View {
 
 /// Back, play/pause or forward. Dimmed (not hidden, so the row doesn't move) when the player refuses
 /// it, with the reason as its tooltip and VoiceOver hint.
-private struct TransportButton: View {
+struct TransportButton: View {
     let symbol: String
     let size: CGFloat
     let label: String

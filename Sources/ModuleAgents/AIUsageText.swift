@@ -61,7 +61,7 @@ enum AIUsageText {
         return "\(model.name) · \(share < 1 ? "<1" : String(Int(share.rounded())))%"
     }
 
-    /// The Module Menu's line: the chosen account's tightest limit ("Session 63% left"), its name when it
+    /// The All Modules widget's line: the chosen account's tightest limit ("Session 63% left"), its name when it
     /// has no limits, else "All accounts".
     static func menuStatus(account: AgentAccount?, limits: AccountLimits?, now: Date = .now) -> String {
         guard let account else { return String(localized: "All accounts", comment: "AI Usage: every account at once") }

@@ -8,6 +8,7 @@ public struct NotchPreview: View {
     private let behavior: NotchBehavior
     private let modules: [any NotchModule]
     private let onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
+    private let onHomeEvent: ((NotchHomeEvent) -> Void)?
     private let startState: NotchState?
     @State private var host: NotchPreviewHost
 
@@ -20,6 +21,7 @@ public struct NotchPreview: View {
     ///     default every drag, so files dragged from inside the app window land too.
     ///   - onStateChange: called when the preview opens, shrinks or closes (lessons), and whether a
     ///     click (or Esc) did it.
+    ///   - onHomeEvent: called when Home comes up or a widget opens its module (lessons).
     ///   - startState: a state to go to on appearing (off-screen snapshots).
     public init(
         behavior: NotchBehavior,
@@ -28,8 +30,10 @@ public struct NotchPreview: View {
         arrangement: ModuleArrangement? = nil,
         acceptsDragSource: @escaping @MainActor (Any?) -> Bool = { _ in true },
         onStateChange: ((NotchState, _ byClick: Bool) -> Void)? = nil,
+        onHomeEvent: ((NotchHomeEvent) -> Void)? = nil,
         startState: NotchState? = nil
     ) {
+        self.onHomeEvent = onHomeEvent
         self.behavior = behavior
         self.modules = modules
         self.onStateChange = onStateChange
@@ -55,9 +59,13 @@ public struct NotchPreview: View {
             .onChange(of: behavior, initial: true) { model.behavior = behavior }
             .onChange(of: modules.map(ObjectIdentifier.init), initial: true) { model.modules = modules }
             .onChange(of: model.state) { onStateChange?(model.state, model.lastChangeWasClick) }
-            .onAppear { if let startState { model.transition(to: startState) } }
+            .onAppear {
+                model.onHomeEvent = onHomeEvent
+                if let startState { model.transition(to: startState) }
+            }
             // Gone from the page: let go of the module (closes its menus) and settle.
             .onDisappear {
+                model.onHomeEvent = nil
                 model.reset()
                 model.modules = []
             }
@@ -102,6 +110,7 @@ final class NotchPreviewHost {
         )
         reference.host = self
         model.isOnScreen = false
+        model.homeLeavesOutMissing = true
         router.model = model
         model.fitWindow = { [weak self] state in self?.fit(state) }
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
