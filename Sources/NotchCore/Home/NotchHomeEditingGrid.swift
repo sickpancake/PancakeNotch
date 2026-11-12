@@ -46,6 +46,10 @@ struct NotchHomeEditingGrid: View {
     private var canvas: some View {
         let cell = HomeWidgetMetrics.cellSize(in: area)
         return ZStack(alignment: .topLeading) {
+            if model.homeLayout.placements.isEmpty {
+                HomeWidgetEmptyLine(String(localized: "Click Add to put widgets on Home."))
+                    .frame(width: area.width, height: area.height)
+            }
             ForEach(model.homeLayout.placements) { original in
                 let placement = shown.placement(of: original.kind) ?? original
                 let frame = HomeWidgetMetrics.frame(column: placement.slot.column, row: placement.slot.row,

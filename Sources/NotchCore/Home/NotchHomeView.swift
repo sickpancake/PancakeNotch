@@ -115,7 +115,9 @@ struct NotchHomeView: View {
             }
             .frame(width: area.width, height: area.height, alignment: .topLeading)
             .contentShape(Rectangle())
-            .highPriorityGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in model.beginHomeEditing() },
+            // Alongside, not before, the widgets' own clicks and buttons, so a quick click still works. Once
+            // the hold starts editing, the editing grid replaces the widgets, so the release presses nothing.
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in model.beginHomeEditing() },
                                  including: model.isEditingHome ? .none : .all)
             .contextMenu {
                 if let open = model.openAppPage {
