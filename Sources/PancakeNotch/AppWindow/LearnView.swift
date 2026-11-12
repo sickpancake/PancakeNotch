@@ -155,6 +155,7 @@ struct LessonPlayer: View {
         _runner = State(initialValue: LessonRunner(lesson: lesson))
     }
 
+    private var usesHome: Bool { lesson.id == .home }
     private var usesShelf: Bool { lesson.id == .shelf }
     private var usesNowPlaying: Bool { lesson.id == .nowPlaying }
     private var usesAgents: Bool { lesson.id == .agents }
@@ -175,6 +176,7 @@ struct LessonPlayer: View {
         if usesUsage { return String(localized: "Practice accounts: they're made up, and nothing is read from your Mac.") }
         if usesTimer { return String(localized: "A practice timer: your real timer and stopwatch aren't touched.") }
         if usesKeepAwake { return String(localized: "A practice Keep Awake: it doesn't keep your Mac awake.") }
+        if usesHome { return String(localized: "A practice Home with the default widgets: your own Home and modules aren't touched.") }
         return nil
     }
 
@@ -182,10 +184,11 @@ struct LessonPlayer: View {
         VStack(spacing: 0) {
             NotchStage(
                 behavior: behavior,
-                arrangement: arrangement,
+                arrangement: stageArrangement,
                 modules: practiceModules,
                 activeHint: hint,
                 onStateChange: notchChanged,
+                onHomeEvent: homeChanged,
                 badge: .practice
             )
             .background(Color.black)
@@ -325,8 +328,33 @@ struct LessonPlayer: View {
         start()
     }
 
+    /// The Home lesson needs Home, even when the notch settings show tabs only: then it practises with
+    /// the standard navigation instead.
+    private var stageArrangement: ModuleArrangement? {
+        if usesHome, arrangement?.navigation == .tabs { return ModuleArrangement() }
+        return arrangement
+    }
+
+    private func homeChanged(_ event: NotchHomeEvent) {
+        switch event {
+        case .opened: runner.receive(.homeOpened)
+        case .widgetOpened: runner.receive(.homeWidgetOpened)
+        }
+    }
+
     /// Fresh pretend threads or accounts each time the lesson starts.
     private func makePractice() {
+        if usesHome {
+            // A few modules, so Home looks like the real one: a song, the Timer, Keep Awake, the Shelf.
+            nowPlaying = PracticeNowPlaying()
+            let module = TimerModule.practice()
+            let signals = TimerLessonSignals(runner: runner)
+            module.center.onEvent = { event in signals.handle(event) }
+            timer = module
+            keepAwake = KeepAwakeModule.practice()
+            practice = PracticeShelf(seeded: true)
+            return
+        }
         if usesKeepAwake {
             let module = KeepAwakeModule.practice()
             let runner = runner

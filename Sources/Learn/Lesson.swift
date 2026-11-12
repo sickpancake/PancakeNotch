@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, nowPlaying, shelf, agents, aiUsage, timer, keepAwake
+    case basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake
 
     public var id: Self { self }
 }
@@ -13,7 +13,7 @@ public enum LessonSignal: Hashable, Sendable {
          shelfItemAdded, shelfItemOpened, shelfItemClosed, shelfMenuOpened,
          shelfDraggedOut, shelfSeveralSelected, shelfCleared,
          musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
-         moduleSwitched,
+         moduleSwitched, homeOpened, homeWidgetOpened,
          agentAllowed, agentOpened, agentsCleared,
          usageAccountsOpened, usageAccountChosen, usageRangeChosen,
          timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped,
@@ -61,11 +61,12 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, nowPlaying, shelf, agents, aiUsage, timer, keepAwake] }
+    public static var all: [Lesson] { [basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
         case .basics: basics
+        case .home: home
         case .nowPlaying: nowPlaying
         case .shelf: shelf
         case .agents: agents
@@ -110,6 +111,37 @@ public struct Lesson: Identifiable, Sendable {
                 symbol: "command",
                 signal: .shortcutSet,
                 isOptional: true
+            ),
+        ]
+    )
+
+    /// Home's widgets: bringing Home up, using a widget's own button, and opening a module from its widget.
+    public static let home = Lesson(
+        id: .home,
+        title: String(localized: "Home", comment: "Lesson title"),
+        summary: String(localized: "Your widgets: use them, and open a module from one.", comment: "Lesson summary"),
+        symbol: "house",
+        steps: [
+            LessonStep(
+                id: "home.open",
+                title: String(localized: "Open Home", comment: "Lesson step title"),
+                detail: String(localized: "Open the notch, then click the house at its top left. Home shows a widget for each module.", comment: "Lesson step detail"),
+                symbol: "house",
+                signal: .homeOpened
+            ),
+            LessonStep(
+                id: "home.button",
+                title: String(localized: "Start a timer from Home", comment: "Lesson step title"),
+                detail: String(localized: "Widgets have buttons of their own: click 5 min on the Timer widget.", comment: "Lesson step detail"),
+                symbol: "timer",
+                signal: .timerStarted
+            ),
+            LessonStep(
+                id: "home.widget",
+                title: String(localized: "Open a module from its widget", comment: "Lesson step title"),
+                detail: String(localized: "Go back to Home and click a widget away from its buttons: the notch shows that module. To move, add or resize widgets, pick Home in the sidebar.", comment: "Lesson step detail"),
+                symbol: "hand.tap",
+                signal: .homeWidgetOpened
             ),
         ]
     )

@@ -244,6 +244,7 @@ extension AppWindowController {
         try render("learn-aiusage", section: .learn, lesson: .aiUsage)
         try render("learn-timer", section: .learn, lesson: .timer)
         try render("learn-keepawake", section: .learn, lesson: .keepAwake)
+        try render("learn-home", section: .learn, lesson: .home)
         try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
         try render("help-long", section: .help, size: CGSize(width: 1000, height: 2900))
         // Codex connected too: its /hooks step shows.
