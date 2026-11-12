@@ -37,6 +37,8 @@ public protocol NotchModule: AnyObject {
     /// The notch should open on this module (music is playing). The first such module by ranking
     /// wins, after any that `waitsForYou`; otherwise the notch opens on the one used last (ADR-0010).
     var wantsFocus: Bool { get }
+    /// Nothing here needs reopening. With Last module, prefer Home when it is available.
+    var isIdleForOpening: Bool { get }
     /// Something here waits for the user (an agent's question, a finished timer). Opening the notch comes
     /// here first, before a playing song, and while active it gets a spot beside the notch before modules
     /// that don't wait (ADR-0011 amendment 2026-11-03).
@@ -113,6 +115,7 @@ public extension NotchModule {
     func peekView(layout: NotchLayout) -> AnyView? { nil }
     var isActive: Bool { false }
     var wantsFocus: Bool { false }
+    var isIdleForOpening: Bool { false }
     var waitsForYou: Bool { false }
     var prefersSecondEar: Bool { false }
     var prefersFirstEar: Bool { false }

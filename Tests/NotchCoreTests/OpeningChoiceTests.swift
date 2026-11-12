@@ -9,6 +9,7 @@ final class WaitingModule: NotchModule {
     let moduleID: String
     var isActive = false
     var wantsFocus = false
+    var isIdleForOpening = false
     var waitsForYou = false
     var prefersSecondEar = false
     weak var notch: NotchViewModel?

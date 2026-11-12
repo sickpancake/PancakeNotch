@@ -5,6 +5,10 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Paused music leaves room for Home.** With Last module, the notch opens on Home when your music is paused or nothing is playing. Playing music and things that need you still come first.
+- **Edit Home in the notch.** Press and hold a widget or gap to move, remove, resize or add widgets. Done, Esc or a click outside finishes; Edit beside Settings opens the full editor.
+- **Pages when you need them.** The Home editor shows pages with widgets. Use + after the page tabs to add one (up to three); an emptied page disappears.
+
 - **Home.** The Module Menu is now Home: your modules as widgets, all in the open notch at once. Pause a song, start a timer or turn Keep Awake on right there, or click a widget to open its module. There's also a clock, your battery and a number from Statistics.
 - **Make it yours.** A new Home page in the PancakeNotch window: drag widgets around (the others make room), pick small, medium or large, add pages (up to three), undo, or start from a ready-made layout. The window's first page is now called Overview.
 - **Open on Home.** A new Notch setting, When the notch opens, show, can start the notch on Home instead of the module you used last.

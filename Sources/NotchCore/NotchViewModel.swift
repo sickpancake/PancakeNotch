@@ -377,7 +377,8 @@ public final class NotchViewModel {
     /// Picks what to open on: the module asked for (its ear or strip was pointed at, a drag), else the
     /// first by ranking that waits for you (an agent's question, a finished timer), else Home when the
     /// person chose it in Settings, else the first module that wants it (music playing), otherwise the one
-    /// used last; Home when there's no module at all (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
+    /// used last, or Home if that module is idle and Home is available. Home also opens when there are
+    /// no modules (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
     private func chooseModuleForOpening(_ moduleID: String?) {
         showsHome = false
         chosenHomePage = 0
@@ -390,6 +391,8 @@ public final class NotchViewModel {
             showsHome = true
         } else if let focused = ranked.first(where: { $0.wantsFocus }) {
             selectedID = focused.moduleID
+        } else if homeIsAvailable, selectedModule?.isIdleForOpening == true {
+            showsHome = true
         }
     }
 

@@ -102,3 +102,40 @@ extension HomeReplayNotch {
         m.showHomePage(1); m.toggleHome(); m.toggleHome(); #expect(m.homePage == 0)
     }
 }
+
+
+extension HomeReplayNotch {
+    // Model paths: Settings(idle), Select, Open; targeted and waiting opens still win.
+    @Test(arguments: [true, false]) func idleLastModuleUsesHomeWhenAvailable(tabs: Bool) {
+        let m = model(), idle = WaitingModule("idle")
+        idle.isIdleForOpening = true
+        m.modules = [idle]
+        m.home.opening = .lastModule
+        m.arrangement.navigation = tabs ? .tabs : .tabsAndMenu
+        m.open()
+        #expect(m.showsHome == !tabs)
+        #expect(m.selectedModule?.moduleID == "idle")
+    }
+
+    @Test func focusAndWaitingBeatIdleFallback() {
+        let m = model(), idle = WaitingModule("idle"), active = WaitingModule("active")
+        idle.isIdleForOpening = true
+        active.wantsFocus = true
+        m.modules = [idle, active]
+        m.home.opening = .lastModule
+        m.open()
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "active")
+        m.close()
+        active.wantsFocus = false
+        active.waitsForYou = true
+        m.select("idle")
+        m.open()
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "active")
+        m.close()
+        m.open(focusing: "idle")
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "idle")
+    }
+}

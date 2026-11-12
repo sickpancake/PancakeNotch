@@ -122,3 +122,31 @@ struct SongFocusTests {
         #expect(!module.isActive)
     }
 }
+
+
+extension SongFocusTests {
+    @Test(arguments: [true, false]) func pausedLastModuleOpensHome(tabs: Bool) async {
+        let (module, backend, notch) = makeModule(Clock())
+        notch.home.opening = .lastModule
+        notch.arrangement.navigation = tabs ? .tabs : .tabsAndMenu
+        play(backend)
+        await settle()
+        notch.open()
+        #expect(!notch.showsHome)
+        #expect(module.wantsFocus)
+        notch.close()
+        play(backend, playing: false)
+        await settle()
+        #expect(!module.wantsFocus)
+        #expect(module.isIdleForOpening)
+        #expect(module.isActive) // Paused artwork still keeps its spot beside the notch.
+        notch.open()
+        #expect(notch.showsHome == !tabs)
+        #expect(notch.selectedModule?.moduleID == "nowPlaying")
+        notch.close()
+        nothing(backend)
+        await settle()
+        notch.open()
+        #expect(notch.showsHome == !tabs)
+    }
+}
