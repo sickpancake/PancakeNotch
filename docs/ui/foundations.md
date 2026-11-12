@@ -88,7 +88,7 @@ Anything that counts or ticks (times, percentages, item counts) uses `.monospace
 | --- | --- | --- |
 | Big status | 19 semibold | "Keeping your Mac awake" |
 | Panel title | 15 semibold | Song title, "Nothing playing" |
-| Row or item title | 12–13 semibold | An agent's thread, a Menu row |
+| Row or item title | 12–13 semibold | An agent's thread, an All Modules button |
 | Body and secondary | 12–12.5 regular/medium, white 0.6 | Artist · album, status detail |
 | Header beside the notch | 12 semibold | "Shelf" |
 | Pill and button labels | 11.5 semibold | `NotchPill` |
@@ -125,7 +125,7 @@ surface: the notch (and the practice notches shown in the window) is SF Pro; the
 | Thing | Value |
 | --- | --- |
 | Open panel body | up to 600 × 180 (taller: 228 "medium", 360 "tall"); computed by `NotchLayout`, never hard-coded |
-| Side padding inside the open panel | 20 (the Shelf and the Module Menu use 18) |
+| Side padding inside the open panel | 20 (the Shelf and Home use 18) |
 | Bottom padding | 12–16 |
 | Top band | as tall as the hardware notch; content starts 6–8 below it |
 | Gap between a picture and its text column | 18 |
@@ -160,7 +160,7 @@ Pills, segments, tabs and chips are **capsules**.
 | Notch open | top ears 18, bottom 26 |
 | Album art in the open panel | 14 |
 | Art in an ear | 6 |
-| Module Menu favourite tiles | 12 |
+| Home widget cards | 12 |
 | Rows, small square buttons, length buttons | 9 |
 | Note backgrounds on art | 8 |
 | Icon squares | 7–8 |
@@ -185,7 +185,7 @@ The design is flat. Depth comes from opacity, not from shadows or materials.
 - Prefer the outline symbol at rest and the `.fill` version for "on" or "playing" (`cup.and.heat.waves` →
   `cup.and.heat.waves.fill`, `star` → `star.fill`).
 - When an icon changes, use `.contentTransition(.symbolEffect(.replace))`.
-- Each module has one symbol, used in its tab, the Module Menu and its card in the app window. It's set twice
+- Each module has one symbol, used in its tab, Home and its card in the app window. It's set twice
   (`NotchModule.symbol` and `AppContext.moduleInfo`): keep them the same.
 - Icon-only buttons always get a `.help()` tooltip and an accessibility label.
 

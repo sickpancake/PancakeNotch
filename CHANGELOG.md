@@ -5,6 +5,11 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Home.** The Module Menu is now Home: your modules as widgets, all in the open notch at once. Pause a song, start a timer or turn Keep Awake on right there, or click a widget to open its module. There's also a clock, your battery and a number from Statistics.
+- **Make it yours.** A new Home page in the PancakeNotch window: drag widgets around (the others make room), pick small, medium or large, add pages (up to three), undo, or start from a ready-made layout. The window's first page is now called Overview.
+- **Open on Home.** A new Notch setting, When the notch opens, show, can start the notch on Home instead of the module you used last.
+- **Learn Home.** A short hands-on lesson shows how Home works.
+
 ## 0.3.1 — beta
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.

@@ -25,6 +25,20 @@ const ICONS = {
       <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
     </>
   ),
+  house: <path d="M4 11.2 12 4.5l8 6.7M6.3 9.4V18a1.5 1.5 0 0 0 1.5 1.5h2.9v-5h2.6v5h2.9a1.5 1.5 0 0 0 1.5-1.5V9.4" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  battery: (
+    <>
+      <rect x="3" y="8" width="16" height="8.5" rx="2.4" />
+      <rect x="5" y="10" width="9.5" height="4.5" rx="1" fill="currentColor" stroke="none" />
+      <path d="M21 11v2.5" />
+    </>
+  ),
   note: (
     <>
       <path d="M11.2 17.3V4.4c0-.6.6-1 1.2-.8l4.4 1.6c.5.2.8.6.8 1.1v1.6l-6.4-2.2" />

@@ -23,7 +23,7 @@ way, using the curves and transitions on this page. Read [Foundations](foundatio
 2. **Short.** Most motion is 0.15–0.3 s. Opening the notch is the longest common move, and it's under half a
    second. Anything slower than 0.4 s needs a reason (a gauge refilling once, a recording dot pulsing).
 3. **It comes from somewhere.** Things grow from the notch, from the button that opened them, or slide in from
-   the side they live on. The Module Menu grows from the top-left where its button is; the AI Usage menu from the
+   the side they live on. Home grows from the top-left where its button is, and its pages slide up or down (a cross-fade with Reduce Motion); the AI Usage menu from the
    top-right; panel content grows down from the notch.
 4. **Direction means something.** Moving to a module further right slides the new page in from the right; a
    countdown's digits roll down, a stopwatch's roll up; Timer slides left, Stopwatch slides right.
@@ -63,7 +63,7 @@ Use these. Don't invent a new duration or damping when one here is close.
 | --- | --- | --- | --- |
 | Open | `NotchViewModel.animation(opening: true)`: `.spring(response: 0.42, dampingFraction: 0.8)` | The notch opening or waking into compact | `.easeInOut(duration: 0.2)` |
 | Close | `NotchViewModel.animation(opening: false)`: `.spring(response: 0.45, dampingFraction: 1.0)` | Closing; no overshoot so it tucks cleanly into the hardware | `.easeInOut(duration: 0.2)` |
-| Switch | `NotchViewModel.switchAnimation`: `.spring(response: 0.32, dampingFraction: 0.86)` | Changing module, opening the Module Menu, pages inside a module (Timer ↔ Stopwatch) | `.easeInOut(duration: 0.15)` |
+| Switch | `NotchViewModel.switchAnimation`: `.spring(response: 0.32, dampingFraction: 0.86)` | Changing module, opening Home, pages inside a module (Timer ↔ Stopwatch) | `.easeInOut(duration: 0.15)` |
 | Tall | `NotchViewModel.tallAnimation`: `.spring(response: 0.28, dampingFraction: 0.88)` | The panel growing to a taller height and back; quicker because it follows a click | `.easeInOut(duration: 0.15)` |
 | Tabs | `.spring(response: 0.3, dampingFraction: 0.85)` | The tab highlight gliding, the tab bar changing | `.easeInOut(duration: 0.15)` |
 | Ear swap | `.spring(response: 0.35, dampingFraction: 0.85)` | One module's ears replacing another's | `.easeInOut(duration: 0.15)` |
@@ -94,7 +94,7 @@ In a module, reuse those statics instead of copying their numbers, so a later tw
 | --- | --- | --- | --- |
 | **Blur reveal** | Fades in from a 10 pt blur while stretching down from the notch (y 0.6 → 1, anchored at the top) | The open panel's content when the notch opens | `NotchView.swift` (`blurReveal`) |
 | **Module switch** | The new page slides in 34 pt from its side with a 6 pt blur; the old one blurs and shrinks to 0.97 *in place* | Changing module | `NotchView.swift` (`moduleSwitch(forward:)`) |
-| **Menu reveal** | Grows from 0.96 at the top-left corner with a 5 pt blur | The Module Menu | `NotchView.swift` (`menuReveal`) |
+| **Menu reveal** | Grows from 0.96 at the top-left corner with a 5 pt blur | Home | `NotchView.swift` (`menuReveal`) |
 | **Page slide** | `.opacity` + 24 pt sideways offset, direction from the page's place | Pages inside one module (Timer ↔ Stopwatch) | `TimerView.swift` (`pageTransition`) |
 | **Rise** | `.opacity` + 3 pt upward offset | New text arriving in place (song title and artist) | `NowPlayingView.swift` |
 | **Grow from anchor** | `.opacity` + `.scale(0.96, anchor: <where its button is>)` | Small menus and popovers inside a page (AI Usage's menu) | `AIUsageView.swift` |

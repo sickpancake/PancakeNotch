@@ -1,6 +1,6 @@
 # The app window
 
-The PancakeNotch window: Home, Modules, Learn, Statistics, the settings pages (General, Notch, Keyboard), Help
+The PancakeNotch window: Overview, Modules, Home, Learn, Statistics, the settings pages (General, Notch, Keyboard), Help
 and About, plus the first-run welcome. Read [Foundations](foundations.md) first. The building blocks below live
 in `Sources/PancakeNotch/AppWindow/AppComponents.swift` unless noted.
 
@@ -17,11 +17,11 @@ in `Sources/PancakeNotch/AppWindow/AppComponents.swift` unless noted.
 `AppWindowView` puts a 232 pt sidebar (`AppPalette.sidebar`) and a 1 pt hairline beside the page
 (`AppPalette.background`). Until the welcome is done, `OnboardingView` fills the window instead.
 
-- **Sidebar:** the logo glyph and "PancakeNotch" (15 bold) at the top; Home, Modules, Learn, Statistics; a
+- **Sidebar:** the logo glyph and "PancakeNotch" (15 bold) at the top; Overview, Modules, Home, Learn, Statistics; a
   "SETTINGS" `SectionLabel` over General, Notch, Keyboard; Help, About and Quit at the bottom with the version
   in `tertiaryText`. Rows are 32 high, 9 pt corners, icon 13 medium in an 18 pt column, title 13.5
-  (semibold when selected). Selected: `selection` fill plus a hairline border; hover: `hover` fill. Each page has
-  ⌘1, ⌘2… in sidebar order.
+  (semibold when selected). Selected: `selection` fill plus a hairline border; hover: `hover` fill. The first nine
+  pages have ⌘1 … ⌘9 in sidebar order (there is no ⌘10, so About has none).
 - **`.appWindowStyle()`** is applied once at the root. It makes every `Toggle` a `MonochromeSwitchStyle`, every
   `Button` a `PillButtonStyle`, tints white, forces dark mode and sets the minimum size. Don't override these per
   view unless you need the prominent variant.
@@ -69,7 +69,7 @@ look.
 
 | Need | Use | Notes |
 | --- | --- | --- |
-| On/off | `Toggle(…).labelsHidden()` (styled as `MonochromeSwitchStyle` by the window) | White track with a black knob when on, grey when off. `.large` size only for Home's big notch switch. Always give the Toggle a real title for VoiceOver, even though it's hidden |
+| On/off | `Toggle(…).labelsHidden()` (styled as `MonochromeSwitchStyle` by the window) | White track with a black knob when on, grey when off. `.large` size only for Overview's big notch switch. Always give the Toggle a real title for VoiceOver, even though it's hidden |
 | One of 2–4 short options | `MonochromeSegmented(title:options:selection:)` | Chosen option is a white capsule with black text; reads as a Picker |
 | Any of several options | `MonochromeChips(title:options:selection:)` | Same look, several can be on; each reads as on/off |
 | One of a longer list | `MonochromeDropdown(title:sections:selection:onChoose:width:)` | A pill showing the choice, a dark list that scrolls, opens at the chosen row, arrow keys and Return work |
@@ -104,7 +104,12 @@ can try their settings right there.
 
 ## Other page patterns
 
-- **Home:** a hero card with the notch art and the big notch switch, small boxes (update ready, Learn
+- **Home (the editor):** a black panel as wide as the open notch with the grid of the page being edited (page
+  tabs, Undo/Redo and a Layouts menu above it), and a gallery of widgets below. Widgets are drawn with practice
+  data and wiggle gently (±0.9°) only while the window is active, nothing is being dragged and Reduce Motion is
+  off. Each has a − badge, a size button that shows on hover or focus, a right-click menu and VoiceOver actions;
+  arrows move the focused one, Delete removes it. Drags are private (no pasteboard), so nothing lands in the Shelf.
+- **Overview:** a hero card with the notch art and the big notch switch, small boxes (update ready, Learn
   progress) with a 16 bold icon tile, stat tiles with big 34 bold numbers, and a tips card.
 - **Statistics:** charts with Swift Charts in white (`AppPalette.ink`, 0.8 for bars not highlighted) on
   `hairline` grid lines, axis labels 10.5 in `secondaryText`. The live memory and CPU readings tick once a

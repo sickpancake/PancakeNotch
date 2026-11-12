@@ -41,7 +41,7 @@ export const nameOf = (item: Item) =>
 export const kindOf = (item: Item) => ({ file: 'File', text: 'Text', link: 'Link' })[item.kind]
 export const count = (n: number) => (n === 1 ? '1 item' : `${n} items`)
 
-/** The agents' one-line summary, for the Module Menu. */
+/** The agents' one-line summary, for Home. */
 export function summary(threads: Thread[]) {
   const needs = threads.filter((thread) => thread.state === 'needs').length
   const working = threads.filter((thread) => thread.state === 'working').length
@@ -167,7 +167,7 @@ export const share = (model: Model, total: number) => {
   return `${model.name} · ${percent < 1 ? '<1' : Math.round(percent)}%`
 }
 
-/** The Module Menu's line: the chosen account's tightest limit, or "All accounts". */
+/** Home's AI Usage line: the chosen account's tightest limit, or "All accounts". */
 export function usageStatus(selection: Selection) {
   if (selection === 'all') return 'All accounts'
   const limit = accountOf(selection).limits.reduce((a, b) => (b.left < a.left ? b : a))

@@ -20,6 +20,7 @@ struct HelpView: View {
         ) {
             notchCard
             besideNotchCard
+            homeCard
             musicCard
             shelfCard
             agentsCard
@@ -99,6 +100,39 @@ struct HelpView: View {
                 EmptyView()
             }
             MoreOnlineRow(topic: .besideTheNotch)
+        }
+    }
+
+    // MARK: Home
+
+    /// Home's state right now: off with tabs only, empty, or there; and how to arrange it.
+    @ViewBuilder
+    private var homeCard: some View {
+        let arrangement = context.arrangement
+        SettingsCard(header: String(localized: "Home and widgets")) {
+            if arrangement.navigation == .tabs {
+                SettingsRow(
+                    title: String(localized: "Home is off"),
+                    subtitle: String(localized: "The open notch shows tabs only. Pick Home and tabs, or Home, under In the open notch, show.")
+                ) {
+                    Button(String(localized: "Show Home")) { arrangement.navigation = .tabsAndMenu }
+                }
+            } else if context.home.layout.isEmpty {
+                SettingsRow(
+                    title: String(localized: "Home is empty"),
+                    subtitle: String(localized: "Add widgets on the Home page, or start from a ready-made layout there.")
+                ) {
+                    Button(String(localized: "Open Home")) { navigation.section = .home }
+                }
+            } else {
+                SettingsRow(
+                    title: String(localized: "Click the house in the open notch"),
+                    subtitle: String(localized: "Home shows your modules as widgets. Click one to open its module; drag them around on the Home page here.")
+                ) {
+                    Button(String(localized: "Open Home")) { navigation.section = .home }
+                }
+            }
+            MoreOnlineRow(topic: .home)
         }
     }
 
@@ -459,7 +493,7 @@ struct HelpView: View {
             }
             if context.progress.homeBoxHidden {
                 SettingsRow(
-                    title: String(localized: "The Learn box on Home"),
+                    title: String(localized: "The Learn box on Overview"),
                     subtitle: String(localized: "You hid it. It shows how many lessons are done.")
                 ) {
                     Button(String(localized: "Show It Again")) { context.progress.homeBoxHidden = false }
