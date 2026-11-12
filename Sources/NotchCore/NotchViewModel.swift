@@ -44,8 +44,14 @@ public final class NotchViewModel {
     public private(set) var selectedID: String?
     /// The open notch shows Home (the widget grid) instead of a module (ADR-0042).
     public private(set) var showsHome = false {
-        didSet { if showsHome, !oldValue { onHomeEvent?(.opened) } }
+        didSet {
+            guard showsHome, !oldValue else { return }
+            homeVisit &+= 1
+            onHomeEvent?(.opened)
+        }
     }
+    /// Counts the times Home has come up, so what's read once per opening (Statistics) knows a new one.
+    public private(set) var homeVisit = 0
     /// Told when Home comes up and when a widget click opens something (Learn's Home lesson).
     @ObservationIgnored public var onHomeEvent: ((NotchHomeEvent) -> Void)?
     /// Home's layout, the "When the notch opens" choice and the one-time hint. Memory-only unless the
@@ -193,7 +199,10 @@ public final class NotchViewModel {
         }
         if !homeIsAvailable { showsHome = false }
         // The last module went away while it showed: Home takes its place.
-        if modules.isEmpty, state == .expanded, homeIsAvailable { showsHome = true }
+        if modules.isEmpty, state == .expanded, homeIsAvailable, !showsHome {
+            chosenHomePage = 0 // Home always comes up on its first page.
+            showsHome = true
+        }
         for module in added { module.attach(to: self) }
         // Attached while already open (e.g. pinned with PANCAKENOTCH_DEBUG_STATE=expanded), or Home
         // went away with the module before last.
@@ -267,6 +276,13 @@ public final class NotchViewModel {
         guard showsHome, !homeIsAvailable else { return }
         withAnimation(Self.switchAnimation) { showsHome = false }
         if state == .expanded { selectedModule?.notchDidOpen() }
+    }
+
+    /// Whether the widgets on this layout page may tick: Home shows in the open notch, on screen, and this
+    /// is the page that shows (one sliding away stops at once). Never in a snapshot.
+    public func homeIsLive(onPage page: Int) -> Bool {
+        guard state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
+        return homePages.indices.contains(homePage) && homePages[homePage] == page
     }
 
     /// Home's pages that hold something, in order: the ones the open notch scrolls through.

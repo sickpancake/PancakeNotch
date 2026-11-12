@@ -11,6 +11,10 @@ extension HomeLayout {
         guard let entries = saved["placements"] as? [Any] else { return .default }
         var result = Self(statisticsMetric: saved["statisticsMetric"] as? String)
         var seen: Set<HomeWidgetKind> = []
+        // Widgets saved exactly where they fit go first, then ones nudged back inside the grid, then the
+        // rest wherever there's room: a nudged widget never takes the spot of one saved there.
+        var exact: [HomePlacement] = []
+        var nudged: [HomePlacement] = []
         var pending: [(HomeWidgetKind, HomeWidgetSize)] = []
         for case let entry as [String: Any] in entries {
             guard let name = entry["widget"] as? String, let kind = HomeWidgetKind(rawValue: name),
@@ -20,11 +24,15 @@ extension HomeLayout {
             if let page = integer(entry["page"]), (0..<pageCount).contains(page),
                let column = integer(entry["column"]), column >= 0,
                let row = integer(entry["row"]), row >= 0 {
-                let item = HomePlacement(kind: kind, size: size, slot: HomeSlot(page: page,
-                    column: min(column, columns - size.columns), row: min(row, rows - size.rows)))
-                if result.isFree(item) { result.placements.append(item); continue }
+                let slot = HomeSlot(page: page, column: min(column, columns - size.columns), row: min(row, rows - size.rows))
+                let item = HomePlacement(kind: kind, size: size, slot: slot)
+                if slot.column == column, slot.row == row, size == storedSize { exact.append(item) } else { nudged.append(item) }
+            } else {
+                pending.append((kind, size))
             }
-            pending.append((kind, size))
+        }
+        for item in exact + nudged {
+            if result.isFree(item) { result.placements.append(item) } else { pending.append((item.kind, item.size)) }
         }
         for (kind, size) in pending {
             if case .success(let repaired) = result.adding(kind, size: size) { result = repaired }

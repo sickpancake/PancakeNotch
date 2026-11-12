@@ -152,13 +152,14 @@ private struct HomePageGrid: View {
             currentModuleID: model.selectedModule?.moduleID,
             select: { model.select($0) }, extras: model.homeExtras
         )
-        let isLive = model.state == .expanded && model.showsHome && model.isOnScreen && model.snapshotClock == nil
+        let isLive = model.homeIsLive(onPage: page)
         ZStack(alignment: .topLeading) {
             ForEach(model.homeLayout.placements(onPage: page)) { placement in
                 let frame = HomeWidgetMetrics.frame(column: placement.slot.column, row: placement.slot.row,
                                                     size: placement.size, cell: cell)
                 let context = HomeWidgetContext(size: frame.size, isLive: isLive,
-                                                isSnapshot: model.snapshotClock != nil, fixedNow: model.snapshotClock)
+                                                isSnapshot: model.snapshotClock != nil, fixedNow: model.snapshotClock,
+                                                visit: model.homeVisit)
                 Group {
                     if resolver.isTurnedOff(placement.kind) {
                         HomeGhost(kind: placement.kind, size: frame.size,
