@@ -15,7 +15,8 @@ struct HomeWidgetPicker: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        // The close button floats at the right, so the empty line stays centred on the whole panel.
+        ZStack(alignment: .trailing) {
             Group {
                 if kinds.isEmpty {
                     HomeWidgetEmptyLine(String(localized: "Every widget is on Home"))
@@ -31,6 +32,7 @@ struct HomeWidgetPicker: View {
                     }
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel(Text("Widgets you can add"))
+                    .padding(.trailing, 32)
                 }
             }
             .frame(maxWidth: .infinity)
