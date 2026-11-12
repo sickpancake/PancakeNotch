@@ -45,7 +45,10 @@ Motion is on.
 | --- | --- |
 | Notch outline, sizes per state | `Sources/NotchCore/NotchShape.swift`, `NotchLayout.swift`, `NotchGeometry.swift` |
 | Notch root view, ears, transitions | `Sources/NotchCore/NotchView.swift` |
-| Module tabs and the Module Menu | `Sources/NotchCore/NotchModuleBar.swift` |
+| Module tabs and the Home button | `Sources/NotchCore/NotchModuleBar.swift` |
+| Home in the notch (grid, cards, ghosts, page dots) | `Sources/NotchCore/Home/NotchHomeView.swift`, widget sizes in `HomeWidgetContext.swift` |
+| Each module's widgets | `Sources/Module*/*Widget*.swift`; Battery and Statistics in `Sources/PancakeNotch/HomeExtras.swift` |
+| The Home editor (app window) | `Sources/PancakeNotch/AppWindow/HomeEditorView.swift` |
 | Shared notch controls | `Sources/NotchCore/NotchControls.swift` (`PressableStyle`, `NotchPill`, `NotchRoundButton`), `DrainingRing.swift` |
 | What a module provides | `Sources/NotchCore/NotchModule.swift` (`NotchModule`, `CompactEars`) |
 | Each module's pages | `Sources/Module*/…View.swift`, `…Ears.swift`, `…Layout.swift` |

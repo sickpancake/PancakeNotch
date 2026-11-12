@@ -22,7 +22,7 @@ How the notch is built, how a module's page is laid out, and the controls it use
 | **Closed** | Exactly the camera cutout: pure black, invisible | No top ears, bottom corners 14 |
 | **Compact** | The notch grows a spot on each side (the "ears") showing what's active | Top ears 6, bottom 14 |
 | Compact + **peek** | A 24 pt strip hangs under the compact notch for a moment (a new song, Keep Awake stopped) | Bottom 16 |
-| **Expanded** | The open panel, showing one module or the Module Menu | Top ears 18, bottom 26, shadow |
+| **Expanded** | The open panel, showing one module or Home | Top ears 18, bottom 26, shadow |
 
 The outline is `NotchShape`, which flares out into the menu bar at the top ("ears" of the shape) and has
 rounded bottom corners. `NotchView` morphs it between states with the springs listed in
@@ -54,8 +54,8 @@ gives:
 
 | Member | What it is |
 | --- | --- |
-| `title`, `symbol` | Name and SF Symbol for its tab, the Module Menu and VoiceOver |
-| `menuStatus` | One short line under its name in the Module Menu ("Playing", "3 items"), or nil |
+| `title`, `symbol` | Name and SF Symbol for its tab, Home and VoiceOver |
+| `menuStatus` | One short line for Home's All Modules widget ("Playing", "3 items"), or nil |
 | `expandedView(layout:)` | The open page, laid out at the open body size |
 | `compactEars(layout:)` | `CompactEars(main:extra:)`: the view for its spot, and optionally one for the other spot when it's the only active module |
 | `peekView(layout:)` | The strip under the compact notch, or nil |
@@ -150,6 +150,23 @@ struct ExampleView: View {
 
 `expandedView(layout:)` returns `AnyView(ExampleView(module: self, layout: ExampleLayout(layout)))`.
 
+## Home
+
+Home replaces the old Module Menu (ADR-0042). It's a grid of widgets, 6 columns × 2 rows a page, up to 3 pages,
+in `Sources/NotchCore/Home/`. Sizes: small 1×1, medium 2×1, large 2×2. Cards (`HomeWidgetCard`) are white 0.06
+(0.1 under the pointer when a click opens something) with a 0.06 hairline and 12 pt corners, 8 pt apart, 10 pt
+padding, 18 pt from the panel's sides. A switched-off module's widget is a dashed `HomeGhost`. A small widget
+with a reading uses `HomeSmallFace` (symbol and caption on top, value below), a plain one `HomeWidgetTile`.
+
+- A module draws its widgets in `homeWidget(_:size:context:)`; `context.isLive` is true only while the open
+  notch shows Home's visible page. Anything that ticks (a `TimelineView`, a progress bar) must pause when it's
+  false. `context.isSnapshot` and `fixedNow` keep pictures still.
+- A click on a card opens its module (`openedFromHome(_:)` picks a page, e.g. the Timer's stopwatch); buttons
+  inside the card act on their own. Never read anything that could ask macOS for permission (Now Playing reads
+  only what its center already knows).
+- Pages change one at a time from a scroll (`HomePageScrollTracker`) or the arrow keys; dots show on the right
+  only with more than one non-empty page.
+
 ## Page patterns
 
 The open panel is wide and short (about 600 × 140 under the band). Lay things out side by side, not in tall
@@ -161,7 +178,7 @@ stacks. Reuse the closest existing pattern:
 | **Status + actions** | Keep Awake, the running Timer | A dial or ring (64 pt, 4 pt line) on the left, 18 pt gap, a big status (19 semibold), a detail line (12 medium, white 0.6) and an optional note (10.5, white 0.45); `NotchPill`s on the right; a row of option buttons underneath |
 | **List** | Agents, AI Usage | Rows 36–40 high with 10 pt inset: a mark or icon (22), a title (13 semibold) over a subtitle (11.5, white 0.6), and a status or buttons on the right. Hover fill white 0.08 in a 9 pt rounded rectangle when the row does something |
 | **Tile row** | Shelf | Tiles 74 × 90, 6 apart, with the name under the picture; scrolls sideways when long |
-| **Two panes** | Module Menu, Timer side by side | Two areas split by a 1 pt divider (white 0.1–0.12) with a little vertical padding |
+| **Two panes** | Timer side by side | Two areas split by a 1 pt divider (white 0.1–0.12) with a little vertical padding |
 
 Option buttons (Keep Awake's lengths, the Timer's presets) are small rounded rectangles: 26 high, corners 9,
 white 0.11 (0.2 hover), 12 semibold monospaced digits. The current default has a faint outline

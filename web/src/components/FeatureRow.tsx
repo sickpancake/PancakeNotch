@@ -19,7 +19,7 @@ const FEATURES: Feature[] = [
   { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt />, fresh: true },
   { title: 'Agents', line: 'Claude Code, Codex and Cursor at work. Allow or Deny from the notch.', art: <AgentsArt /> },
   { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, and a heads-up when one resets.', art: <UsageArt /> },
-  { title: 'Module Menu', line: 'Every module in one place. Your favorites get a tab.', art: <MenuArt /> },
+  { title: 'Home', line: 'Every module as a widget, in the open notch. Drag them where you want.', art: <MenuArt /> },
   { title: 'Statistics', line: 'What you listen to, and how light the app stays.', art: <StatsArt /> },
   { title: 'Full screen', line: 'Steps aside while you watch a video.', art: <FullScreenArt /> },
   { title: 'Your shortcut', line: 'Open it from the keyboard, with keys you choose.', art: <ShortcutArt /> },

@@ -1,11 +1,11 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer, useState, type ReactNode } from 'react'
 import { TileSwap } from '@/components/TileSwap'
 import { cn } from '@/lib/utils'
 import { Cover, Icon, StatusMark, TOOL_ICON, Thumb, type IconName } from './art'
 import { SONGS, clock, count, kindOf, nameOf, type Item, type Module, type Thread } from './data'
 import { positionAt, type Player, type PlayerActions } from './player'
 
-/* What the open notch shows: the player, the Shelf, the agents and the Module Menu, at the app's sizes (AI Usage is in usageViews.tsx). */
+/* What the open notch shows: the player, the Shelf, the agents and Home, at the app's sizes (AI Usage is in usageViews.tsx). */
 
 const control = 'grid cursor-pointer place-items-center rounded-[10px] text-white transition-[background-color,color,transform] duration-150 hover:bg-white/9 active:scale-90 motion-reduce:active:scale-100'
 
@@ -285,63 +285,86 @@ export function AgentsView({ threads, narrow, onAllow, onDeny }: { threads: Thre
   )
 }
 
-/* ---------- The Module Menu ---------- */
+/* ---------- Home ---------- */
 
-const MODULES: { id: Exclude<Module, 'menu'>; name: string; icon: IconName }[] = [
-  { id: 'np', name: 'Now Playing', icon: 'note' },
-  { id: 'shelf', name: 'Shelf', icon: 'tray' },
-  { id: 'agents', name: 'Agents', icon: 'agents' },
-  { id: 'usage', name: 'AI Usage', icon: 'usage' },
-]
-
-export function MenuView({ current, song, items, agents, usage, narrow, onGo }: { current: Module; song: string; items: number; agents: string; usage: string; narrow: boolean; onGo: (module: Module) => void }) {
+/** One widget card, as in the app: white 7%, 12 pt corners, a click opens its module. */
+function Card({ className, onClick, label, children }: { className?: string; onClick?: () => void; label: string; children: ReactNode }) {
+  const look = cn('flex min-w-0 flex-col rounded-xl bg-white/6 p-2.5 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,.06)]', className) // taste-skill-ignore: the app's own interface, drawn in the pretend screen
+  if (!onClick) return <div className={look} aria-label={label}>{children}</div>
   return (
-    <div className="flex h-full gap-[18px]">
-      <div className={cn(narrow && 'min-w-0 flex-1')}>
-        <p className="mt-1 mb-2.5 text-[10px] leading-none font-semibold tracking-[.08em] text-white/50 uppercase">Favorites</p>
-        <div className={cn('flex', narrow ? 'gap-1.5' : 'gap-2')}>
-          {MODULES.map((module) => (
-            <button
-              key={module.id}
-              type="button"
-              onClick={() => onGo(module.id)}
-              className={cn(
-                'flex h-[62px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl bg-white/7 text-[10.5px] leading-none font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,.08)] transition-colors hover:bg-white/12', // taste-skill-ignore: the app's own interface, drawn in the pretend screen
-                current === module.id && 'bg-white/16 shadow-[inset_0_0_0_1px_rgba(255,255,255,.3)] hover:bg-white/16', // taste-skill-ignore: the app's own interface, drawn in the pretend screen
-                narrow ? 'min-w-0 flex-1 px-0.5 text-center leading-[1.15]' : 'w-[78px]', // four tiles share a phone's width, and a long name wraps
-              )}
-            >
-              <Icon name={module.icon} className="text-[17px]" />
-              {module.name}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* A phone has no room for the list beside the tiles. */}
-      <div className={cn('min-h-0 min-w-0 flex-1 flex-col border-l border-white/12 pl-[18px]', narrow ? 'hidden' : 'flex')} /* taste-skill-ignore: the app's own interface, drawn in the pretend screen */>
-        <p className="mt-1 mb-2.5 text-[10px] leading-none font-semibold tracking-[.08em] text-white/50 uppercase">All modules</p>
-        {/* The list scrolls when it doesn't fit, with no scrollbar, as in the app. */}
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
-          {MODULES.map((module) => (
-            <button
-              key={module.id}
-              type="button"
-              onClick={() => onGo(module.id)}
-              className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-[3px] text-left transition-colors hover:bg-white/7"
-            >
-              <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-white/10 text-[13px]">
-                <Icon name={module.icon} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[12.5px] leading-[1.25] font-semibold">{module.name}</span>
-                <span className="block truncate text-[11px] leading-[1.3] text-white/50">
-                  {module.id === 'np' ? song : module.id === 'agents' ? agents : module.id === 'usage' ? usage : items ? count(items) : 'Empty'}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+    <button type="button" onClick={onClick} aria-label={label} className={cn(look, 'cursor-pointer transition-colors hover:bg-white/10')}>
+      {children}
+    </button>
+  )
+}
+
+/** Home: the modules as widgets on a 6 × 2 grid (4 columns on a phone), like the app's default page. */
+export function HomeView({ song, songIndex, items, agents, usage, narrow, onGo }: { song: { title: string; artist: string }; songIndex: number; items: number; agents: string; usage: string; narrow: boolean; onGo: (module: Module) => void }) {
+  const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const small = 'text-[10px] leading-[1.3] font-medium text-white/55'
+  return (
+    <div className={cn('grid h-full gap-2', narrow ? 'grid-cols-4' : 'grid-cols-6')} style={{ gridTemplateRows: 'repeat(2, minmax(0, 1fr))' }}>
+      <Card className="col-span-2 row-span-2 justify-between" label={`Now Playing: ${song.title}`} onClick={() => onGo('np')}>
+        <span className="flex items-center gap-2.5">
+          <span className="size-[46px] flex-none overflow-hidden rounded-[9px]">
+            <Cover song={songIndex} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[12.5px] leading-[1.25] font-semibold">{song.title}</span>
+            <span className="block truncate text-[11px] leading-[1.3] text-white/60">{song.artist}</span>
+          </span>
+        </span>
+        <span className="h-[3px] w-full rounded-full bg-white/15">
+          <span className="block h-full w-2/5 rounded-full bg-white/90" />
+        </span>
+      </Card>
+      <Card className="col-span-2 justify-center gap-1" label={`Agents: ${agents}`} onClick={() => onGo('agents')}>
+        <span className="flex items-center gap-1.5 text-[11px] leading-none font-semibold text-white/85">
+          <Icon name="agents" className="text-[13px]" />
+          Agents
+        </span>
+        <span className={cn(small, 'truncate')}>{agents}</span>
+      </Card>
+      {!narrow && (
+        <>
+          <Card className="justify-between" label={`Shelf: ${items ? count(items) : 'Empty'}`} onClick={() => onGo('shelf')}>
+            <Icon name="tray" className="text-[13px] text-white/85" />
+            <span>
+              <span className="block text-[11px] leading-[1.25] font-semibold">Shelf</span>
+              <span className={cn(small, 'block truncate')}>{items ? count(items) : 'Drop files here'}</span>
+            </span>
+          </Card>
+          <Card className="justify-between" label={`Clock: ${time}`}>
+            <Icon name="clock" className="text-[13px] text-white/85" />
+            <span className="truncate text-[16px] leading-none font-semibold tabular-nums">{time}</span>
+          </Card>
+        </>
+      )}
+      <Card className="col-span-2 justify-center gap-1" label={`AI Usage: ${usage}`} onClick={() => onGo('usage')}>
+        <span className="flex items-center gap-1.5 text-[11px] leading-none font-semibold text-white/85">
+          <Icon name="usage" className="text-[13px]" />
+          AI Usage
+        </span>
+        <span className={cn(small, 'truncate')}>{usage}</span>
+      </Card>
+      {!narrow && (
+        <>
+          <Card className="justify-between" label="Battery: 76%, on battery">
+            <span className="flex items-center gap-1.5">
+              <Icon name="battery" className="text-[13px] text-white/85" />
+              <span className={small}>On battery</span>
+            </span>
+            <span className="text-[16px] leading-none font-semibold tabular-nums">76%</span>
+          </Card>
+          <Card className="justify-between" label="Statistics: 23 notch opens today">
+            <span className="flex items-center gap-1.5">
+              <Icon name="grid" className="text-[12px] text-white/85" />
+              <span className={small}>Opens</span>
+            </span>
+            <span className="text-[16px] leading-none font-semibold tabular-nums">23</span>
+          </Card>
+        </>
+      )}
     </div>
   )
 }

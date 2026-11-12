@@ -13,10 +13,10 @@ Built to be **light**: under 50 MB of memory when idle, under 100 MB at peak, ~0
 - **AI Usage** — choose between accounts, check plan limits, and see tokens and estimated API value for today, 7 days, or 30 days. Both AI modules are optional and read files already on your Mac.
 - **Timer** — a timer and a stopwatch with laps; the time left shows beside the notch, and a sound plays when it ends.
 - **Keep Awake** — keeps your Mac awake for a while, or by itself while AI agents work or a file converts; stops on a low battery.
-- **Module Menu** — tabs for your favorite modules, a menu with all of them, or a two-finger swipe.
-- **The PancakeNotch window** — settings, favorites, statistics (listening, usage, and the app's own memory use), short hands-on lessons, and a Help page with quick fixes.
+- **Home** — every module as a widget in the open notch, plus a clock, your battery and a statistic. Drag them into place, pick small, medium or large, and spread them over up to three pages. Tabs for your favorite modules and a two-finger swipe still work.
+- **The PancakeNotch window** — an overview, the Home editor, settings, favorites, statistics (listening, usage, and the app's own memory use), short hands-on lessons, and a Help page with quick fixes.
 
-Later: battery, calendar, AirPods/Bluetooth, and more.
+Later: calendar, AirPods/Bluetooth, and more.
 
 ## Requirements
 

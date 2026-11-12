@@ -8,12 +8,12 @@ import { EXAMPLES, SONGS, VIEWS, count, earOf, kindOf, nearLimit, spokenName, su
 import { usePlayer } from './player'
 import { useUsage } from './usage'
 import { AccountMenu, AccountPill, UsageEar, UsageView } from './usageViews'
-import { AgentsView, MenuView, NowPlayingView, ShelfView } from './views'
+import { AgentsView, HomeView, NowPlayingView, ShelfView } from './views'
 
 /* A working copy of the notch, hanging from the top edge of the box it's in (a pretend screen).
    Hover it to open it (tap on touch screens): a pretend, silent song plays, the Shelf holds a few
    examples, three pretend AI agents wait in Agents (one asks to be allowed), three pretend AI accounts
-   show their limits in AI Usage, and the Module Menu switches between them. Sizes are the app's own,
+   show their limits in AI Usage, and Home shows them all as widgets. Sizes are the app's own,
    in points. It tells its owner what's showing
    (`onStatus`), so the words beside it can follow along. */
 
@@ -236,7 +236,7 @@ export function LiveNotch({ active, onStatus }: Props) {
 
   const go = (next: Module) => {
     if (next === module) {
-      if (next === 'menu') go(lastModule) // the Menu button toggles the Menu
+      if (next === 'menu') go(lastModule) // the Home button toggles Home
       return
     }
     setDirection(VIEWS.indexOf(next) > VIEWS.indexOf(module) ? 1 : -1)
@@ -446,7 +446,7 @@ export function LiveNotch({ active, onStatus }: Props) {
                       </>
                     ) : (
                       <>
-                        <Tab label="All modules" icon="grid" on={module === 'menu'} onClick={() => go('menu')} />
+                        <Tab label="Home" icon="house" on={module === 'menu'} onClick={() => go('menu')} />
                         <span aria-hidden="true" className="mx-1 h-3.5 w-px flex-none bg-white/20" /* taste-skill-ignore: the app's own interface, drawn in the pretend screen */ />
                         <Tab label="Now Playing" icon="note" on={module === 'np'} onClick={() => go('np')} />
                         <Tab label="Shelf" icon="tray" on={module === 'shelf'} onClick={() => go('shelf')} />
@@ -523,7 +523,7 @@ export function LiveNotch({ active, onStatus }: Props) {
                     )}
                     {module === 'usage' && <UsageView usage={usage} onRange={usageActions.setRange} onEmail={usageActions.toggleEmail} narrow={EW < 420} />}
                     {module === 'menu' && (
-                      <MenuView current={lastModule} song={song.title} items={items.length} agents={summary(agents.threads)} usage={usageStatus(usage.account)} narrow={EW < 420} onGo={go} />
+                      <HomeView song={song} songIndex={player.song} items={items.length} agents={summary(agents.threads)} usage={usageStatus(usage.account)} narrow={EW < 420} onGo={go} />
                     )}
                   </m.div>
                 </div>

@@ -5,6 +5,7 @@ enum HelpTopic: String, CaseIterable {
     case firstLaunch = "first-launch"
     case notchNotShowing = "notch-not-showing"
     case besideTheNotch = "beside-the-notch"
+    case home
     case musicNotDetected = "music-not-detected"
     case musicControls = "music-controls"
     case soundBars = "sound-bars"

@@ -36,7 +36,7 @@ function describe({ open, module, item }: NotchStatus) {
   if (module === 'np') return 'Pause, skip or drag through the song, without leaving the app you’re in.'
   if (module === 'agents') return 'Every AI agent at work, in one list. When one asks for permission, answer it right here.'
   if (module === 'usage') return 'How much of your Claude and Codex limits are left, and the tokens you’ve used, for each account. Pick one, or all of them.'
-  if (module === 'menu') return 'The Module Menu holds every module. Your favorites get a tab of their own.'
+  if (module === 'menu') return 'Home shows every module as a widget. Click one to open it, or arrange them however you like.'
   if (item === 'text') return 'Notes open right in the notch, to read, change or copy.'
   if (item) return 'Every item opens in place, to check it, copy it or take it off the Shelf.'
   return 'The Shelf keeps files, notes and links for later, even after a restart.'
