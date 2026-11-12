@@ -31,20 +31,20 @@ enum HomeSnapshot {
         let smalls: [HomeWidgetKind] = [.nowPlaying, .timer, .stopwatch, .agents, .aiUsage, .shelf, .keepAwake, .clock, .battery, .statistics]
         let mediums: [HomeWidgetKind] = smalls
         let larges: [HomeWidgetKind] = HomeWidgetKind.allCases.filter { $0.supports(.large) }
-        return [
-            home(layout, .default, modules: live(), intro: true),
-            home(layout, .default, modules: live()) { $0.beginHomeEditing() },
-            home(layout, HomeLayout(), modules: live()) { $0.beginHomeEditing() },
-            home(layout, .default, modules: [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 3)]),
-            home(layout, HomeLayout(), modules: live()),
-            home(layout, twoPages, modules: live()) { $0.showHomePage(1) },
-        ]
-            + pages(of: smalls, size: .small).map { home(layout, $0, modules: live()) }
-            + pages(of: smalls, size: .small).map { home(layout, $0, modules: empty()) }
-            + pages(of: mediums, size: .medium).map { home(layout, $0, modules: live()) }
-            + pages(of: mediums, size: .medium).map { home(layout, $0, modules: empty()) }
-            + pages(of: larges, size: .large).map { home(layout, $0, modules: live()) }
-            + pages(of: larges, size: .large).map { home(layout, $0, modules: empty()) }
+        // Appended step by step: one long `+` chain is too much for the macOS 15 runner's type checker.
+        var models: [NotchViewModel] = []
+        models.append(home(layout, .default, modules: live(), intro: true))
+        models.append(home(layout, .default, modules: live()) { $0.beginHomeEditing() })
+        models.append(home(layout, HomeLayout(), modules: live()) { $0.beginHomeEditing() })
+        models.append(home(layout, .default, modules: [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 3)]))
+        models.append(home(layout, HomeLayout(), modules: live()))
+        models.append(home(layout, twoPages, modules: live()) { $0.showHomePage(1) })
+        for (kinds, size) in [(smalls, HomeWidgetSize.small), (mediums, .medium), (larges, .large)] {
+            let layouts = pages(of: kinds, size: size)
+            for homeLayout in layouts { models.append(home(layout, homeLayout, modules: live())) }
+            for homeLayout in layouts { models.append(home(layout, homeLayout, modules: empty())) }
+        }
+        return models
     }
 
     private static func home(_ layout: NotchLayout, _ homeLayout: HomeLayout, modules: [any NotchModule],
