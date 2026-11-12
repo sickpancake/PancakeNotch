@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Small usage counters for the Home page. Stored only on this Mac, in `UserDefaults`.
+/// Small usage counters for the Overview page. Stored only on this Mac, in `UserDefaults`.
 @MainActor
 @Observable
 final class UsageStats {

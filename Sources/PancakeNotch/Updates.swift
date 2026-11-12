@@ -4,7 +4,7 @@ import os
 import Sparkle
 
 /// Automatic updates through Sparkle (ADR-0005). It checks once a day and asks before installing.
-/// A check that finds an update stays quiet: a dot on the menu bar icon, a card on Home and a menu
+/// A check that finds an update stays quiet: a dot on the menu bar icon, a card on Overview and a menu
 /// item. Sparkle's window opens only when the user clicks one of them (gentle reminders).
 ///
 /// Only released builds can update: the release pipeline writes the update-signing public key into

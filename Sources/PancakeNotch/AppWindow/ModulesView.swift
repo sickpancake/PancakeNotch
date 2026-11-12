@@ -134,11 +134,11 @@ private struct YourModulesCard: View {
         let order = String(localized: "Drag a module or use its arrows to reorder. Usually the first two that are active get the spots beside the notch; some modules have a set spot.")
         let favorites = switch navigation {
         case .tabsAndMenu:
-            String(localized: "Favorites (★) get a tab in the open notch and a big tile in the Module Menu.")
+            String(localized: "Favorites (★) get a tab beside the Home button in the open notch.")
         case .menu:
-            String(localized: "Favorites (★) get a big tile at the top of the Module Menu.")
+            String(localized: "Favorites (★) get a tab when the open notch shows Home and tabs (Notch settings).")
         case .tabs:
-            String(localized: "Every module has a tab right now, so favorites only matter with a Module Menu (Notch settings).")
+            String(localized: "Every module has a tab right now, so favorites only matter with Home and tabs (Notch settings).")
         }
         return "\(order) \(favorites)"
     }
@@ -159,8 +159,8 @@ private struct ModuleListRow: View {
         let info = AppContext.moduleInfo(moduleID)
         let rank = arrangement.rank(of: moduleID)
         let isOn = context.isEnabled(moduleID)
-        // Without a Module Menu every module is a tab: a star would change nothing.
-        let favoritesMatter = arrangement.navigation != .tabs
+        // Stars pick the tabs beside Home; with tabs only (all modules) or Home only (no tabs) they change nothing.
+        let favoritesMatter = arrangement.navigation == .tabsAndMenu
         HStack(spacing: 12) {
             // Up and down arrows, so the order can change without dragging (keyboard, Full Keyboard Access).
             VStack(spacing: 0) {

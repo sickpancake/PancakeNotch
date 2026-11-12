@@ -22,11 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Module ranking, favorites, ear sides and navigation, shared by the notch and the app window.
     private let arrangement = ModuleArrangement(defaults: .standard)
+    /// Home's widgets and options, shared by the notch and the editor in the app window (ADR-0042).
+    private let home = HomeSettings(defaults: .standard)
 
     /// Set `PANCAKENOTCH_DEBUG_STATE=compact|expanded` to pin the notch in that state (screenshots, design work).
     private lazy var notchController = NotchWindowController(
         initialState: ProcessInfo.processInfo.environment["PANCAKENOTCH_DEBUG_STATE"].flatMap(NotchState.init(rawValue:)),
-        arrangement: arrangement
+        arrangement: arrangement,
+        home: home
     )
 
     private let preferences = Preferences()
@@ -113,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stats: stats,
             progress: learnProgress,
             arrangement: arrangement,
+            home: home,
             shelfSettings: shelfSettings,
             shelfStore: shelfStore,
             nowPlayingSettings: nowPlayingSettings,
@@ -172,6 +176,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notchController.onModuleShown = { [weak self] moduleID in self?.statistics.recordModuleShown(moduleID) }
         notchController.openSettings = { [weak self] in self?.showSettings() }
+        notchController.openAppPage = { [weak self] page in
+            switch page {
+            case .homeEditor: self?.appWindow.show(section: .home)
+            case .modules: self?.appWindow.show(section: .modules)
+            case .statistics: self?.appWindow.show(section: .statistics)
+            }
+        }
+        notchController.homeExtras = HomeExtras.live(statistics: statistics, home: home, readPower: Self.readPower)
         observePreferences()
         seedShelfIfRequested()
         observeModules()
@@ -303,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// A second copy of what the real notch shows, on the same real data, for the live notch on Home.
+    /// A second copy of what the real notch shows, on the same real data, for the live notch on Overview.
     /// Each copy has its own open/selected state; items, the song and settings are shared.
     private func makeLiveModules() -> [any NotchModule] {
         var modules: [any NotchModule] = []
@@ -478,13 +490,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         }]
                     })
             }
+            // Home on its own sheet beside it ("notch-home.png"), so the main sheet stays sharp.
+            let url = URL(fileURLWithPath: path)
+            let homeURL = URL(fileURLWithPath: url.deletingPathExtension().path + "-home.png")
+            try NotchSnapshot.write(geometry: geometry, to: homeURL, includesStates: false) { HomeSnapshot.models(layout: $0) }
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }
         NSApp.terminate(nil)
     }
 
-    /// Now Playing and the Shelf together: both ears, the tabs, the Menu, the Shelf picked, "Menu only".
+    /// Now Playing and the Shelf together: both ears, the tabs, Home, the Shelf picked, "Home only".
     private static func moduleSnapshots(layout: NotchLayout) -> [NotchViewModel] {
         func model(_ state: NotchState, navigation: NotchNavigation = .tabsAndMenu, swapped: Bool = false,
                    shelf: any NotchModule = ShelfPreviewModule(), setUp: (NotchViewModel) -> Void = { _ in }) -> NotchViewModel {
@@ -510,7 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model(.compact, shelf: ShelfSnapshot.module(itemCount: 16)),
             model(.compact, swapped: true, shelf: ShelfSnapshot.module(itemCount: 20)),
             model(.expanded),
-            model(.expanded) { $0.toggleMenu() },
+            model(.expanded) { $0.toggleHome() },
             model(.expanded) { $0.select("shelf") },
             model(.expanded, navigation: .tabs) { $0.select("shelf") },
             model(.expanded, navigation: .menu),

@@ -138,6 +138,7 @@ struct NotchSettingsView: View {
     var body: some View {
         @Bindable var preferences = context.preferences
         @Bindable var arrangement = context.arrangement
+        @Bindable var home = context.home
         AppPage(
             title: String(localized: "Notch"),
             subtitle: String(localized: "How the notch reacts to your pointer. Try your changes right here.")
@@ -191,12 +192,24 @@ struct NotchSettingsView: View {
                     MonochromeSegmented(
                         title: String(localized: "In the open notch, show"),
                         options: [
-                            (.tabsAndMenu, String(localized: "Menu and tabs")),
+                            (.tabsAndMenu, String(localized: "Home and tabs")),
                             (.tabs, String(localized: "Tabs")),
-                            (.menu, String(localized: "Menu")),
+                            (.menu, String(localized: "Home", comment: "Notch settings: only the Home button, no tabs")),
                         ],
                         selection: $arrangement.navigation
                     )
+                }
+                SettingsRow(
+                    title: String(localized: "When the notch opens, show"),
+                    subtitle: openingHint(home.opening, homeIsOff: arrangement.navigation == .tabs)
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "When the notch opens, show"),
+                        options: HomeOpening.allCases.map { ($0, $0.title) },
+                        selection: $home.opening
+                    )
+                    .disabled(arrangement.navigation == .tabs)
+                    .opacity(arrangement.navigation == .tabs ? 0.4 : 1)
                 }
                 SettingsRow(
                     title: String(localized: "Order and favorites"),
@@ -337,11 +350,21 @@ private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
 private func navigationHint(_ navigation: NotchNavigation) -> String {
     switch navigation {
     case .tabsAndMenu:
-        String(localized: "A Module Menu button, then a tab for each favorite.")
+        String(localized: "A Home button, then a tab for each favorite.")
     case .tabs:
-        String(localized: "A tab for every module, one click apart.")
+        String(localized: "A tab for every module, one click apart. No Home.")
     case .menu:
-        String(localized: "Just the module's name: click it for the Module Menu. The simplest look.")
+        String(localized: "Just the module's name: click it for Home. The simplest look.")
+    }
+}
+
+private func openingHint(_ opening: HomeOpening, homeIsOff: Bool) -> String {
+    if homeIsOff { return String(localized: "Home needs Home and tabs, or Home, above.") }
+    return switch opening {
+    case .lastModule:
+        String(localized: "The module you used last. Something that needs you still comes first.")
+    case .home:
+        String(localized: "Your widgets. Something that needs you still comes first.")
     }
 }
 
@@ -462,7 +485,7 @@ struct KeyboardSettingsView: View {
             SettingsCard(header: String(localized: "In this window")) {
                 SettingsRow(
                     title: String(localized: "Jump to a page"),
-                    subtitle: String(localized: "Home, Modules, Learn, Statistics, General, Notch, Keyboard, Help, About, in sidebar order.")
+                    subtitle: String(localized: "Overview, Modules, Home, Learn, Statistics, General, Notch, Keyboard, Help, About, in sidebar order.")
                 ) {
                     KeyCombo(keys: ["⌘", "1 – \(AppSection.allCases.count)"])
                 }

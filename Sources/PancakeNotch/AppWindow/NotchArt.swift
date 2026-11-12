@@ -97,6 +97,8 @@ struct NotchStage: View {
     var screenWidth: CGFloat = 560
     /// Told when the preview opens, shrinks or closes (lessons).
     var onStateChange: ((NotchState, _ byClick: Bool) -> Void)?
+    /// Home came up, or a widget opened its module (the Home lesson).
+    var onHomeEvent: ((NotchHomeEvent) -> Void)?
     /// Opens the preview on appearing (off-screen snapshots).
     var startState: NotchState?
     /// "Live" or "Practice" in the bottom corner; none where it's obvious (the welcome).
@@ -120,6 +122,7 @@ struct NotchStage: View {
                 previewState = state
                 onStateChange?(state, byClick)
             },
+            onHomeEvent: onHomeEvent,
             startState: startState
         )
         .opacity(isActive ? 1 : 0.4)

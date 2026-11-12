@@ -14,11 +14,11 @@ import TimerCore
 @MainActor
 @Observable
 final class AppNavigation {
-    var section: AppSection = .home
+    var section: AppSection = .overview
     /// The lesson shown on Learn; other pages pick one before switching there.
     var lesson: LessonID = .basics
     /// Where the window goes when the welcome ends; Home unless the welcome asked for Learn.
-    var sectionAfterWelcome: AppSection = .home
+    var sectionAfterWelcome: AppSection = .overview
 
     /// Opens a lesson on Learn.
     func open(_ lesson: LessonID) {
@@ -37,6 +37,8 @@ final class AppContext {
     let progress: LearnProgress
     /// Module ranking, favorites, ear sides and how the open notch moves between modules.
     let arrangement: ModuleArrangement
+    /// Home's widgets and options, shared with the real notch (ADR-0042).
+    let home: HomeSettings
     let shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
     let nowPlayingSettings: NowPlayingSettings
@@ -69,6 +71,7 @@ final class AppContext {
         stats: UsageStats,
         progress: LearnProgress,
         arrangement: ModuleArrangement,
+        home: HomeSettings,
         shelfSettings: ShelfSettings,
         shelfStore: ShelfStore,
         nowPlayingSettings: NowPlayingSettings,
@@ -91,6 +94,7 @@ final class AppContext {
         self.stats = stats
         self.progress = progress
         self.arrangement = arrangement
+        self.home = home
         self.shelfSettings = shelfSettings
         self.shelfStore = shelfStore
         self.nowPlayingSettings = nowPlayingSettings

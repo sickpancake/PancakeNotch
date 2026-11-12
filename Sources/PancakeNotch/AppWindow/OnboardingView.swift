@@ -410,7 +410,7 @@ struct OnboardingView: View {
 private struct SidebarPeek: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            row(String(localized: "Home"), "house")
+            row(String(localized: "Overview"), "rectangle.3.group")
             row(String(localized: "Modules"), "square.grid.2x2")
             row(String(localized: "Learn"), "graduationcap", highlighted: true)
             row(String(localized: "General"), "gearshape")

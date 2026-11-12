@@ -124,12 +124,14 @@ extension AppWindowController {
         let timers = TimerCenter()
         let keepAwakeSettings = KeepAwakeSettings(defaults: defaults)
         let keepAwake = KeepAwakeCenter(settings: keepAwakeSettings, isPractice: true)
+        let home = HomeSettings()
         let context = AppContext(
             preferences: preferences,
             shortcuts: noShortcut,
             stats: stats,
             progress: progress,
             arrangement: arrangement,
+            home: home,
             shelfSettings: shelfSettings,
             shelfStore: shelfStore,
             nowPlayingSettings: nowPlayingSettings,
@@ -155,7 +157,7 @@ extension AppWindowController {
         func render(_ name: String, section: AppSection, lesson: LessonID = .basics, shortcuts: ShortcutController = noShortcut,
                     size: CGSize = AppWindowView.defaultSize, settle: TimeInterval = 0.3) throws {
             let pageContext = shortcuts === noShortcut ? context : AppContext(
-                preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement,
+                preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement, home: home,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
                 usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
@@ -187,7 +189,8 @@ extension AppWindowController {
         for section in AppSection.allCases {
             try render(section.rawValue, section: section)
         }
-        try render("home-small", section: .home, size: AppWindowView.minimumSize)
+        try render("overview-small", section: .overview, size: AppWindowView.minimumSize)
+        try render("home-long", section: .home, size: CGSize(width: 1000, height: 1700))
         try render("learn-shelf", section: .learn, lesson: .shelf)
         try render("learn-nowplaying", section: .learn, lesson: .nowPlaying)
         try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
@@ -275,7 +278,7 @@ extension AppWindowController {
         // The welcome's song check while nothing plays, and the pages in other update states.
         func variant(nowPlaying: NowPlayingCenter = nowPlaying, updates: Updates = updates) -> AppContext {
             AppContext(
-                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement,
+                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement, home: home,
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
                 usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
@@ -285,7 +288,7 @@ extension AppWindowController {
         let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))
         try render("onboarding-music-waiting", rootView: OnboardingView(context: waiting, step: .music).appWindowStyle())
         let pending = variant(updates: Updates(snapshotPendingVersion: "0.2.0", lastCheck: Date()))
-        try render("home-update", rootView: AppWindowView(context: pending))
+        try render("overview-update", rootView: AppWindowView(context: pending))
         let unbundled = variant(updates: Updates(bundle: Bundle(for: SnapshotWindow.self)))
         unbundled.navigation.section = .general
         try render("general-unbundled", rootView: AppWindowView(context: unbundled))
@@ -312,11 +315,11 @@ extension AppWindowController {
         try render("stage-live", rootView: live.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
 
         for lesson in LessonID.allCases { progress.markDone(lesson) }
-        try render("home-learned", section: .home)
+        try render("overview-learned", section: .overview)
         for lesson in LessonID.allCases { progress.reset(lesson) }
 
         preferences.notchEnabled = false
-        try render("home-off", section: .home)
+        try render("overview-off", section: .overview)
         preferences.notchEnabled = true
 
         // A saved shortcut, so Home shows key caps. Registering it may fail if it's taken; the
@@ -328,7 +331,7 @@ extension AppWindowController {
             defer { shortcutDefaults?.removePersistentDomain(forName: suite + ".shortcut") }
             if let shortcutDefaults {
                 let withShortcut = ShortcutController(defaults: shortcutDefaults) {}
-                try render("home-shortcut", section: .home, shortcuts: withShortcut)
+                try render("overview-shortcut", section: .overview, shortcuts: withShortcut)
                 try render("keyboard-shortcut", section: .keyboard, shortcuts: withShortcut)
                 try render("notch-long-shortcut", section: .notch, shortcuts: withShortcut, size: CGSize(width: 1000, height: 2000))
                 // Unregisters it: the system hot key mustn't outlive its controller.
