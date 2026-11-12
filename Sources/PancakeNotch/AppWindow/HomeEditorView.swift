@@ -21,6 +21,8 @@ struct HomeEditorView: View {
     @State private var note: String?
     @State private var noteTask: Task<Void, Never>?
     @State private var confirmsReset = false
+    /// The widget that has the keyboard (outlined); a click anywhere else on the page, or Esc, lets go.
+    @FocusState private var focusedWidget: HomeWidgetKind?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
 
@@ -43,6 +45,9 @@ struct HomeEditorView: View {
             }
             gallery
         }
+        // A click on anything that isn't a widget or a control ends editing the selected widget.
+        .contentShape(Rectangle())
+        .onTapGesture { focusedWidget = nil }
         .coordinateSpace(.named(Self.space))
         .overlay(alignment: .topLeading) { floatingWidget }
         .onAppear {
@@ -55,7 +60,9 @@ struct HomeEditorView: View {
             noteTask?.cancel()
         }
         // Escape, or the window going to the background, drops a drag without changing anything.
-        .onExitCommand { cancelDrag() }
+        .onExitCommand {
+            if drag != nil { cancelDrag() } else { focusedWidget = nil }
+        }
         .onChange(of: appearsActive) { _, active in if !active { cancelDrag() } }
         .onChange(of: Self.practiceKinds(for: context)) { _, kinds in practice.update(kinds) }
         .confirmationDialog(
@@ -205,7 +212,8 @@ struct HomeEditorView: View {
                         isDimmed: drag != nil,
                         isLive: appearsActive && drag == nil,
                         wiggles: !reduceMotion && appearsActive && drag == nil,
-                        actions: actions(for: placement)
+                        actions: actions(for: placement),
+                        focus: $focusedWidget
                     )
                     .frame(width: frame.width, height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
@@ -483,33 +491,41 @@ private struct EditableWidget: View {
     let isLive: Bool
     let wiggles: Bool
     let actions: HomeWidgetActions
-    @FocusState private var isFocused: Bool
+    /// The page's choice of widget with the keyboard.
+    var focus: FocusState<HomeWidgetKind?>.Binding
     @State private var isHovered = false
+    /// The size list is open: the size button stays while the pointer is over the list.
+    @State private var choosingSize = false
+
+    private var isFocused: Bool { focus.wrappedValue == placement.kind }
 
     var body: some View {
         let kind = placement.kind
         face
             .allowsHitTesting(false)
-            .overlay(alignment: .topLeading) { removeBadge.offset(x: -6, y: -6) }
+            // The outline first, so the remove badge and the size button sit on top of it.
+            .overlay {
+                RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius + 3, style: .continuous)
+                    .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 1.5)
+                    .padding(-3)
+                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .overlay(alignment: .bottomTrailing) {
                 // Only while pointed at or focused, so it doesn't cover the widget's words.
-                if kind.sizes.count > 1, isHovered || isFocused {
+                if kind.sizes.count > 1, isHovered || isFocused || choosingSize {
                     sizeControl.padding(5).transition(.opacity)
                 }
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 1.5)
-                    .padding(-3)
-                    .accessibilityHidden(true)
-            }
+            .overlay(alignment: .topLeading) { removeBadge.offset(x: -6, y: -6) }
             .modifier(Wiggle(isOn: wiggles, seed: kind.hashValue))
             .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
             .onHover { hovering in withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering } }
             .focusable()
-            .focused($isFocused)
+            .focused(focus, equals: kind)
             .focusEffectDisabled()
-            .onTapGesture { isFocused = true }
+            .onTapGesture { focus.wrappedValue = kind }
             .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .delete, .deleteForward]) { press in
                 switch press.key {
                 case .leftArrow: actions.nudge(.left)
@@ -561,24 +577,30 @@ private struct EditableWidget: View {
         .accessibilityHidden(true)
     }
 
+    /// S, M or L: opens the app's own drop-down list of the sizes this widget comes in.
     private var sizeControl: some View {
-        Menu {
-            ForEach(placement.kind.sizes, id: \.self) { size in
-                Toggle(size.title, isOn: Binding(get: { size == placement.size }, set: { if $0 { actions.resize(size) } }))
-            }
-        } label: {
+        Button { choosingSize.toggle() } label: {
             Text(placement.size.shortTitle)
                 .font(.system(size: 9.5, weight: .bold))
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 20, height: 16)
-                .background(Color(white: 0.24), in: Capsule())
+                .background(Color(white: choosingSize ? 0.36 : 0.24), in: Capsule())
+                .contentShape(Capsule())
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
+        .popover(isPresented: $choosingSize, arrowEdge: .bottom) {
+            DropdownList(
+                sections: [placement.kind.sizes.map { DropdownOption(value: $0, label: $0.title) }],
+                selection: placement.size,
+                width: 120
+            ) { size in
+                choosingSize = false
+                if size != placement.size { actions.resize(size) }
+            }
+        }
         .help(Text("Size"))
-        .accessibilityHidden(true)
+        .accessibilityHidden(true) // VoiceOver has the size actions on the widget itself.
     }
 
     @ViewBuilder private var menu: some View {
