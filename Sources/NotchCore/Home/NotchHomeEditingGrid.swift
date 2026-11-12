@@ -58,7 +58,7 @@ struct NotchHomeEditingGrid: View {
                 tile(original, frame: frame)
                     .modifier(HomeWiggle(isOn: model.isEditingHome && model.state == .expanded && model.showsHome
                                          && dragged == nil && model.isOnScreen && model.snapshotClock == nil,
-                                         seed: HomeWidgetKind.allCases.firstIndex(of: original.kind) ?? 0))
+                                         seed: WiggleMotion.seed(for: original.kind)))
                     .frame(width: frame.width, height: frame.height)
                     .scaleEffect(lifted && !reduceMotion ? 1.04 : 1)
                     .offset(x: lifted ? pointer.x - anchor.x : frame.minX,

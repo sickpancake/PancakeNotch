@@ -624,7 +624,7 @@ private struct EditableWidget: View {
                 }
             }
             .overlay(alignment: .topLeading) { removeBadge.offset(x: -6, y: -6) }
-            .modifier(Wiggle(isOn: wiggles, seed: WiggleMotion.seed(for: kind)))
+            .modifier(HomeWiggle(isOn: wiggles, seed: WiggleMotion.seed(for: kind)))
             .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
             .onHover { hovering in withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering } }
             // Leaving the page (or the widget going) closes the size list and forgets the pointer.

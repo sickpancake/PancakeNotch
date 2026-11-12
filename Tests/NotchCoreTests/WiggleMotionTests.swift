@@ -1,7 +1,7 @@
 import Foundation
-import NotchCore
+@testable import NotchCore
 import Testing
-@testable import PancakeNotch
+
 
 /// The editor's wiggle: it eases in and out, and is exactly level when it's off.
 struct WiggleMotionTests {
