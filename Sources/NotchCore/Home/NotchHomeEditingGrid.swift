@@ -28,6 +28,9 @@ struct NotchHomeEditingGrid: View {
                 HomeWidgetPicker(kinds: HomeWidgetKind.allCases.filter {
                     !model.home.layout.contains($0) && !resolver.isTurnedOff($0)
                 }, resolver: resolver, area: area, add: add, close: { model.showsHomePicker = false })
+                // Part of editing: a click between its choices doesn't finish.
+                .contentShape(Rectangle())
+                .onTapGesture {}
             } else {
                 canvas
             }
@@ -66,6 +69,8 @@ struct NotchHomeEditingGrid: View {
                     .opacity(lifted || placement.slot.page == page ? 1 : 0)
                     .allowsHitTesting(lifted || placement.slot.page == page)
                     .zIndex(lifted ? 2 : 0)
+                    // A click on a widget keeps editing (only gaps finish it); dragging moves it.
+                    .onTapGesture {}
                     .gesture(dragGesture(original, frame: frame))
                     .animation(lifted || reduceMotion ? nil : .snappy(duration: 0.25), value: placement)
                     .transaction { if lifted { $0.animation = nil } }

@@ -190,4 +190,15 @@ extension HomeReplayNotch {
         m.endHomeEditing()
         #expect(m.homePages[m.homePage] == 2)
     }
+
+    /// A click in the open notch's gaps (it reaches `tap`) and the Home button both finish editing; the
+    /// notch stays open on Home.
+    @Test func clickAwayAndHomeButtonFinishEditing() {
+        let m = model(); m.open(); m.beginHomeEditing()
+        m.tap()
+        #expect(!m.isEditingHome && m.showsHome && m.state == .expanded)
+        m.beginHomeEditing()
+        m.toggleHome()
+        #expect(!m.isEditingHome && m.showsHome && m.state == .expanded)
+    }
 }

@@ -249,6 +249,11 @@ public final class NotchViewModel {
 
     /// Opens or closes Home in the open notch. With no module to go back to, Home stays.
     public func toggleHome() {
+        // While editing, the Home button finishes editing and stays on Home.
+        if isEditingHome {
+            endHomeEditing()
+            return
+        }
         guard state == .expanded, homeIsAvailable, !isHeld else { return }
         let opening = !showsHome
         guard opening || selectedModule != nil else { return }
@@ -730,6 +735,11 @@ public final class NotchViewModel {
         cancelAttentionClose()
         guard state == .expanded else {
             open(focusing: moduleUnderPointer())
+            return
+        }
+        // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.
+        if isEditingHome {
+            endHomeEditing()
             return
         }
         guard !isHeld else { return }

@@ -100,13 +100,13 @@ struct HomeEditorView: View {
         HStack(spacing: 10) {
             pageTabs(pages)
             Spacer(minLength: 8)
-            Button { undo() } label: {
+            Button { focusedWidget = nil; undo() } label: {
                 Label(String(localized: "Undo"), systemImage: "arrow.uturn.backward")
             }
             .keyboardShortcut("z", modifiers: .command)
             .disabled(!history.canUndo)
             .help(Text("Undo (⌘Z)"))
-            Button { redo() } label: {
+            Button { focusedWidget = nil; redo() } label: {
                 Label(String(localized: "Redo"), systemImage: "arrow.uturn.forward")
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -139,7 +139,7 @@ struct HomeEditorView: View {
             ForEach(pages.pages, id: \.self) { index in
                 let isSelected = index == page
                 let isEmpty = home.layout.isPageEmpty(index)
-                Button { page = index } label: {
+                Button { focusedWidget = nil; page = index } label: {
                     Text("Page \(pages.number(of: index) ?? 1)")
                         .font(.app(size: 12.5, weight: .semibold))
                         .foregroundStyle(isSelected ? Color.black : AppPalette.primaryText.opacity(isEmpty ? 0.5 : 0.85))
@@ -158,7 +158,7 @@ struct HomeEditorView: View {
                 .transition(.opacity)
             }
             if pages.canAddPage {
-                Button { turn(to: .new) } label: {
+                Button { focusedWidget = nil; turn(to: .new) } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(AppPalette.primaryText.opacity(0.85))
@@ -447,6 +447,7 @@ struct HomeEditorView: View {
     }
 
     private func add(_ kind: HomeWidgetKind) {
+        focusedWidget = nil
         change { $0.adding(kind) }
         if let placed = home.layout.placement(of: kind) { page = placed.slot.page }
     }
@@ -465,6 +466,7 @@ struct HomeEditorView: View {
     }
 
     private func replace(with layout: HomeLayout) {
+        focusedWidget = nil
         change { _ in .success(layout) }
         page = home.layout.nonEmptyPages.first ?? 0
     }
