@@ -7,6 +7,7 @@ import ModuleShelf
 import ModuleTimer
 import NotchCore
 import NowPlayingCore
+import SwiftUI
 
 /// Home's states for the off-screen notch sheet (`PANCAKENOTCH_SNAPSHOT`, ADR-0042): the default layout,
 /// switched-off modules as ghosts, an empty Home, a second page, and every widget at every size with
@@ -15,6 +16,16 @@ import NowPlayingCore
 enum HomeSnapshot {
     /// A fixed time, so the pictures don't change between runs.
     static let clock = Date(timeIntervalSince1970: 1_794_390_060) // a Wednesday morning
+
+    static func pickerRows(layout: NotchLayout) -> [AnyView] {
+        let choices: [[HomeWidgetKind]] = [[.nowPlaying, .stopwatch, .battery, .statistics, .allModules, .clock], []]
+        return choices.map { kinds in
+            let model = home(layout, .default, modules: live())
+            let resolver = HomeWidgetResolver(modules: model.modules, arrangement: model.arrangement,
+                                              extras: model.homeExtras)
+            return HomeWidgetPickerSnapshot.view(model: model, kinds: kinds, resolver: resolver)
+        }
+    }
 
     static func models(layout: NotchLayout) -> [NotchViewModel] {
         let smalls: [HomeWidgetKind] = [.nowPlaying, .timer, .stopwatch, .agents, .aiUsage, .shelf, .keepAwake, .clock, .battery, .statistics]

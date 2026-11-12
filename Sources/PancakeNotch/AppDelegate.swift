@@ -480,20 +480,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func writeSnapshot(to path: String) {
         let geometry = currentGeometry() ?? .simulated(in: NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1512, height: 982))
         do {
-            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path)) { layout in
-                NowPlayingSnapshot.models(layout: layout) + Self.moduleSnapshots(layout: layout) + ShelfSnapshot.models(layout: layout)
-                    + AgentsSnapshot.models(layout: layout) + TimerSnapshot.models(layout: layout) { NowPlayingSnapshot.module() }
-                    + KeepAwakeSnapshot.models(layout: layout, others: { [NowPlayingSnapshot.module()] }, withTimer: {
+            try NotchSnapshot.write(geometry: geometry, to: URL(fileURLWithPath: path), moduleRows: { layout in
+                var rows = NowPlayingSnapshot.models(layout: layout)
+                rows += Self.moduleSnapshots(layout: layout)
+                rows += ShelfSnapshot.models(layout: layout)
+                rows += AgentsSnapshot.models(layout: layout)
+                rows += TimerSnapshot.models(layout: layout) { NowPlayingSnapshot.module() }
+                rows += KeepAwakeSnapshot.models(layout: layout, others: { [NowPlayingSnapshot.module()] }, withTimer: {
                         [NowPlayingSnapshot.module(), TimerSnapshot.module { center, clock in
                             center.startTimer(seconds: 25 * 60)
                             clock.advance(4 * 60 + 18)
                         }]
                     })
-            }
+                return rows
+            })
             // Home on its own sheet beside it ("notch-home.png"), so the main sheet stays sharp.
             let url = URL(fileURLWithPath: path)
             let homeURL = URL(fileURLWithPath: url.deletingPathExtension().path + "-home.png")
-            try NotchSnapshot.write(geometry: geometry, to: homeURL, includesStates: false) { HomeSnapshot.models(layout: $0) }
+            try NotchSnapshot.write(geometry: geometry, to: homeURL, includesStates: false,
+                                    additionalRows: { HomeSnapshot.pickerRows(layout: $0) },
+                                    moduleRows: { HomeSnapshot.models(layout: $0) })
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }

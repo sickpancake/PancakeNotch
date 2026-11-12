@@ -160,6 +160,12 @@ with a reading uses `HomeSmallFace` (symbol and caption on top, value below), a 
 A medium or large widget with a title row uses `HomeWidgetHeader` (symbol in a 14 pt column, name, optional
 trailing count), and "nothing here" text is a `HomeWidgetEmptyLine`, centred in the room under the title.
 
+The in-notch add picker (`HomeWidgetPicker`) fills the same grid area with a horizontal scrolling row,
+without scroll bars. Each button shows a still, non-interactive default-size widget preview and a 10.5 pt
+caption; its fill brightens from white 0.13 to 0.2 on hover, with shared press feedback. A 24 pt Back to Home
+round button stays at the right. When no choices remain, a centred 11 pt, white 0.5 line reads “Every widget
+is on Home”. The host owns insertion, Esc and the transition back to the grid.
+
 Keep widgets of one size looking alike:
 
 | | Small | Medium | Large |
