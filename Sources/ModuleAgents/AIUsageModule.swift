@@ -306,6 +306,12 @@ public final class AIUsageModule: NotchModule {
         focusedAccount = choices[(index + amount + choices.count) % choices.count]
     }
 
+    /// Another window took the keyboard (including PancakeNotch's own window, which the click and app
+    /// watchers don't see): the menu closes and stops holding the notch open.
+    public func keyFocusLost() {
+        closeMenu()
+    }
+
     /// A click elsewhere in the app window closes the menu in a practice notch, the way a click in
     /// another app closes it in the real one.
     public func clickedOutsidePreview() {

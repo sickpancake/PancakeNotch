@@ -641,6 +641,9 @@ private struct EditableWidget: View {
                     sizeControl.padding(5).transition(.opacity)
                 }
             }
+            // The widget's shape before the remove badge, which sits half outside it: a shape after the badge
+            // would cut off its outer half, and a click there would only let go of the widget.
+            .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
             .overlay(alignment: .topLeading) {
                 if isEditingShown { removeBadge.offset(x: -6, y: -6).transition(.opacity) }
             }
@@ -649,7 +652,6 @@ private struct EditableWidget: View {
                 if !shown { choosingSize = false; isHovered = false }
             }
             .modifier(HomeWiggle(isOn: wiggles, seed: WiggleMotion.seed(for: kind)))
-            .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
             .onHover { hovering in withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering } }
             // Leaving the page (or the widget going) closes the size list and forgets the pointer.
             .onDisappear { choosingSize = false; isHovered = false }

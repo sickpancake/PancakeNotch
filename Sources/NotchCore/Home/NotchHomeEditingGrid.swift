@@ -92,6 +92,9 @@ struct NotchHomeEditingGrid: View {
     private func tile(_ placement: HomePlacement, frame: CGRect) -> some View {
         face(placement, size: frame.size)
             .allowsHitTesting(false)
+            // The tile's own shape (for dragging) comes before the badges: they sit half outside the tile,
+            // and a shape after them would cut off their outer half, so a click there would finish editing.
+            .contentShape(Rectangle())
             .overlay(alignment: .topLeading) {
                 Button { edit { .success($0.removing(placement.kind)) } } label: {
                     Image(systemName: "minus").font(.system(size: 9, weight: .heavy))
@@ -118,7 +121,6 @@ struct NotchHomeEditingGrid: View {
                     .help(Text("Size"))
                 }
             }
-            .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(placement.kind.title))
             .accessibilityActions {

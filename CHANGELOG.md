@@ -7,7 +7,8 @@ so write them for people using the app: short, plain, no code talk.
 
 - **Hold anywhere below Home’s buttons to edit.** The bottom strip and side margins now work too, and holding a widget button won’t press it.
 - **A quieter Home editor.** Widget badges, size controls and outlines fade away when its window is inactive, and return when you come back.
-
+- **The whole remove badge works.** Clicking the edge of a widget's − badge removes it, instead of finishing editing.
+- **AI Usage's account menu closes when you switch windows,** including to the PancakeNotch window, so it no longer keeps the notch open.
 - **Paused music leaves room for Home.** With Last module, the notch opens on Home when your music is paused or nothing is playing. Playing music and things that need you still come first.
 - **Edit Home in the notch.** Press and hold a widget or gap to move, remove, resize or add widgets. Done, Esc or a click outside finishes; Edit beside Settings opens the full editor.
 - **Pages when you need them.** The Home editor shows pages with widgets. Use + after the page tabs to add one (up to three); an emptied page disappears.
