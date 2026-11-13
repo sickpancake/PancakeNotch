@@ -356,13 +356,12 @@ struct HomeEditorView: View {
         let available = HomeWidgetKind.allCases.filter { kind in kind.moduleID.map(context.isEnabled) ?? true }
         let kinds = available.filter { $0.matches(search: search) }
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                SectionLabel(title: String(localized: "Widgets"))
-                    .padding(.leading, 20)
-                Spacer(minLength: 8)
-                searchField(addable: kinds.filter { !home.layout.contains($0) })
-            }
-            Group {
+            SectionLabel(title: String(localized: "Widgets"))
+                .padding(.horizontal, 20)
+            searchField(addable: kinds.filter { !home.layout.contains($0) })
+            // New results cross-fade over the old ones in place: a fresh grid per result set, so widgets
+            // never slide from their old spot to a new one.
+            ZStack(alignment: .top) {
                 if kinds.isEmpty {
                     noMatches(available: available)
                         .transition(.opacity)
@@ -374,9 +373,9 @@ struct HomeEditorView: View {
                             }
                             .gesture(dragGesture(kind: kind, size: kind.defaultSize, origin: nil, fromGallery: true),
                                      including: home.layout.contains(kind) ? .none : .all)
-                            .transition(.opacity)
                         }
                     }
+                    .id(kinds)
                     .transition(.opacity)
                 }
             }
@@ -420,7 +419,7 @@ struct HomeEditorView: View {
             }
         }
         .padding(.horizontal, 10)
-        .frame(width: 220, height: 30)
+        .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
         .background(AppPalette.hover, in: .rect(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
             .strokeBorder(isSearching ? AppPalette.hairlineStrong : AppPalette.hairline))
