@@ -102,3 +102,103 @@ extension HomeReplayNotch {
         m.showHomePage(1); m.toggleHome(); m.toggleHome(); #expect(m.homePage == 0)
     }
 }
+
+
+extension HomeReplayNotch {
+    // Model paths: Settings(idle), Select, Open; targeted and waiting opens still win.
+    @Test(arguments: [true, false]) func idleLastModuleUsesHomeWhenAvailable(tabs: Bool) {
+        let m = model(), idle = WaitingModule("idle")
+        idle.isIdleForOpening = true
+        m.modules = [idle]
+        m.home.opening = .lastModule
+        m.arrangement.navigation = tabs ? .tabs : .tabsAndMenu
+        m.open()
+        #expect(m.showsHome == !tabs)
+        #expect(m.selectedModule?.moduleID == "idle")
+    }
+
+    @Test func focusAndWaitingBeatIdleFallback() {
+        let m = model(), idle = WaitingModule("idle"), active = WaitingModule("active")
+        idle.isIdleForOpening = true
+        active.wantsFocus = true
+        m.modules = [idle, active]
+        m.home.opening = .lastModule
+        m.open()
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "active")
+        m.close()
+        active.wantsFocus = false
+        active.waitsForYou = true
+        m.select("idle")
+        m.open()
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "active")
+        m.close()
+        m.open(focusing: "idle")
+        #expect(!m.showsHome)
+        #expect(m.selectedModule?.moduleID == "idle")
+    }
+}
+
+extension HomeReplayNotch {
+    @Test func editingHoldsAndStopsWidgets() {
+        let m = model(); m.open(); m.beginHomeEditing()
+        defer { m.endHomeEditing() }
+        #expect(m.isEditingHome && m.isHeld)
+        #expect(m.showsModuleBar)
+        #expect(!m.homeIsLive(onPage: 0))
+        m.hoverChanged(false)
+        #expect(m.state == .expanded)
+        m.openFromHome(.timer)
+        #expect(m.showsHome)
+        m.endHomeEditing()
+        #expect(!m.isHeld)
+    }
+    @Test func editingEndsAcrossLifecycle() {
+        let m = model()
+        m.open(); m.beginHomeEditing(); m.showsHomePicker = true; m.close()
+        #expect(!m.isEditingHome && !m.showsHomePicker)
+        m.open(); m.beginHomeEditing(); m.select("timer")
+        #expect(!m.isEditingHome && !m.showsHome)
+        m.toggleHome(); m.beginHomeEditing(); m.keyFocusLost()
+        #expect(!m.isEditingHome)
+        m.beginHomeEditing(); m.openForAttention(focusing: "timer")
+        #expect(!m.isEditingHome && !m.showsHome)
+        m.toggleHome(); m.beginHomeEditing(); m.isOnScreen = false
+        #expect(!m.isEditingHome)
+    }
+    @Test func editingEscapeAndEmptyPage() {
+        let m = model(); m.home.layout = HomeLayout(); m.open(); m.beginHomeEditing()
+        #expect(m.homePages == [0])
+        let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                     windowNumber: 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                                     isARepeat: false, keyCode: 53)!
+        #expect(m.handleKey(escape))
+        #expect(!m.isEditingHome && m.showsHome)
+    }
+}
+
+extension HomeReplayNotch {
+    @Test func editingPreservesSparsePageAndSaves() {
+        let m = model()
+        m.home.layout = HomeLayout(placements: [.init(kind: .clock, size: .small, slot: .init(page: 2, column: 0, row: 0))])
+        m.open(); m.beginHomeEditing()
+        #expect(m.homePages[m.homePage] == 2)
+        var history = HomeHistory()
+        #expect(m.home.edit(&history) { $0.resizing(.clock, to: .medium) } == nil)
+        #expect(m.home.layout.placement(of: .clock)?.size == .medium)
+        m.endHomeEditing()
+        #expect(m.homePages[m.homePage] == 2)
+    }
+
+    /// A click in the open notch's gaps (it reaches `tap`) and the Home button both finish editing; the
+    /// notch stays open on Home.
+    @Test func clickAwayAndHomeButtonFinishEditing() {
+        let m = model(); m.open(); m.beginHomeEditing()
+        m.tap()
+        #expect(!m.isEditingHome && m.showsHome && m.state == .expanded)
+        m.beginHomeEditing()
+        m.toggleHome()
+        #expect(!m.isEditingHome && m.showsHome && m.state == .expanded)
+    }
+}

@@ -21,7 +21,7 @@ struct KeepAwakeWidget: View {
         let status = KeepAwakeStatus(center)
         switch size {
         case .small, .large:
-            HomeSmallFace(caption: center.isHolding ? status.detail : module.title) {
+            HomeSmallFace(caption: Self.smallCaption(center)) {
                 Image(systemName: KeepAwakeDial.symbol(center))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(center.isHolding ? 0.9 : 0.6))
@@ -36,10 +36,11 @@ struct KeepAwakeWidget: View {
             .accessibilityLabel(Text(KeepAwakeStatus.spoken(center)))
         case .medium:
             HStack(spacing: 10) {
-                KeepAwakeDial(module: module, size: 34, lineWidth: 3, isLive: isLive)
+                // The same 30 pt ring as the Timer, AI Usage and Battery widgets.
+                KeepAwakeDial(module: module, size: 30, lineWidth: 3, cupScale: 0.38, isLive: isLive)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(center.isHolding ? String(localized: "On", comment: "Keep Awake widget") : String(localized: "Off", comment: "Keep Awake widget"))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 19, weight: .semibold))
                         .contentTransition(.opacity)
                     Text(status.kind == .off ? module.title : status.detail)
                         .font(.system(size: 10, weight: .medium))
@@ -55,6 +56,14 @@ struct KeepAwakeWidget: View {
             .animation(.easeInOut(duration: 0.2), value: center.isHolding)
             .frame(maxHeight: .infinity)
         }
+    }
+
+    /// Small's caption: when a timed session ends ("3:13 AM"), short enough for the cell; nothing otherwise,
+    /// since the cup already says what it is and On or Off says the rest.
+    @MainActor
+    static func smallCaption(_ center: KeepAwakeCenter) -> String? {
+        guard center.isHolding, let end = center.session?.end else { return nil }
+        return KeepAwakeText.time(end)
     }
 
     /// The same rules as the open page: Turn Off while on; Turn On, dimmed with the reason on a low battery.

@@ -45,6 +45,7 @@ public final class NotchViewModel {
     /// The open notch shows Home (the widget grid) instead of a module (ADR-0042).
     public private(set) var showsHome = false {
         didSet {
+            if !showsHome { endHomeEditing(); resetHomeMotion() }
             guard showsHome, !oldValue else { return }
             homeVisit &+= 1
             onHomeEvent?(.opened)
@@ -64,6 +65,36 @@ public final class NotchViewModel {
     /// The last page change went to a later page, for the slide.
     public private(set) var homePageForward = true
     @ObservationIgnored private var homeScroll = HomePageScrollTracker()
+    @ObservationIgnored private var homeMotion = HomeScrollMotion()
+    private(set) var homeScrollPosition: CGFloat?
+    private(set) var homeMovingPages: [Int] = []
+    private(set) var homeAnimationOrigin: Int?
+    @ObservationIgnored private var homeMotionGeneration = 0
+
+    var homeRenderedPages: [Int] {
+        homeMovingPages.isEmpty ? [homePage] : homeMovingPages.filter { homePages.indices.contains($0) }
+    }
+
+    private func resetHomeMotion() {
+        homeMotionGeneration &+= 1
+        homeMotion = HomeScrollMotion()
+        homeScrollPosition = nil
+        homeMovingPages = []
+        homeAnimationOrigin = nil
+    }
+
+    private func settleHome(to index: Int) {
+        homeMotion.end()
+        homeMotionGeneration &+= 1
+        let generation = homeMotionGeneration
+        withAnimation(.smooth(duration: 0.28, extraBounce: 0), completionCriteria: .removed) {
+            chosenHomePage = index
+            homeScrollPosition = CGFloat(index)
+        } completion: { [weak self] in
+            guard let self, self.homeMotionGeneration == generation else { return }
+            self.resetHomeMotion()
+        }
+    }
     /// Draws the Battery and Statistics widgets (the app has their data). `nil` shows plain tiles.
     @ObservationIgnored public var homeExtras: HomeExtraWidgets?
     /// Set for off-screen snapshots: Home's widgets show this time and never tick.
@@ -160,7 +191,7 @@ public final class NotchViewModel {
     /// notch rests (measured). Every way out of Closed wakes them before it animates.
     public private(set) var earsAsleep = false
     /// The window is on screen (set by the window controller): hidden, nothing in it needs to tick.
-    public var isOnScreen = true
+    public var isOnScreen = true { didSet { if !isOnScreen { endHomeEditing(); resetHomeMotion() } } }
     @ObservationIgnored private var swipe = NotchSwipeTracker()
 
     public init(
@@ -225,6 +256,7 @@ public final class NotchViewModel {
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
     /// picks the module itself (`open`).
     public func select(_ moduleID: String) {
+        endHomeEditing()
         guard let target = modules.first(where: { $0.moduleID == moduleID }) else { return }
         cancelAttentionClose()
         let previous = selectedModule
@@ -247,6 +279,11 @@ public final class NotchViewModel {
 
     /// Opens or closes Home in the open notch. With no module to go back to, Home stays.
     public func toggleHome() {
+        // While editing, the Home button finishes editing and stays on Home.
+        if isEditingHome {
+            endHomeEditing()
+            return
+        }
         guard state == .expanded, homeIsAvailable, !isHeld else { return }
         let opening = !showsHome
         guard opening || selectedModule != nil else { return }
@@ -281,12 +318,63 @@ public final class NotchViewModel {
     /// Whether the widgets on this layout page may tick: Home shows in the open notch, on screen, and this
     /// is the page that shows (one sliding away stops at once). Never in a snapshot.
     public func homeIsLive(onPage page: Int) -> Bool {
-        guard state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
+        guard !isEditingHome, state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
         return homePages.indices.contains(homePage) && homePages[homePage] == page
     }
 
     /// Home's pages that hold something, in order: the ones the open notch scrolls through.
-    public var homePages: [Int] { homeLayout.nonEmptyPages }
+    public var homePages: [Int] {
+        let pages = homeLayout.nonEmptyPages
+        guard isEditingHome else { return pages }
+        if let free = (0..<HomeLayout.pageCount).first(where: { !pages.contains($0) }) {
+            return (pages + [free]).sorted()
+        }
+        return pages
+    }
+
+    public private(set) var isEditingHome = false
+    public var showsHomePicker = false
+    @ObservationIgnored private var homeOutsideLocal: Any?
+    @ObservationIgnored private var homeOutsideGlobal: Any?
+
+    public func beginHomeEditing() {
+        guard state == .expanded, showsHome, isOnScreen, !isEditingHome else { return }
+        resetHomeMotion()
+        let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
+        cancelAttentionClose()
+        hoverTask?.cancel()
+        isEditingHome = true
+        chosenHomePage = homePages.firstIndex(of: shownPage) ?? 0
+        home.hasSeenIntro = true
+        requestKeyFocus?()
+        // Snapshot models never install native input observers.
+        guard snapshotClock == nil else { return }
+        homeOutsideLocal = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.homeOutsideClick()
+            return event
+        }
+        homeOutsideGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.homeOutsideClick()
+        }
+    }
+
+    private func homeOutsideClick() {
+        if !layout.outline(for: state, contains: pointerLocation()) { endHomeEditing() }
+    }
+
+    public func endHomeEditing() {
+        guard isEditingHome else { return }
+        let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
+        isEditingHome = false
+        chosenHomePage = homePages.firstIndex(of: shownPage) ?? 0
+        showsHomePicker = false
+        if let monitor = homeOutsideLocal { NSEvent.removeMonitor(monitor) }
+        if let monitor = homeOutsideGlobal { NSEvent.removeMonitor(monitor) }
+        homeOutsideLocal = nil
+        homeOutsideGlobal = nil
+        releaseKeyFocus?()
+        holdReleased()
+    }
 
     /// Practice notches (Settings, Learn) leave out the widgets of modules they don't have, instead of
     /// showing them as turned off.
@@ -306,12 +394,21 @@ public final class NotchViewModel {
         guard showsHome, homePages.indices.contains(index), index != homePage else { return }
         cancelAttentionClose()
         homePageForward = index > homePage
-        withAnimation(Self.switchAnimation) { chosenHomePage = index }
+        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || snapshotClock != nil {
+            resetHomeMotion()
+            withAnimation(Self.switchAnimation) { chosenHomePage = index }
+        } else {
+            if homeScrollPosition == nil { homeScrollPosition = CGFloat(homePage) }
+            homeAnimationOrigin = homePage
+            homeMovingPages = [homePage, index]
+            settleHome(to: index)
+        }
     }
 
     /// A click on a widget, away from its buttons: opens what it belongs to. Stopwatch opens the Timer,
     /// Statistics the app window's Statistics page; Clock and Battery do nothing.
     public func openFromHome(_ kind: HomeWidgetKind) {
+        guard !isEditingHome else { return }
         if kind == .statistics {
             openAppPage?(.statistics)
             return
@@ -332,7 +429,7 @@ public final class NotchViewModel {
     /// Whether the tabs and Home button show: several modules or Home to go to, and nothing holding the
     /// current module open.
     public var showsModuleBar: Bool {
-        (modules.count > 1 || homeIsAvailable) && !isHeld
+        (modules.count > 1 || homeIsAvailable) && (isEditingHome || !isHeld)
     }
 
     /// Moves to the next or previous module by ranking (two-finger swipe).
@@ -377,8 +474,10 @@ public final class NotchViewModel {
     /// Picks what to open on: the module asked for (its ear or strip was pointed at, a drag), else the
     /// first by ranking that waits for you (an agent's question, a finished timer), else Home when the
     /// person chose it in Settings, else the first module that wants it (music playing), otherwise the one
-    /// used last; Home when there's no module at all (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
+    /// used last, or Home if that module is idle and Home is available. Home also opens when there are
+    /// no modules (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
     private func chooseModuleForOpening(_ moduleID: String?) {
+        resetHomeMotion()
         showsHome = false
         chosenHomePage = 0
         let ranked = rankedModules
@@ -390,20 +489,69 @@ public final class NotchViewModel {
             showsHome = true
         } else if let focused = ranked.first(where: { $0.wantsFocus }) {
             selectedID = focused.moduleID
+        } else if homeIsAvailable, selectedModule?.isIdleForOpening == true {
+            showsHome = true
         }
     }
 
     /// Scrolling up or down on Home moves one whole page per gesture (or per wheel step).
     private func scrollHome(_ event: NSEvent) -> Bool {
-        guard let step = homeScroll.handle(
-            phase: NotchSwipeTracker.Phase(event),
-            deltaY: event.scrollingDeltaY,
-            deltaX: event.scrollingDeltaX,
-            isPrecise: event.hasPreciseScrollingDeltas,
-            time: event.timestamp
-        ) else { return false }
-        showHomePage(homePage + step)
+        let phase = NotchSwipeTracker.Phase(event)
+        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !event.hasPreciseScrollingDeltas {
+            guard let step = homeScroll.handle(phase: phase, deltaY: event.scrollingDeltaY,
+                deltaX: event.scrollingDeltaX, isPrecise: event.hasPreciseScrollingDeltas,
+                time: event.timestamp) else { return false }
+            showHomePage(homePage + step)
+            return true
+        }
+        return handleHomePreciseScroll(phase: phase, deltaY: event.scrollingDeltaY,
+            deltaX: event.scrollingDeltaX, time: event.timestamp, momentum: !event.momentumPhase.isEmpty)
+    }
+
+    @discardableResult
+    func handleHomePreciseScroll(phase: NotchSwipeTracker.Phase, deltaY: CGFloat, deltaX: CGFloat,
+                                 time: TimeInterval, momentum: Bool = false) -> Bool {
+        // Native momentum belongs to the completed gesture, never to the spring.
+        if momentum {
+            if homeMotion.active { finishHomeScroll(time: time) }
+            return true
+        }
+        if phase == .began {
+            cancelAttentionClose()
+            resetHomeMotion()
+            homeMotion.begin(page: homePage, time: time)
+        }
+        if phase == .ended {
+            finishHomeScroll(time: time)
+            return true
+        }
+        guard phase == .began || phase == .changed, homeMotion.active else { return false }
+        homeMotion.move(y: deltaY, x: deltaX, time: time)
+        guard homeMotion.vertical else { return false }
+        let height = HomeWidgetMetrics.pageStride(in: HomeWidgetMetrics.gridArea(in: layout))
+        let position = homeMotion.position(height: height, count: homePages.count)
+        let direction = position >= CGFloat(homeMotion.origin) ? 1 : -1
+        let lastPage = max(0, homePages.count - 1)
+        let neighbour = min(lastPage, max(0, homeMotion.origin + direction))
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            homeScrollPosition = position
+            homeMovingPages = Array(Set([homeMotion.origin, neighbour])).sorted()
+            chosenHomePage = homeMotion.target(height: height, count: homePages.count, time: time)
+        }
         return true
+    }
+
+    private func finishHomeScroll(time: TimeInterval) {
+        guard homeMotion.active else { return }
+        let target = homeMotion.target(height: HomeWidgetMetrics.pageStride(in: HomeWidgetMetrics.gridArea(in: layout)),
+                                       count: homePages.count, time: time)
+        if homeMovingPages.isEmpty { resetHomeMotion(); return }
+        let revealed = homeMovingPages.first(where: { $0 != homeMotion.origin }) ?? homeMotion.origin
+        let neighbour = target == homeMotion.origin ? revealed : target
+        homeMovingPages = Array(Set([homeMotion.origin, neighbour])).sorted()
+        settleHome(to: target)
     }
 
     /// The module that takes this drag: the current one if it does, else the first by ranking.
@@ -605,6 +753,7 @@ public final class NotchViewModel {
 
     /// The panel stopped being the key window: key presses go elsewhere now.
     public func keyFocusLost() {
+        endHomeEditing()
         modules.forEach { $0.keyFocusLost() }
     }
 
@@ -627,6 +776,7 @@ public final class NotchViewModel {
     /// or closes.
     public func handleKey(_ event: NSEvent) -> Bool {
         cancelAttentionClose()
+        if isEditingHome, event.keyCode == 53 { endHomeEditing(); return true }
         if !showsHome, selectedModule?.handleKey(event) == true { return true }
         if showsHome, event.keyCode == 125 || event.keyCode == 126 { // Down and Up arrows: Home's pages
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
@@ -647,7 +797,7 @@ public final class NotchViewModel {
     }
 
     /// True while any module needs the notch to stay open.
-    var isHeld: Bool { modules.contains { $0.holdsOpen } }
+    var isHeld: Bool { isEditingHome || modules.contains { $0.holdsOpen } }
 
     private func closeIfPointerOutside() {
         guard !layout.outline(for: state, contains: pointerLocation()) else { return }
@@ -672,6 +822,11 @@ public final class NotchViewModel {
         cancelAttentionClose()
         guard state == .expanded else {
             open(focusing: moduleUnderPointer())
+            return
+        }
+        // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.
+        if isEditingHome {
+            endHomeEditing()
             return
         }
         guard !isHeld else { return }
@@ -733,6 +888,7 @@ public final class NotchViewModel {
     /// the window controller (`presentAttention`), or right here in a preview.
     public func requestAttention(from module: any NotchModule, revealsInFullScreen: Bool) {
         guard modules.contains(where: { $0 === module }) else { return }
+        if isEditingHome { endHomeEditing(); select(module.moduleID) }
         if let presentAttention {
             presentAttention(module.moduleID, revealsInFullScreen)
         } else {
@@ -755,6 +911,11 @@ public final class NotchViewModel {
     /// Opens on `moduleID` for an alert. Left untouched for `attentionCloseDelay` with the pointer away,
     /// it closes again; the module's ear keeps showing what happened. Does nothing while already open.
     public func openForAttention(focusing moduleID: String) {
+        if isEditingHome {
+            endHomeEditing()
+            select(moduleID)
+            return
+        }
         guard !isPinned, state != .expanded else { return }
         open(focusing: moduleID)
         guard state == .expanded else { return }
@@ -929,6 +1090,7 @@ public final class NotchViewModel {
     }
 
     private func leftExpanded() {
+        endHomeEditing()
         releaseKeyFocus?()
         if !showsHome { selectedModule?.notchDidClose() }
         showsHome = false

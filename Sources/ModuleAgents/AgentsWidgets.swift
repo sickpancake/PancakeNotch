@@ -72,16 +72,11 @@ struct AgentsWidget: View {
     }
 
     private var header: some View {
-        Label(module.title, systemImage: module.symbol)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.85))
+        HomeWidgetHeader(symbol: module.symbol, title: module.title)
     }
 
     private var empty: some View {
-        Text("No agents running")
-            .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.5))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        HomeWidgetEmptyLine(String(localized: "No agents running"))
     }
 
     /// Deny works from here; Review opens Agents, where the whole request and Allow are.
@@ -148,9 +143,9 @@ struct AIUsageWidget: View {
             switch size {
             case .small, .large:
                 HomeSmallFace(caption: reading.limit.label) {
-                    LimitRing(left: left / 100, size: 14)
+                    LimitRing(left: left / 100, size: 13)
                 } value: {
-                    percent(left, size: size == .small ? 16 : 19)
+                    percent(left, size: 17)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(AIUsageText.spoken(reading, now: now)))
@@ -158,7 +153,7 @@ struct AIUsageWidget: View {
                 HStack(spacing: 10) {
                     LimitRing(left: left / 100, size: 30)
                     VStack(alignment: .leading, spacing: 1) {
-                        percent(left, size: 17)
+                        percent(left, size: 19)
                         Text([reading.limit.label, AIUsageText.reset(reading.limit.resetsAt, now: now)].compactMap { $0 }
                             .joined(separator: " · "))
                             .font(.system(size: 10, weight: .medium))
@@ -172,12 +167,20 @@ struct AIUsageWidget: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(AIUsageText.spoken(reading, now: now)))
             }
-        } else {
+        } else if size == .small {
             HomeWidgetTile(symbol: module.symbol, title: module.title,
                            line: module.center.accounts.isEmpty
-                               ? (size == .small ? String(localized: "No accounts", comment: "Home widget: AI Usage found no accounts")
-                                  : String(localized: "No accounts found", comment: "Module Menu status"))
+                               ? String(localized: "No accounts", comment: "Home widget: AI Usage found no accounts")
                                : String(localized: "No limits yet", comment: "Home widget: AI Usage has no limits to show"))
+        } else {
+            // The same title row and centred line as the other widgets with nothing to show.
+            VStack(alignment: .leading, spacing: 4) {
+                HomeWidgetHeader(symbol: module.symbol, title: module.title)
+                HomeWidgetEmptyLine(module.center.accounts.isEmpty
+                    ? String(localized: "No accounts found", comment: "Module Menu status")
+                    : String(localized: "No limits yet", comment: "Home widget: AI Usage has no limits to show"))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 

@@ -10,54 +10,87 @@ import SwiftUI
 /// never land in the Shelf or anywhere outside the editor.
 struct HomeEditorView: View {
     let context: AppContext
+    @State private var isPageVisible = false
     @State private var practice = PracticeSet()
     @State private var history = HomeHistory()
     @State private var page = 0
     @State private var drag: HomeEditorDrag?
+    /// Where the pointer is while dragging. Kept apart from `drag` so a move only redraws the floating
+    /// widget, not the whole page.
+    @State private var pointer = DragPointer()
     /// Where a cancelled drag started: the rest of that same gesture is ignored, so it can't come back or land.
     @State private var cancelledDragStart: CGPoint?
     @State private var gridFrame: CGRect = .zero
-    @State private var tabFrames: [Int: CGRect] = [:]
+    @State private var tabFrames: [PageTab: CGRect] = [:]
     @State private var note: String?
     @State private var noteTask: Task<Void, Never>?
     @State private var confirmsReset = false
+    /// The widget that has the keyboard (outlined); a click anywhere else on the page, or Esc, lets go.
+    @FocusState private var focusedWidget: HomeWidgetKind?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
 
     nonisolated static let space = "homeEditor"
 
     private var home: HomeSettings { context.home }
+    private var isEditingShown: Bool { appearsActive && isPageVisible }
 
     /// The layout as it would be if the dragged widget landed where it is now.
     private var shownLayout: HomeLayout { drag?.preview ?? home.layout }
 
     var body: some View {
-        AppPage(
+        // Built once per update and handed down, not rebuilt by each part of the page.
+        let resolver = HomeWidgetResolver(modules: practice.modules, arrangement: context.arrangement,
+                                          extras: HomeExtras.practice(home: home))
+        // The tabs follow the saved layout, so they hold still while a widget is dragged around.
+        let pages = HomePageList(layout: home.layout, editing: page)
+        return AppPage(
             title: String(localized: "Home"),
             subtitle: String(localized: "Arrange the widgets Home shows in the open notch. Drag them around, or add more from below. Changes show in the notch right away.")
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                toolbar
-                canvas
+                toolbar(pages: pages)
+                canvas(resolver: resolver, pages: pages)
                 noteLine
             }
-            gallery
+            gallery(resolver: resolver)
         }
+        // A click on anything that isn't a widget or a control ends editing the selected widget.
+        .contentShape(Rectangle())
+        .onTapGesture { focusedWidget = nil }
         .coordinateSpace(.named(Self.space))
-        .overlay(alignment: .topLeading) { floatingWidget }
+        .overlay(alignment: .topLeading) { floatingWidget(resolver: resolver) }
         .onAppear {
+            isPageVisible = true
+            // Coming back to this page never finds a widget still outlined.
+            focusedWidget = nil
+            if home.layout.isPageEmpty(page), let first = home.layout.nonEmptyPages.first { page = first }
             practice.update(Self.practiceKinds(for: context))
             home.hasSeenIntro = true // the notch's "Home is new" hint has done its job
         }
         .onDisappear {
+            isPageVisible = false
             cancelDrag()
+            focusedWidget = nil
             practice.close()
             noteTask?.cancel()
         }
         // Escape, or the window going to the background, drops a drag without changing anything.
-        .onExitCommand { cancelDrag() }
-        .onChange(of: appearsActive) { _, active in if !active { cancelDrag() } }
+        .onExitCommand {
+            if drag != nil { cancelDrag() } else { focusedWidget = nil }
+        }
+        .onChange(of: isEditingShown) { _, shown in
+            if !shown { focusedWidget = nil; cancelDrag() }
+        }
+        .onChange(of: page) { _, _ in focusedWidget = nil }
         .onChange(of: Self.practiceKinds(for: context)) { _, kinds in practice.update(kinds) }
+        // An edit that empties the page being edited moves on to the nearest page with widgets, so an
+        // empty page doesn't linger. A page made with "+" stays: it was empty before the edit too.
+        .onChange(of: home.layout) { old, new in
+            guard !new.isEmpty, new.isPageEmpty(page), !old.isPageEmpty(page),
+                  let nearest = HomePageList.nearestNonEmptyPage(to: page, in: new) else { return }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { page = nearest }
+        }
         .confirmationDialog(
             String(localized: "Reset Home to the default layout?"),
             isPresented: $confirmsReset
@@ -70,17 +103,17 @@ struct HomeEditorView: View {
 
     // MARK: Toolbar
 
-    private var toolbar: some View {
+    private func toolbar(pages: HomePageList) -> some View {
         HStack(spacing: 10) {
-            pageTabs
+            pageTabs(pages)
             Spacer(minLength: 8)
-            Button { undo() } label: {
+            Button { focusedWidget = nil; undo() } label: {
                 Label(String(localized: "Undo"), systemImage: "arrow.uturn.backward")
             }
             .keyboardShortcut("z", modifiers: .command)
             .disabled(!history.canUndo)
             .help(Text("Undo (⌘Z)"))
-            Button { redo() } label: {
+            Button { focusedWidget = nil; redo() } label: {
                 Label(String(localized: "Redo"), systemImage: "arrow.uturn.forward")
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -106,13 +139,15 @@ struct HomeEditorView: View {
         .labelStyle(.iconOnly)
     }
 
-    private var pageTabs: some View {
+    /// One tab for each page that holds widgets (named by its place in the row, not its saved number), the
+    /// page being edited if it's blank, and a "+" for a new page while there's room.
+    private func pageTabs(_ pages: HomePageList) -> some View {
         HStack(spacing: 2) {
-            ForEach(0..<HomeLayout.pageCount, id: \.self) { index in
+            ForEach(pages.pages, id: \.self) { index in
                 let isSelected = index == page
-                let isEmpty = shownLayout.isPageEmpty(index)
-                Button { page = index } label: {
-                    Text("Page \(index + 1)")
+                let isEmpty = home.layout.isPageEmpty(index)
+                Button { focusedWidget = nil; page = index } label: {
+                    Text("Page \(pages.number(of: index) ?? 1)")
                         .font(.app(size: 12.5, weight: .semibold))
                         .foregroundStyle(isSelected ? Color.black : AppPalette.primaryText.opacity(isEmpty ? 0.5 : 0.85))
                         .padding(.horizontal, 12)
@@ -123,11 +158,30 @@ struct HomeEditorView: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tabFrames[index] = $0 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tabFrames[.page(index)] = $0 }
+                .onDisappear { tabFrames[.page(index)] = nil }
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                 .accessibilityValue(Text(isEmpty ? String(localized: "Empty") : ""))
+                .transition(.opacity)
+            }
+            if pages.canAddPage {
+                Button { focusedWidget = nil; turn(to: .new) } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppPalette.primaryText.opacity(0.85))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tabFrames[.new] = $0 }
+                .onDisappear { tabFrames[.new] = nil }
+                .help(Text("New Page"))
+                .accessibilityLabel(Text("New Page"))
+                .transition(.opacity)
             }
         }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: pages.pages)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: pages.canAddPage)
         .padding(2)
         .background(AppPalette.rail.opacity(0.5), in: Capsule())
         .fixedSize()
@@ -135,16 +189,27 @@ struct HomeEditorView: View {
         .accessibilityLabel(Text("Pages"))
     }
 
+    /// Shows a page: a tab's, or the first blank one ("+"), which becomes a tab while it's being edited.
+    private func turn(to tab: PageTab) {
+        switch tab {
+        case .page(let index):
+            if index != page { page = index }
+        case .new:
+            let pages = HomePageList(layout: home.layout, editing: page)
+            if pages.canAddPage, let new = pages.newPage { page = new }
+        }
+    }
+
     // MARK: Canvas
 
     /// A black panel like the open notch, with the grid of the page being edited.
-    private var canvas: some View {
+    private func canvas(resolver: HomeWidgetResolver, pages: HomePageList) -> some View {
         GeometryReader { proxy in
             // As wide as the open notch gets (never wider), in the middle of the page.
             let width = min(proxy.size.width, NotchLayout.maxExpandedBodySize.width)
             let metrics = HomeEditorMetrics(width: width)
             ZStack(alignment: .topLeading) {
-                grid(metrics: metrics)
+                grid(metrics: metrics, resolver: resolver, pages: pages)
                     .frame(width: metrics.grid.width, height: metrics.grid.height, alignment: .topLeading)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { gridFrame = $0 }
                     .padding(.horizontal, HomeWidgetMetrics.sidePadding)
@@ -161,14 +226,24 @@ struct HomeEditorView: View {
         .frame(height: HomeEditorMetrics.height)
     }
 
-    private func grid(metrics: HomeEditorMetrics) -> some View {
+    private func grid(metrics: HomeEditorMetrics, resolver: HomeWidgetResolver, pages: HomePageList) -> some View {
         let cell = HomeWidgetMetrics.cellSize(in: metrics.grid)
-        let resolver = HomeWidgetResolver(modules: practice.modules, arrangement: context.arrangement,
-                                          extras: HomeExtras.practice(home: home))
         let layout = shownLayout
-        let placements = layout.placements(onPage: page).filter { $0.kind != drag?.kind || drag?.landing != nil }
-        // Only the free cells: the widgets' cards are see-through, so a cell under one would show.
-        let taken = placements.reduce(into: Set<HomeCell>()) { $0.formUnion($1.cells) }
+        // One host per widget for the whole drag. The dragged widget's host also stays while it's away
+        // from this page (hidden): a drag gesture is cancelled the moment the view that owns it goes.
+        var hosts = layout.placements(onPage: page)
+        if let drag, !drag.fromGallery, !hosts.contains(where: { $0.kind == drag.kind }),
+           let original = home.layout.placement(of: drag.kind) {
+            hosts.append(original)
+        }
+        /// What a host shows: the widget, the dragged widget's dashed landing spot, or nothing.
+        func face(of placement: HomePlacement) -> HostFace {
+            guard placement.kind == drag?.kind else { return .widget }
+            return drag?.landing != nil && placement.slot.page == page ? .landing : .hidden
+        }
+        // Only the free cells: the widgets' cards are see-through, so a cell under one would show. A hidden
+        // widget leaves its cells free, so there's still something to aim at.
+        let taken = hosts.filter { face(of: $0) != .hidden }.reduce(into: Set<HomeCell>()) { $0.formUnion($1.cells) }
         let free = (0..<(HomeLayout.columns * HomeLayout.rows)).filter { index in
             !taken.contains(HomeCell(page: page, column: index / HomeLayout.rows, row: index % HomeLayout.rows))
         }
@@ -183,65 +258,75 @@ struct HomeEditorView: View {
                     .offset(x: frame.minX, y: frame.minY)
                     .accessibilityHidden(true)
             }
-            ForEach(placements) { placement in
+            ForEach(hosts) { placement in
                 let frame = HomeWidgetMetrics.frame(column: placement.slot.column, row: placement.slot.row,
                                                     size: placement.size, cell: cell)
-                if placement.kind == drag?.kind {
-                    // Where the dragged widget will land.
-                    RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
-                        .fill(.white.opacity(0.08))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
-                                .strokeBorder(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                        }
-                        .frame(width: frame.width, height: frame.height)
-                        .offset(x: frame.minX, y: frame.minY)
+                let face = face(of: placement)
+                // The host is the same view whatever it shows, and owns the drag gesture. A widget dragged in
+                // from the gallery has none of its own: the gallery item holds that gesture.
+                ZStack {
+                    switch face {
+                    case .widget:
+                        EditableWidget(
+                            placement: placement, frame: frame, resolver: resolver, pages: pages,
+                            isOff: placement.kind.moduleID.map { !context.isEnabled($0) } ?? false,
+                            isDimmed: drag != nil,
+                            isLive: isEditingShown && drag == nil,
+                            isEditingShown: isEditingShown,
+                            wiggles: !reduceMotion && isEditingShown && drag == nil,
+                            actions: actions(for: placement, pages: pages),
+                            focus: $focusedWidget
+                        )
                         .transition(.opacity)
-                        .accessibilityHidden(true)
-                } else {
-                    EditableWidget(
-                        placement: placement, frame: frame, resolver: resolver,
-                        isOff: placement.kind.moduleID.map { !context.isEnabled($0) } ?? false,
-                        isDimmed: drag != nil,
-                        isLive: appearsActive && drag == nil,
-                        wiggles: !reduceMotion && appearsActive && drag == nil,
-                        actions: actions(for: placement)
-                    )
-                    .frame(width: frame.width, height: frame.height)
-                    .offset(x: frame.minX, y: frame.minY)
-                    .gesture(dragGesture(kind: placement.kind, size: placement.size, origin: frame, fromGallery: false))
-                    .transition(.opacity)
+                    case .landing:
+                        // Where the dragged widget will land.
+                        RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
+                            .fill(.white.opacity(0.08))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                            }
+                            .transition(.opacity)
+                            .accessibilityHidden(true)
+                    case .hidden:
+                        Color.clear.accessibilityHidden(true)
+                    }
                 }
+                .frame(width: frame.width, height: frame.height)
+                .offset(x: frame.minX, y: frame.minY)
+                .gesture(dragGesture(kind: placement.kind, size: placement.size, origin: frame, fromGallery: false),
+                         including: drag?.fromGallery == true && face != .widget ? .none : .all)
+                .transition(.opacity)
             }
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25), value: layout)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: page)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Page \(page + 1) of Home"))
+        .accessibilityLabel(Text("Page \(pages.number(of: page) ?? 1) of Home"))
     }
 
     /// The widget under the pointer while dragging: lifted a little, slightly bigger, with a shadow.
-    @ViewBuilder private var floatingWidget: some View {
+    @ViewBuilder private func floatingWidget(resolver: HomeWidgetResolver) -> some View {
         if let drag {
-            let resolver = HomeWidgetResolver(modules: practice.modules, arrangement: context.arrangement,
-                                              extras: HomeExtras.practice(home: home))
             let size = HomeWidgetMetrics.frame(column: 0, row: 0, size: drag.size,
                                                cell: HomeWidgetMetrics.cellSize(in: HomeEditorMetrics(width: gridFrame.width + 2 * HomeWidgetMetrics.sidePadding).grid)).size
-            Group {
-                if drag.kind.moduleID.map({ !context.isEnabled($0) }) ?? false {
-                    HomeGhost(kind: drag.kind, size: size, open: nil)
-                } else {
-                    HomeWidgetCard(kind: drag.kind, size: size, opens: false) {
-                        resolver.content(drag.kind, size: drag.size,
-                                         context: HomeWidgetContext(size: size, isLive: false, isPractice: true))
-                    } open: {}
+            // The widget is built here, when the drag changes; following the pointer only moves it.
+            DragFollower(pointer: pointer, grab: drag.grab) {
+                Group {
+                    if drag.kind.moduleID.map({ !context.isEnabled($0) }) ?? false {
+                        HomeGhost(kind: drag.kind, size: size, open: nil)
+                    } else {
+                        HomeWidgetCard(kind: drag.kind, size: size, opens: false) {
+                            resolver.content(drag.kind, size: drag.size,
+                                             context: HomeWidgetContext(size: size, isLive: false, isPractice: true))
+                        } open: {}
+                    }
                 }
+                .background(.black, in: .rect(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous))
+                .scaleEffect(reduceMotion ? 1 : 1.06)
+                .shadow(color: .black.opacity(0.5), radius: 14, y: 8)
+                .opacity(reduceMotion ? 0.85 : 1)
             }
-            .background(.black, in: .rect(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous))
-            .scaleEffect(reduceMotion ? 1 : 1.06)
-            .shadow(color: .black.opacity(0.5), radius: 14, y: 8)
-            .opacity(reduceMotion ? 0.85 : 1)
-            .offset(x: drag.location.x - drag.grab.x, y: drag.location.y - drag.grab.y)
             .allowsHitTesting(false)
             .transition(.opacity)
             .accessibilityHidden(true)
@@ -260,10 +345,8 @@ struct HomeEditorView: View {
 
     // MARK: Gallery
 
-    private var gallery: some View {
+    private func gallery(resolver: HomeWidgetResolver) -> some View {
         let kinds = HomeWidgetKind.allCases.filter { kind in kind.moduleID.map(context.isEnabled) ?? true }
-        let resolver = HomeWidgetResolver(modules: practice.modules, arrangement: context.arrangement,
-                                              extras: HomeExtras.practice(home: home))
         return VStack(alignment: .leading, spacing: 10) {
             SectionLabel(title: String(localized: "Widgets"))
                 .padding(.horizontal, 20)
@@ -289,6 +372,7 @@ struct HomeEditorView: View {
     private func dragGesture(kind: HomeWidgetKind, size: HomeWidgetSize, origin: CGRect?, fromGallery: Bool) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.space))
             .onChanged { value in
+                guard isEditingShown else { return }
                 if value.startLocation == cancelledDragStart { return }
                 if drag == nil {
                     let cell = HomeWidgetMetrics.cellSize(in: gridFrame.size)
@@ -297,14 +381,20 @@ struct HomeEditorView: View {
                     let grab = origin.map { CGPoint(x: value.startLocation.x - gridFrame.minX - $0.minX,
                                                     y: value.startLocation.y - gridFrame.minY - $0.minY) }
                         ?? CGPoint(x: widget.width / 2, y: widget.height / 2)
+                    pointer.location = value.location
                     drag = HomeEditorDrag(kind: kind, size: size, fromGallery: fromGallery, start: value.startLocation,
-                                          grab: grab, location: value.location)
+                                          grab: grab)
                 }
                 dragMoved(to: value.location)
             }
             .onEnded { value in
                 if value.startLocation == cancelledDragStart {
                     cancelledDragStart = nil
+                    return
+                }
+                guard isEditingShown else {
+                    cancelDrag()
+                    cancelledDragStart = nil // This gesture ended; the next drag may start in the same spot.
                     return
                 }
                 dragEnded()
@@ -318,28 +408,19 @@ struct HomeEditorView: View {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25)) { drag = nil }
     }
 
+    /// Follows the pointer at once; the page is redrawn only when the pointer moves to another landing spot.
     private func dragMoved(to location: CGPoint) {
         guard var current = drag else { return }
-        current.location = location
-        // Hovering a page tab turns to that page.
-        if let tab = tabFrames.first(where: { $0.value.contains(location) })?.key, tab != page { page = tab }
-        let topLeft = CGPoint(x: location.x - current.grab.x - gridFrame.minX, y: location.y - current.grab.y - gridFrame.minY)
-        let cell = HomeWidgetMetrics.cellSize(in: gridFrame.size)
-        let center = CGPoint(x: topLeft.x + cell.width / 2, y: topLeft.y + cell.height / 2)
-        let overGrid = gridFrame.insetBy(dx: -cell.width / 2, dy: -cell.height / 2).contains(location)
-        if overGrid {
-            let slot = HomeSlot(
-                page: page,
-                column: Int((center.x / (cell.width + HomeWidgetMetrics.gap)).rounded(.down)),
-                row: Int((center.y / (cell.height + HomeWidgetMetrics.gap)).rounded(.down))
-            )
-            current.landing = slot
-            current.preview = current.fromGallery
+        pointer.location = location
+        // Hovering a page tab turns to that page, and "+" to a new one.
+        if let tab = tabFrames.first(where: { $0.value.contains(location) })?.key { turn(to: tab) }
+        let slot = HomeDragLanding.slot(pointer: location, grab: current.grab, grid: gridFrame, page: page)
+        guard slot != current.landing else { return }
+        current.landing = slot
+        current.preview = slot.flatMap { slot in
+            current.fromGallery
                 ? home.layout.previewInserting(current.kind, size: current.size, at: slot)
                 : home.layout.previewMoving(current.kind, to: slot)
-        } else {
-            current.landing = nil
-            current.preview = nil
         }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { drag = current }
     }
@@ -359,14 +440,14 @@ struct HomeEditorView: View {
 
     // MARK: Changes
 
-    private func actions(for placement: HomePlacement) -> HomeWidgetActions {
+    private func actions(for placement: HomePlacement, pages: HomePageList) -> HomeWidgetActions {
         HomeWidgetActions(
             remove: { change { .success($0.removing(placement.kind)) } },
             resize: { size in change { $0.resizing(placement.kind, to: size) } },
             nudge: { direction in change { $0.nudging(placement.kind, by: direction) } },
             moveToPage: { target in
-                change { $0.movingToPage(placement.kind, page: target) }
-                page = target
+                // Follow the widget, unless the move was refused.
+                if change({ $0.movingToPage(placement.kind, page: target) }) { page = target }
             },
             metric: HomeStatisticsMetric(saved: home.layout.statisticsMetric),
             setMetric: { metric in
@@ -380,19 +461,28 @@ struct HomeEditorView: View {
     }
 
     private func add(_ kind: HomeWidgetKind) {
-        change { $0.adding(kind) }
+        focusedWidget = nil
+        change { $0.adding(kind, preferring: page) }
         if let placed = home.layout.placement(of: kind) { page = placed.slot.page }
     }
 
-    private func change(_ edit: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) {
+    /// Applies an edit; returns whether it was accepted (a refusal says why, in the note).
+    @discardableResult
+    private func change(_ edit: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) -> Bool {
+        var accepted = true
         withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25)) {
-            if let refusal = home.edit(&history, edit) { show(refusal.message) }
+            if let refusal = home.edit(&history, edit) {
+                show(refusal.message)
+                accepted = false
+            }
         }
+        return accepted
     }
 
     private func replace(with layout: HomeLayout) {
+        focusedWidget = nil
         change { _ in .success(layout) }
-        page = 0
+        page = home.layout.nonEmptyPages.first ?? 0
     }
 
     private func undo() {
@@ -435,11 +525,48 @@ private struct HomeEditorDrag {
     let start: CGPoint
     /// Where the pointer holds the widget, from its top-left corner.
     let grab: CGPoint
-    var location: CGPoint
     /// The cell its top-left corner would land on, or `nil` while it's away from the grid.
     var landing: HomeSlot?
     /// Home with the widget landed there and its neighbours moved aside; `nil` when it can't land.
     var preview: HomeLayout?
+}
+
+/// Where the pointer is during a drag. Only the floating widget reads it, so a move redraws just that.
+@MainActor @Observable private final class DragPointer {
+    var location: CGPoint = .zero
+}
+
+/// Holds a view where the pointer holds the dragged widget. The view is built by the caller, so following the
+/// pointer is only an offset, and it's never animated: the widget stays glued to the pointer.
+private struct DragFollower<Content: View>: View {
+    let pointer: DragPointer
+    let grab: CGPoint
+    let content: Content
+
+    init(pointer: DragPointer, grab: CGPoint, @ViewBuilder content: () -> Content) {
+        self.pointer = pointer
+        self.grab = grab
+        self.content = content()
+    }
+
+    var body: some View {
+        let location = pointer.location
+        content
+            .offset(x: location.x - grab.x, y: location.y - grab.y)
+            .animation(nil, value: location)
+    }
+}
+
+/// A tab in the page row: a page, or "+" for a new one.
+private enum PageTab: Hashable {
+    case page(Int)
+    case new
+}
+
+/// What a widget's host shows on the grid: the widget, the dragged widget's landing spot, or nothing
+/// (the dragged widget while it's away from this page).
+private enum HostFace {
+    case widget, landing, hidden
 }
 
 /// The editor's panel: as wide as the page allows (up to a real notch's 600), with a real notch's height.
@@ -477,39 +604,61 @@ private struct EditableWidget: View {
     let placement: HomePlacement
     let frame: CGRect
     let resolver: HomeWidgetResolver
+    /// The page tabs, which name the pages in the "Move to" lists.
+    let pages: HomePageList
     let isOff: Bool
     let isDimmed: Bool
     /// The previews tick (a running timer, the clock) only while the window is active and nothing is dragged.
     let isLive: Bool
+    let isEditingShown: Bool
     let wiggles: Bool
     let actions: HomeWidgetActions
-    @FocusState private var isFocused: Bool
+    /// The page's choice of widget with the keyboard.
+    var focus: FocusState<HomeWidgetKind?>.Binding
     @State private var isHovered = false
+    /// The size list is open: the size button stays while the pointer is over the list.
+    @State private var choosingSize = false
+
+    private var isFocused: Bool { focus.wrappedValue == placement.kind }
 
     var body: some View {
         let kind = placement.kind
         face
             .allowsHitTesting(false)
-            .overlay(alignment: .topLeading) { removeBadge.offset(x: -6, y: -6) }
+            // The outline first, so the remove badge and the size button sit on top of it.
+            .overlay {
+                RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius + 3, style: .continuous)
+                    .strokeBorder(.white.opacity(isEditingShown && isFocused ? 0.9 : 0), lineWidth: 1.5)
+                    .padding(-3)
+                    .animation(.easeInOut(duration: 0.2), value: isEditingShown)
+                    .animation(.easeInOut(duration: 0.2), value: isFocused)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .overlay(alignment: .bottomTrailing) {
                 // Only while pointed at or focused, so it doesn't cover the widget's words.
-                if kind.sizes.count > 1, isHovered || isFocused {
+                if isEditingShown, kind.sizes.count > 1, isHovered || isFocused || choosingSize {
                     sizeControl.padding(5).transition(.opacity)
                 }
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 1.5)
-                    .padding(-3)
-                    .accessibilityHidden(true)
-            }
-            .modifier(Wiggle(isOn: wiggles, seed: kind.hashValue))
+            // The widget's shape before the remove badge, which sits half outside it: a shape after the badge
+            // would cut off its outer half, and a click there would only let go of the widget.
             .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
+            .overlay(alignment: .topLeading) {
+                if isEditingShown { removeBadge.offset(x: -6, y: -6).transition(.opacity) }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isEditingShown)
+            .onChange(of: isEditingShown) { _, shown in
+                if !shown { choosingSize = false; isHovered = false }
+            }
+            .modifier(HomeWiggle(isOn: wiggles, seed: WiggleMotion.seed(for: kind)))
             .onHover { hovering in withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering } }
+            // Leaving the page (or the widget going) closes the size list and forgets the pointer.
+            .onDisappear { choosingSize = false; isHovered = false }
             .focusable()
-            .focused($isFocused)
+            .focused(focus, equals: kind)
             .focusEffectDisabled()
-            .onTapGesture { isFocused = true }
+            .onTapGesture { focus.wrappedValue = kind }
             .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .delete, .deleteForward]) { press in
                 switch press.key {
                 case .leftArrow: actions.nudge(.left)
@@ -523,7 +672,7 @@ private struct EditableWidget: View {
             .contextMenu { menu }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(isOff ? String(localized: "\(kind.moduleTitle) is turned off") : kind.title))
-            .accessibilityValue(Text("\(placement.size.title), page \(placement.slot.page + 1), column \(placement.slot.column + 1), row \(placement.slot.row + 1)"))
+            .accessibilityValue(Text("\(placement.size.title), page \(pages.number(of: placement.slot.page) ?? placement.slot.page + 1), column \(placement.slot.column + 1), row \(placement.slot.row + 1)"))
             .accessibilityHint(Text("Arrow keys move it, Delete removes it. More in the actions."))
             .accessibilityAction(named: Text("Remove")) { actions.remove() }
             .accessibilityAction(named: Text("Move Left")) { actions.nudge(.left) }
@@ -531,7 +680,7 @@ private struct EditableWidget: View {
             .accessibilityAction(named: Text("Move Up")) { actions.nudge(.up) }
             .accessibilityAction(named: Text("Move Down")) { actions.nudge(.down) }
             .modifier(SizeActions(kind: kind, current: placement.size, resize: actions.resize))
-            .modifier(PageActions(current: placement.slot.page, move: actions.moveToPage))
+            .modifier(PageActions(current: placement.slot.page, pages: pages, move: actions.moveToPage))
             .modifier(MetricActions(isOn: kind == .statistics, current: actions.metric, choose: actions.setMetric))
     }
 
@@ -561,24 +710,30 @@ private struct EditableWidget: View {
         .accessibilityHidden(true)
     }
 
+    /// S, M or L: opens the app's own drop-down list of the sizes this widget comes in.
     private var sizeControl: some View {
-        Menu {
-            ForEach(placement.kind.sizes, id: \.self) { size in
-                Toggle(size.title, isOn: Binding(get: { size == placement.size }, set: { if $0 { actions.resize(size) } }))
-            }
-        } label: {
+        Button { choosingSize.toggle() } label: {
             Text(placement.size.shortTitle)
                 .font(.system(size: 9.5, weight: .bold))
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 20, height: 16)
-                .background(Color(white: 0.24), in: Capsule())
+                .background(Color(white: choosingSize ? 0.36 : 0.24), in: Capsule())
+                .contentShape(Capsule())
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
+        .popover(isPresented: $choosingSize, arrowEdge: .bottom) {
+            DropdownList(
+                sections: [placement.kind.sizes.map { DropdownOption(value: $0, label: $0.title) }],
+                selection: placement.size,
+                width: 120
+            ) { size in
+                choosingSize = false
+                if size != placement.size { actions.resize(size) }
+            }
+        }
         .help(Text("Size"))
-        .accessibilityHidden(true)
+        .accessibilityHidden(true) // VoiceOver has the size actions on the widget itself.
     }
 
     @ViewBuilder private var menu: some View {
@@ -597,9 +752,11 @@ private struct EditableWidget: View {
             }
         }
         Section(String(localized: "Move to")) {
-            ForEach(0..<HomeLayout.pageCount, id: \.self) { index in
-                Button(String(localized: "Page \(index + 1)")) { actions.moveToPage(index) }
-                    .disabled(index == placement.slot.page)
+            ForEach(pages.others(than: placement.slot.page), id: \.self) { index in
+                Button(String(localized: "Page \(pages.number(of: index) ?? 1)")) { actions.moveToPage(index) }
+            }
+            if let new = pages.newPage {
+                Button(String(localized: "New Page")) { actions.moveToPage(new) }
             }
         }
         Divider()
@@ -634,33 +791,18 @@ private struct SizeActions: ViewModifier {
     }
 }
 
-/// VoiceOver actions to move the widget to another page.
+/// VoiceOver actions to move the widget to another page, or to a new one.
 private struct PageActions: ViewModifier {
     let current: Int
+    let pages: HomePageList
     let move: (Int) -> Void
 
     func body(content: Content) -> some View {
-        (0..<HomeLayout.pageCount).filter { $0 != current }.reduce(AnyView(content)) { view, index in
-            AnyView(view.accessibilityAction(named: Text("Move to Page \(index + 1)")) { move(index) })
+        let others = pages.others(than: current).reduce(AnyView(content)) { view, index in
+            AnyView(view.accessibilityAction(named: Text("Move to Page \(pages.number(of: index) ?? 1)")) { move(index) })
         }
-    }
-}
-
-/// The gentle phone-style wiggle while editing: a small tilt back and forth, each widget slightly out of
-/// step. It runs only while the editor shows and the window is in front, and never with Reduce Motion.
-private struct Wiggle: ViewModifier {
-    let isOn: Bool
-    let seed: Int
-
-    func body(content: Content) -> some View {
-        if isOn {
-            let duration = 0.13 + Double(abs(seed) % 4) * 0.012
-            content.phaseAnimator([-1.0, 1.0]) { view, phase in
-                view.rotationEffect(.degrees(phase * 0.9))
-            } animation: { _ in .easeInOut(duration: duration) }
-        } else {
-            content
-        }
+        guard let new = pages.newPage else { return others }
+        return AnyView(others.accessibilityAction(named: Text("Move to New Page")) { move(new) })
     }
 }
 

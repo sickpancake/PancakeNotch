@@ -7,6 +7,7 @@ import ModuleShelf
 import ModuleTimer
 import NotchCore
 import NowPlayingCore
+import SwiftUI
 
 /// Home's states for the off-screen notch sheet (`PANCAKENOTCH_SNAPSHOT`, ADR-0042): the default layout,
 /// switched-off modules as ghosts, an empty Home, a second page, and every widget at every size with
@@ -16,22 +17,34 @@ enum HomeSnapshot {
     /// A fixed time, so the pictures don't change between runs.
     static let clock = Date(timeIntervalSince1970: 1_794_390_060) // a Wednesday morning
 
+    static func pickerRows(layout: NotchLayout) -> [AnyView] {
+        let choices: [[HomeWidgetKind]] = [[.nowPlaying, .stopwatch, .battery, .statistics, .allModules, .clock], []]
+        return choices.map { kinds in
+            let model = home(layout, .default, modules: live())
+            let resolver = HomeWidgetResolver(modules: model.modules, arrangement: model.arrangement,
+                                              extras: model.homeExtras)
+            return HomeWidgetPickerSnapshot.view(model: model, kinds: kinds, resolver: resolver)
+        }
+    }
+
     static func models(layout: NotchLayout) -> [NotchViewModel] {
         let smalls: [HomeWidgetKind] = [.nowPlaying, .timer, .stopwatch, .agents, .aiUsage, .shelf, .keepAwake, .clock, .battery, .statistics]
         let mediums: [HomeWidgetKind] = smalls
         let larges: [HomeWidgetKind] = HomeWidgetKind.allCases.filter { $0.supports(.large) }
-        return [
-            home(layout, .default, modules: live(), intro: true),
-            home(layout, .default, modules: [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 3)]),
-            home(layout, HomeLayout(), modules: live()),
-            home(layout, twoPages, modules: live()) { $0.showHomePage(1) },
-        ]
-            + pages(of: smalls, size: .small).map { home(layout, $0, modules: live()) }
-            + pages(of: smalls, size: .small).map { home(layout, $0, modules: empty()) }
-            + pages(of: mediums, size: .medium).map { home(layout, $0, modules: live()) }
-            + pages(of: mediums, size: .medium).map { home(layout, $0, modules: empty()) }
-            + pages(of: larges, size: .large).map { home(layout, $0, modules: live()) }
-            + pages(of: larges, size: .large).map { home(layout, $0, modules: empty()) }
+        // Appended step by step: one long `+` chain is too much for the macOS 15 runner's type checker.
+        var models: [NotchViewModel] = []
+        models.append(home(layout, .default, modules: live(), intro: true))
+        models.append(home(layout, .default, modules: live()) { $0.beginHomeEditing() })
+        models.append(home(layout, HomeLayout(), modules: live()) { $0.beginHomeEditing() })
+        models.append(home(layout, .default, modules: [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 3)]))
+        models.append(home(layout, HomeLayout(), modules: live()))
+        models.append(home(layout, twoPages, modules: live()) { $0.showHomePage(1) })
+        for (kinds, size) in [(smalls, HomeWidgetSize.small), (mediums, .medium), (larges, .large)] {
+            let layouts = pages(of: kinds, size: size)
+            for homeLayout in layouts { models.append(home(layout, homeLayout, modules: live())) }
+            for homeLayout in layouts { models.append(home(layout, homeLayout, modules: empty())) }
+        }
+        return models
     }
 
     private static func home(_ layout: NotchLayout, _ homeLayout: HomeLayout, modules: [any NotchModule],
@@ -43,6 +56,7 @@ enum HomeSnapshot {
         model.snapshotClock = clock
         model.homeExtras = HomeExtras.practice(home: settings)
         model.openAppPage = { _ in } // shows the empty Home's Customize button
+        model.openSettings = {} // include the complete band when checking the intro and Edit button
         model.modules = modules
         model.toggleHome()
         setUp(model)

@@ -115,7 +115,7 @@ private struct HomeBatteryWidget: View {
         Group {
             switch size {
             case .small, .large:
-                HomeSmallFace(caption: Self.source(power)) {
+                HomeSmallFace(caption: Self.shortSource(power)) {
                     Image(systemName: Self.symbol(power))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
@@ -139,7 +139,7 @@ private struct HomeBatteryWidget: View {
                     .frame(width: 30, height: 30)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(Self.percent(power))
-                            .font(.system(size: 17, weight: .semibold).monospacedDigit())
+                            .font(.system(size: 19, weight: .semibold).monospacedDigit())
                             .contentTransition(.numericText(value: Double(power.percent ?? 0)))
                         Text(Self.source(power))
                             .font(.system(size: 10, weight: .medium))
@@ -168,6 +168,12 @@ private struct HomeBatteryWidget: View {
 
     private static func percent(_ power: PowerState) -> String {
         power.percent.map { "\($0)%" } ?? String(localized: "No battery", comment: "Battery widget")
+    }
+
+    /// Small's caption, short enough for the cell beside the battery symbol.
+    private static func shortSource(_ power: PowerState) -> String {
+        power.onBattery ? String(localized: "Battery", comment: "Small Battery widget: running on battery")
+            : String(localized: "Plugged in", comment: "Battery widget")
     }
 
     private static func source(_ power: PowerState) -> String {

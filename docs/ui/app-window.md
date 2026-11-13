@@ -105,10 +105,18 @@ can try their settings right there.
 ## Other page patterns
 
 - **Home (the editor):** a black panel as wide as the open notch with the grid of the page being edited (page
-  tabs, Undo/Redo and a Layouts menu above it), and a gallery of widgets below. Widgets are drawn with practice
-  data and wiggle gently (±0.9°) only while the window is active, nothing is being dragged and Reduce Motion is
-  off. Each has a − badge, a size button that shows on hover or focus, a right-click menu and VoiceOver actions;
-  arrows move the focused one, Delete removes it. Drags are private (no pasteboard), so nothing lands in the Shelf.
+  tabs, Undo/Redo and a Layouts menu above it), and a gallery of widgets below. The tabs are the pages that hold
+  widgets (the same ones the notch shows), plus the page being edited if it's blank; they're named by their place
+  in the row ("Page 1", "Page 2"), never by the saved page number. A "+" after them (tooltip "New Page") opens
+  the first blank page while there's room and the current page isn't blank; hovering it during a drag does the
+  same. An edit that empties the current page moves on to the nearest page with widgets; a page made with "+"
+  stays until you leave it. "Move to" (menu and VoiceOver) uses the same names plus "New Page". Widgets are drawn
+  with practice data and wiggle gently (±0.9°) while the window is active, nothing is being dragged and Reduce
+  Motion is off; when any of those stops they ease back to exactly level. Each has a − badge, a size button that
+  shows on hover or focus, a right-click menu and VoiceOver actions; arrows move the focused one, Delete removes
+  it. Drags are private (no pasteboard), so nothing lands in the Shelf. The dragged widget follows the pointer
+  with no animation; only the landing spot and the neighbours moving aside animate. Leaving the page (and coming
+  back) leaves nothing focused and no size list open.
 - **Overview:** a hero card with the notch art and the big notch switch, small boxes (update ready, Learn
   progress) with a 16 bold icon tile, stat tiles with big 34 bold numbers, and a tips card.
 - **Statistics:** charts with Swift Charts in white (`AppPalette.ink`, 0.8 for bars not highlighted) on

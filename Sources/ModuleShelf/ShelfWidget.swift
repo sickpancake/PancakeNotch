@@ -23,11 +23,7 @@ struct ShelfWidget: View {
                            line: items.isEmpty ? String(localized: "Drop files here") : module.menuStatus)
         case .medium, .large:
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Label(module.title, systemImage: "tray")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Spacer(minLength: 0)
+                HomeWidgetHeader(symbol: "tray", title: module.title) {
                     if !items.isEmpty, let status = module.menuStatus {
                         Text(status)
                             .font(.system(size: 10, weight: .medium).monospacedDigit())

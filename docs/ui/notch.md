@@ -157,6 +157,25 @@ in `Sources/NotchCore/Home/`. Sizes: small 1×1, medium 2×1, large 2×2. Cards 
 (0.1 under the pointer when a click opens something) with a 0.06 hairline and 12 pt corners, 8 pt apart, 10 pt
 padding, 18 pt from the panel's sides. A switched-off module's widget is a dashed `HomeGhost`. A small widget
 with a reading uses `HomeSmallFace` (symbol and caption on top, value below), a plain one `HomeWidgetTile`.
+A medium or large widget with a title row uses `HomeWidgetHeader` (symbol in a 14 pt column, name, optional
+trailing count), and "nothing here" text is a `HomeWidgetEmptyLine`, centred in the room under the title.
+
+The in-notch add picker (`HomeWidgetPicker`) fills the same grid area with a horizontal scrolling row,
+without scroll bars. Each button shows a still, non-interactive default-size widget preview and a 10.5 pt
+caption; its fill brightens from white 0.13 to 0.2 on hover, with shared press feedback. A 24 pt Back to Home
+round button stays at the right. When no choices remain, a centred 11 pt, white 0.5 line reads “Every widget
+is on Home”. The host owns insertion, Esc and the transition back to the grid.
+
+Keep widgets of one size looking alike:
+
+| | Small | Medium | Large |
+| --- | --- | --- | --- |
+| Value | 17 semibold | 19 semibold, caption 10 medium white 0.55, 1 pt apart | as Medium (a hero reading may be bigger) |
+| Ring | 13, line 2 | 30, line 3 | — |
+| Caption | 9.5 medium white 0.55, one line, cut off with "…", never shrunk | | |
+
+A small caption must fit beside the symbol (about 9 characters): say "Battery", not "On battery", and leave it
+out when the symbol already says it (an idle Stopwatch, the Clock).
 
 - A module draws its widgets in `homeWidget(_:size:context:)`; `context.isLive` is true only while the open
   notch shows Home's visible page. Anything that ticks (a `TimelineView`, a progress bar) must pause when it's
@@ -164,8 +183,14 @@ with a reading uses `HomeSmallFace` (symbol and caption on top, value below), a 
 - A click on a card opens its module (`openedFromHome(_:)` picks a page, e.g. the Timer's stopwatch); buttons
   inside the card act on their own. Never read anything that could ask macOS for permission (Now Playing reads
   only what its center already knows).
-- Pages change one at a time from a scroll (`HomePageScrollTracker`) or the arrow keys; dots show on the right
-  only with more than one non-empty page.
+- Home's vertical page stack follows precise trackpad deltas point for point inside the clipped grid area.
+  At either end it gently resists further travel. Release settles to the nearest page with a quiet spring;
+  a quick flick selects the adjacent page, never skipping one. Momentum cannot move the settle target.
+  The dots and live widgets follow the predicted settle page; the other mounted page stays still.
+  Only the current page and the neighbour being revealed are mounted during movement.
+- Wheel steps (at most one every 0.3 s), arrow keys and page dots glide between pages. With Reduce Motion,
+  pages cross-fade once per gesture. Editing retains its existing single-page turns and drag-to-dot paging;
+  its drag owner stays mounted. Dots show only when there is more than one page.
 
 ## Page patterns
 
@@ -272,3 +297,25 @@ Every module page has to be drawable without real data, for two reasons:
    fixed clock so pictures don't change between runs.
 
 When you add a state to a page, add it to the snapshot too, render, and look at it.
+
+## Editing Home in the notch
+
+Hold anywhere in Home's body below the band for half a second to edit, including widgets, gaps, the empty Home note and all margins. The band's buttons and module tabs keep their own actions; page dots still turn pages on a short click. A short
+click keeps its usual action. While editing, Home stays open, takes keyboard focus and draws every
+widget with a still context. Gentle independent wiggles stop when hidden, when dragging, or with
+Reduce Motion. The shared `HomeWiggle` modifier returns cards to level when disabled.
+
+The band replaces Settings and Edit with Add (Back while choosing a widget) and a prominent Done pill.
+Outside editing, Edit beside the gear opens the window's Home editor. Compact icons leave room for
+the one-time intro hint. The hardware notch remains clear.
+
+Each widget has the window editor's minus badge at its top-left corner and a size capsule at the
+bottom right. Click the size capsule to step through supported sizes. A private drag lifts immediately;
+a dashed outline shows the drop and neighbours preview the same `HomeLayout` edit used on release.
+The gesture owner stays mounted across previews and page turns. Page dots include one empty destination
+while editing; drag into the dot gutter to change pages. Changes save immediately through HomeSettings.
+A refused edit shows a short fading note. VoiceOver offers removal, four move directions, sizes and pages.
+
+Done, Escape, an outside mouse-down, losing keyboard focus, selecting a module, hiding or closing the
+notch all end editing and release its hold. An attention request ends editing and selects its module.
+Outside-click monitors exist only for the edit session; there is no polling or clipboard drag.

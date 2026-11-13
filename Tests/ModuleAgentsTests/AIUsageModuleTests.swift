@@ -61,6 +61,16 @@ struct AIUsageModuleTests {
         #expect(!module.holdsOpen)
     }
 
+    /// PancakeNotch's own window taking the keyboard (which the click and app watchers don't see) closes the
+    /// menu, so it can't keep the notch held open.
+    @Test func losingTheKeyboardClosesTheMenu() {
+        let (module, notch) = makeModule()
+        module.openMenu()
+        #expect(module.isMenuOpen && module.holdsOpen)
+        notch.keyFocusLost()
+        #expect(!module.isMenuOpen && !module.holdsOpen)
+    }
+
     @Test func theAccountMenuCanBeUsedWithTheKeyboard() throws {
         let (module, notch) = makeModule()
         _ = notch

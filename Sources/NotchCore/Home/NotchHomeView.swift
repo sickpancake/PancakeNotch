@@ -62,7 +62,7 @@ struct NotchHomeView: View {
         let area = HomeWidgetMetrics.gridArea(in: layout)
         let pages = model.homePages
         let index = min(model.homePage, max(0, pages.count - 1))
-        let showsIntro = !model.home.hasSeenIntro && !model.homeLayout.isEmpty && model.openAppPage != nil
+        let showsIntro = !model.isEditingHome && !model.home.hasSeenIntro && !model.homeLayout.isEmpty && model.openAppPage != nil
         VStack(spacing: 0) {
             // The band beside the hardware notch: the bar sits on the left (drawn by NotchView), the gear right.
             HStack(spacing: 0) {
@@ -70,6 +70,11 @@ struct NotchHomeView: View {
                 Color.clear.frame(width: notch.width)
                 HStack(spacing: 6) {
                     Spacer(minLength: 0)
+                    if model.isEditingHome {
+                        NotchPill(title: model.showsHomePicker ? String(localized: "Back") : String(localized: "Add"),
+                                  symbol: model.showsHomePicker ? "chevron.left" : "plus") { model.showsHomePicker.toggle() }
+                        NotchPill(title: String(localized: "Done"), symbol: "checkmark", prominent: true) { model.endHomeEditing() }
+                    }
                     // Once, until it's used or dismissed: a pointer to the editor (the empty note has its own).
                     if showsIntro, let open = model.openAppPage {
                         HomeIntroHint {
@@ -80,7 +85,13 @@ struct NotchHomeView: View {
                         }
                         .transition(.opacity)
                     }
-                    if let openSettings = model.openSettings {
+                    if !model.isEditingHome, let open = model.openAppPage {
+                        HomeGearButton(compact: showsIntro, symbol: "slider.horizontal.3", title: String(localized: "Edit")) {
+                            model.home.hasSeenIntro = true
+                            open(.homeEditor)
+                        }
+                    }
+                    if !model.isEditingHome, let openSettings = model.openSettings {
                         HomeGearButton(compact: showsIntro, action: openSettings)
                     }
                 }
@@ -91,17 +102,32 @@ struct NotchHomeView: View {
             .padding(.horizontal, HomeWidgetMetrics.sidePadding)
 
             ZStack {
-                if pages.indices.contains(index) {
-                    HomePageGrid(model: model, page: pages[index], area: area)
-                        .id(pages[index])
-                        .transition(pageTransition)
+                if model.isEditingHome {
+                    NotchHomeEditingGrid(model: model, area: area)
+                } else if pages.indices.contains(index) {
+                    if reduceMotion {
+                        HomePageGrid(model: model, page: pages[index], area: area)
+                            .id(pages[index])
+                            .transition(.opacity)
+                    } else {
+                        pageStack(pages: pages, area: area)
+                    }
                 } else {
                     HomeEmptyNote(customize: model.openAppPage.map { open in { open(.homeEditor) } })
                         .transition(.opacity)
                 }
             }
             .frame(width: area.width, height: area.height, alignment: .topLeading)
+            .padding(.top, HomeWidgetMetrics.topPadding)
+            .frame(width: size.width, height: size.height - notch.height, alignment: .top)
             .contentShape(Rectangle())
+            // Cover the entire body below the band, including the side and bottom margins.
+            // Alongside, not before, the widgets' own clicks and buttons, so a quick click still works. Once
+            // the hold starts editing, the editing grid replaces the widgets, so the release presses nothing.
+            // While editing only the hold is off: `.none` would also switch off the editor's own clicks and
+            // drags (the widget list's choices, moving widgets), and those clicks would finish editing.
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in model.beginHomeEditing() },
+                                 including: model.isEditingHome ? .subviews : .all)
             .contextMenu {
                 if let open = model.openAppPage {
                     Button(String(localized: "Edit Home…")) {
@@ -110,12 +136,11 @@ struct NotchHomeView: View {
                     }
                 }
             }
-            .padding(.top, HomeWidgetMetrics.topPadding)
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .overlay(alignment: .trailing) {
             if pages.count > 1 {
-                HomePageDots(count: pages.count, current: index) { model.showHomePage($0) }
+                HomePageDots(count: pages.count, current: index, newPage: model.isEditingHome ? pages.firstIndex(where: { model.homeLayout.isPageEmpty($0) }) : nil) { model.showHomePage($0) }
                     .padding(.top, notch.height)
                     .frame(width: HomeWidgetMetrics.sidePadding)
                     .transition(.opacity)
@@ -125,17 +150,42 @@ struct NotchHomeView: View {
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Home"))
+        .accessibilityAction(named: Text("Edit Home")) { model.beginHomeEditing() }
         .accessibilityAction(named: Text("Next page")) { model.showHomePage(index + 1) }
         .accessibilityAction(named: Text("Previous page")) { model.showHomePage(index - 1) }
     }
 
-    /// The arriving page rises from the side it comes from; the leaving one fades where it is.
-    private var pageTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: model.homePageForward ? 24 : -24)),
-            removal: .opacity
-        )
+    /// The pages one above the other, a margin's width apart, like one long column. They scroll through
+    /// the panel's margins above and below the grid and fade out there, so a page leaving never shows a
+    /// hard cut through its widgets. At rest the margins are empty, so nothing on the page is faded.
+    private func pageStack(pages: [Int], area: CGSize) -> some View {
+        let position = model.homeScrollPosition ?? CGFloat(model.homePage)
+        let stride = HomeWidgetMetrics.pageStride(in: area)
+        let top = HomeWidgetMetrics.topPadding, bottom = HomeWidgetMetrics.bottomPadding
+        let height = area.height + top + bottom
+        return ZStack(alignment: .topLeading) {
+            ForEach(model.homeRenderedPages, id: \.self) { index in
+                HomePageGrid(model: model, page: pages[index], area: area)
+                    .offset(y: (CGFloat(index) - position) * stride)
+                    // A page first mounted by a wheel/key/dot turn starts beside the old page.
+                    .transition(.offset(y: CGFloat(index - (model.homeAnimationOrigin ?? index)) * stride))
+                    .allowsHitTesting(index == model.homePage && model.homeScrollPosition == nil)
+                    .accessibilityHidden(index != model.homePage)
+            }
+        }
+        .frame(width: area.width, height: area.height, alignment: .topLeading)
+        .padding(.top, top)
+        .padding(.bottom, bottom)
+        .mask {
+            LinearGradient(stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: top / height),
+                .init(color: .black, location: 1 - bottom / height),
+                .init(color: .clear, location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+        }
+        .padding(.top, -top)
+        .padding(.bottom, -bottom)
     }
 }
 
@@ -296,20 +346,74 @@ public struct HomeWidgetTile: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .truncationMode(.tail)
             if let line {
                 Text(line)
                     .font(.system(size: 9.5, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .truncationMode(.tail)
                     .contentTransition(.opacity)
                     .animation(.easeInOut(duration: 0.2), value: line)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The title row of a Medium or Large widget: the symbol in a fixed 14 pt column and the name, so every
+/// widget's name starts at the same place, with room on the right (the Shelf's count).
+public struct HomeWidgetHeader<Trailing: View>: View {
+    let symbol: String
+    let title: String
+    let trailing: Trailing
+
+    public init(symbol: String, title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.symbol = symbol
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    public var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            trailing
+        }
+        .foregroundStyle(.white.opacity(0.85))
+        .frame(height: 14)
+    }
+}
+
+extension HomeWidgetHeader where Trailing == EmptyView {
+    public init(symbol: String, title: String) {
+        self.init(symbol: symbol, title: title) { EmptyView() }
+    }
+}
+
+/// A widget's "nothing here" line, centred in the room under its title row (as the Shelf's drop zone is).
+public struct HomeWidgetEmptyLine: View {
+    let text: String
+
+    public init(_ text: String) {
+        self.text = text
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -333,11 +437,12 @@ public struct HomeSmallFace<Icon: View, Value: View>: View {
                     .frame(height: 14, alignment: .leading)
                     .accessibilityHidden(true)
                 if let caption {
+                    // Every caption the same size: a long one is cut off, never shrunk.
                     Text(caption)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .truncationMode(.tail)
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.2), value: caption)
                 }
@@ -373,20 +478,26 @@ private struct HomeEmptyNote: View {
 private struct HomePageDots: View {
     let count: Int
     let current: Int
+    var newPage: Int? = nil
     let select: (Int) -> Void
 
     var body: some View {
         VStack(spacing: 5) {
             ForEach(0..<count, id: \.self) { index in
                 Button { select(index) } label: {
-                    Circle()
-                        .fill(.white.opacity(index == current ? 0.9 : 0.3))
-                        .frame(width: 5, height: 5)
+                    Group {
+                        if newPage == index {
+                            Image(systemName: "plus").font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.white.opacity(index == current ? 0.9 : 0.45))
+                        } else {
+                            Circle().fill(.white.opacity(index == current ? 0.9 : 0.3)).frame(width: 5, height: 5)
+                        }
+                    }
                         .frame(width: 14, height: 11)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Page \(index + 1) of \(count)"))
+                .accessibilityLabel(newPage == index ? Text("New page") : Text("Page \(index + 1) of \(count)"))
                 .accessibilityAddTraits(index == current ? [.isSelected] : [])
             }
         }
@@ -405,7 +516,10 @@ struct HomeIntroHint: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(action: customize) {
-                Text("Home is new. Customize it")
+                ViewThatFits(in: .horizontal) {
+                    Text("Home is new. Customize it").fixedSize()
+                    Text("Customize").fixedSize()
+                }
                     .font(.system(size: 11.5, weight: .semibold))
                     .lineLimit(1)
                     .foregroundStyle(.white.opacity(isHovered ? 1 : 0.85))
@@ -435,16 +549,18 @@ struct HomeIntroHint: View {
 struct HomeGearButton: View {
     /// Just the gear, to leave room for the intro hint.
     var compact = false
+    var symbol = "gearshape"
+    var title = String(localized: "Settings")
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "gearshape")
+                Image(systemName: symbol)
                     .font(.system(size: 11, weight: .semibold))
                 if !compact {
-                    Text("Settings")
+                    Text(title)
                         .font(.system(size: 11.5, weight: .semibold))
                 }
             }
@@ -455,8 +571,9 @@ struct HomeGearButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(compact ? Text("Settings") : Text(""))
-        .accessibilityLabel(Text("Settings"))
+        .help(Text(title))
+        .accessibilityLabel(Text(title))
+        .fixedSize()
         .onHover { isHovered = $0 }
         .accessibilityHint(Text("Opens the PancakeNotch window."))
     }
@@ -475,33 +592,36 @@ struct HomeClockWidget: View {
         }
     }
 
-    private func face(_ date: Date) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if size == .small {
+    @ViewBuilder private func face(_ date: Date) -> some View {
+        if size == .small {
+            HomeSmallFace(caption: nil) {
                 Image(systemName: HomeWidgetKind.clock.symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                    .frame(height: 16, alignment: .leading)
-                    .accessibilityHidden(true)
-                Spacer(minLength: 0)
+            } value: {
+                time(date, size: 17)
             }
-            Text(date, format: .dateTime.hour().minute())
-                .font(.system(size: size == .small ? 19 : 24, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.25), value: date)
-            if size == .medium {
+            .accessibilityElement(children: .combine)
+        } else {
+            VStack(alignment: .leading, spacing: 1) {
+                time(date, size: 19)
                 Text(date, format: .dateTime.weekday(.wide).month().day())
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: size == .small ? .topLeading : .leading)
-        .accessibilityElement(children: .combine)
+    }
+
+    private func time(_ date: Date, size: CGFloat) -> some View {
+        Text(date, format: .dateTime.hour().minute())
+            .font(.system(size: size, weight: .semibold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .contentTransition(.numericText())
+            .animation(.easeInOut(duration: 0.25), value: date)
     }
 }
 

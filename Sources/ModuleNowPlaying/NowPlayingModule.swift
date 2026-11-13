@@ -46,8 +46,6 @@ public final class NowPlayingModule: NotchModule {
     @ObservationIgnored private var wasPlaying = false
     @ObservationIgnored private var noteTask: Task<Void, Never>?
 
-    /// How long a paused song still counts as "what you're listening to" when the notch opens.
-    static let recentPause: TimeInterval = 5 * 60
     /// Music that stops for less than this and plays again is the gap between two songs, not a stop:
     /// the user's pick of another module stays.
     static let songGap: TimeInterval = 10
@@ -77,14 +75,10 @@ public final class NowPlayingModule: NotchModule {
         return track.isPlaying || !hasYielded
     }
 
-    /// The notch opens on Now Playing while music plays or was paused a moment ago, unless the user picked
-    /// another module since the music started (`hasYielded`).
-    public var wantsFocus: Bool {
-        guard let track = center.track, !hasYielded else { return false }
-        if track.isPlaying { return true }
-        guard let pausedSince = center.pausedSince else { return false }
-        return Date().timeIntervalSince(pausedSince) < Self.recentPause
-    }
+    /// Playing music takes focus unless the user picked another module since it started.
+    public var wantsFocus: Bool { center.track?.isPlaying == true && !hasYielded }
+
+    public var isIdleForOpening: Bool { center.track?.isPlaying != true }
 
     public var accessibilityStatus: String? {
         guard isActive, let track = center.track else { return nil }
