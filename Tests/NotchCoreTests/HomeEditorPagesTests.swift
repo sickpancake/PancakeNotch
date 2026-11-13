@@ -79,3 +79,28 @@ struct HomeEditorPagesTests {
         #expect(HomeDragLanding.slot(pointer: CGPoint(x: grid.maxX + cell.width, y: grid.midY), grab: .zero, grid: grid, page: 0) == nil)
     }
 }
+
+/// Adding a widget while looking at a page (even a blank new one) puts it there when it fits.
+struct HomeAddingOnPageTests {
+    @Test func addsToTheBlankPageInView() throws {
+        let layout = HomeLayout.default
+        let next = try layout.adding(.battery, preferring: 1).get()
+        #expect(next.placement(of: .battery)?.slot.page == 1)
+        #expect(next.placement(of: .battery)?.slot.column == 0)
+    }
+
+    @Test func fallsBackWhenThePageIsFull() throws {
+        var full = HomeLayout()
+        for kind in [HomeWidgetKind.nowPlaying, .timer, .agents] {
+            full = try full.adding(kind, size: .large, preferring: 0).get()
+        }
+        #expect(full.placements(onPage: 0).count == 3)
+        let next = try full.adding(.clock, preferring: 0).get()
+        #expect(next.placement(of: .clock)?.slot.page == 1)
+    }
+
+    @Test func withoutAPageItStillTakesTheFirstGap() throws {
+        let next = try HomeLayout().adding(.clock).get()
+        #expect(next.placement(of: .clock)?.slot == HomeSlot(page: 0, column: 0, row: 0))
+    }
+}

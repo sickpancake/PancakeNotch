@@ -18,11 +18,21 @@ public enum HomeEditRefusal: Error, Equatable, Sendable {
 public enum HomeNudge: Sendable { case left, right, up, down }
 
 extension HomeLayout {
-    /// Adds at the first gap, trying smaller sizes if needed.
-    public func adding(_ kind: HomeWidgetKind, size: HomeWidgetSize? = nil) -> Result<Self, HomeEditRefusal> {
+    /// Adds at the first gap, trying smaller sizes if needed. With `page`, that page comes first (the one
+    /// the person is looking at, even a blank new one); only if it has no room does it go elsewhere.
+    public func adding(_ kind: HomeWidgetKind, size: HomeWidgetSize? = nil, preferring page: Int? = nil) -> Result<Self, HomeEditRefusal> {
         guard !contains(kind) else { return .failure(.alreadyOnHome) }
         let requested = size ?? kind.defaultSize
         guard kind.supports(requested) else { return .failure(.unsupportedSize) }
+        if let page, (0..<Self.pageCount).contains(page) {
+            for candidate in kind.sizes.reversed() where candidate <= requested {
+                if let slot = firstSpot(kind, candidate, pages: [page]) {
+                    var next = self
+                    next.placements.append(HomePlacement(kind: kind, size: candidate, slot: slot))
+                    return .success(next)
+                }
+            }
+        }
         for candidate in kind.sizes.reversed() where candidate <= requested {
             if let slot = firstSpot(kind, candidate, pages: Array(0..<Self.pageCount)) {
                 var next = self

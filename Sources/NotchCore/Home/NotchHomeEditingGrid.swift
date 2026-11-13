@@ -190,7 +190,7 @@ struct NotchHomeEditingGrid: View {
         }
     }
     private func add(_ kind: HomeWidgetKind) {
-        edit { $0.adding(kind) }
+        edit { $0.adding(kind, preferring: page) }
         model.showsHomePicker = false
         turnToWidget(kind)
     }

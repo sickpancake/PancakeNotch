@@ -448,7 +448,7 @@ struct HomeEditorView: View {
 
     private func add(_ kind: HomeWidgetKind) {
         focusedWidget = nil
-        change { $0.adding(kind) }
+        change { $0.adding(kind, preferring: page) }
         if let placed = home.layout.placement(of: kind) { page = placed.slot.page }
     }
 
