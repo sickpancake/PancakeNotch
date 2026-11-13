@@ -105,9 +105,13 @@ struct NotchHomeView: View {
                 if model.isEditingHome {
                     NotchHomeEditingGrid(model: model, area: area)
                 } else if pages.indices.contains(index) {
-                    HomePageGrid(model: model, page: pages[index], area: area)
-                        .id(pages[index])
-                        .transition(pageTransition)
+                    if reduceMotion {
+                        HomePageGrid(model: model, page: pages[index], area: area)
+                            .id(pages[index])
+                            .transition(.opacity)
+                    } else {
+                        pageStack(pages: pages, area: area)
+                    }
                 } else {
                     HomeEmptyNote(customize: model.openAppPage.map { open in { open(.homeEditor) } })
                         .transition(.opacity)
@@ -147,13 +151,20 @@ struct NotchHomeView: View {
         .accessibilityAction(named: Text("Previous page")) { model.showHomePage(index - 1) }
     }
 
-    /// The arriving page rises from the side it comes from; the leaving one fades where it is.
-    private var pageTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: model.homePageForward ? 24 : -24)),
-            removal: .opacity
-        )
+    private func pageStack(pages: [Int], area: CGSize) -> some View {
+        let position = model.homeScrollPosition ?? CGFloat(model.homePage)
+        return ZStack(alignment: .topLeading) {
+            ForEach(model.homeRenderedPages, id: \.self) { index in
+                HomePageGrid(model: model, page: pages[index], area: area)
+                    .offset(y: (CGFloat(index) - position) * area.height)
+                    // A page first mounted by a wheel/key/dot turn starts beside the old page.
+                    .transition(.offset(y: CGFloat(index - (model.homeAnimationOrigin ?? index)) * area.height))
+                    .allowsHitTesting(index == model.homePage && model.homeScrollPosition == nil)
+                    .accessibilityHidden(index != model.homePage)
+            }
+        }
+        .frame(width: area.width, height: area.height, alignment: .topLeading)
+        .clipped()
     }
 }
 

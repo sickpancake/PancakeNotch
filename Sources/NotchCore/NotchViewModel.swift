@@ -45,7 +45,7 @@ public final class NotchViewModel {
     /// The open notch shows Home (the widget grid) instead of a module (ADR-0042).
     public private(set) var showsHome = false {
         didSet {
-            if !showsHome { endHomeEditing() }
+            if !showsHome { endHomeEditing(); resetHomeMotion() }
             guard showsHome, !oldValue else { return }
             homeVisit &+= 1
             onHomeEvent?(.opened)
@@ -65,6 +65,36 @@ public final class NotchViewModel {
     /// The last page change went to a later page, for the slide.
     public private(set) var homePageForward = true
     @ObservationIgnored private var homeScroll = HomePageScrollTracker()
+    @ObservationIgnored private var homeMotion = HomeScrollMotion()
+    private(set) var homeScrollPosition: CGFloat?
+    private(set) var homeMovingPages: [Int] = []
+    private(set) var homeAnimationOrigin: Int?
+    @ObservationIgnored private var homeMotionGeneration = 0
+
+    var homeRenderedPages: [Int] {
+        homeMovingPages.isEmpty ? [homePage] : homeMovingPages.filter { homePages.indices.contains($0) }
+    }
+
+    private func resetHomeMotion() {
+        homeMotionGeneration &+= 1
+        homeMotion = HomeScrollMotion()
+        homeScrollPosition = nil
+        homeMovingPages = []
+        homeAnimationOrigin = nil
+    }
+
+    private func settleHome(to index: Int) {
+        homeMotion.end()
+        homeMotionGeneration &+= 1
+        let generation = homeMotionGeneration
+        withAnimation(.smooth(duration: 0.28, extraBounce: 0), completionCriteria: .removed) {
+            chosenHomePage = index
+            homeScrollPosition = CGFloat(index)
+        } completion: { [weak self] in
+            guard let self, self.homeMotionGeneration == generation else { return }
+            self.resetHomeMotion()
+        }
+    }
     /// Draws the Battery and Statistics widgets (the app has their data). `nil` shows plain tiles.
     @ObservationIgnored public var homeExtras: HomeExtraWidgets?
     /// Set for off-screen snapshots: Home's widgets show this time and never tick.
@@ -161,7 +191,7 @@ public final class NotchViewModel {
     /// notch rests (measured). Every way out of Closed wakes them before it animates.
     public private(set) var earsAsleep = false
     /// The window is on screen (set by the window controller): hidden, nothing in it needs to tick.
-    public var isOnScreen = true { didSet { if !isOnScreen { endHomeEditing() } } }
+    public var isOnScreen = true { didSet { if !isOnScreen { endHomeEditing(); resetHomeMotion() } } }
     @ObservationIgnored private var swipe = NotchSwipeTracker()
 
     public init(
@@ -309,6 +339,7 @@ public final class NotchViewModel {
 
     public func beginHomeEditing() {
         guard state == .expanded, showsHome, isOnScreen, !isEditingHome else { return }
+        resetHomeMotion()
         let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
         cancelAttentionClose()
         hoverTask?.cancel()
@@ -363,7 +394,15 @@ public final class NotchViewModel {
         guard showsHome, homePages.indices.contains(index), index != homePage else { return }
         cancelAttentionClose()
         homePageForward = index > homePage
-        withAnimation(Self.switchAnimation) { chosenHomePage = index }
+        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || snapshotClock != nil {
+            resetHomeMotion()
+            withAnimation(Self.switchAnimation) { chosenHomePage = index }
+        } else {
+            if homeScrollPosition == nil { homeScrollPosition = CGFloat(homePage) }
+            homeAnimationOrigin = homePage
+            homeMovingPages = [homePage, index]
+            settleHome(to: index)
+        }
     }
 
     /// A click on a widget, away from its buttons: opens what it belongs to. Stopwatch opens the Timer,
@@ -438,6 +477,7 @@ public final class NotchViewModel {
     /// used last, or Home if that module is idle and Home is available. Home also opens when there are
     /// no modules (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
     private func chooseModuleForOpening(_ moduleID: String?) {
+        resetHomeMotion()
         showsHome = false
         chosenHomePage = 0
         let ranked = rankedModules
@@ -456,15 +496,62 @@ public final class NotchViewModel {
 
     /// Scrolling up or down on Home moves one whole page per gesture (or per wheel step).
     private func scrollHome(_ event: NSEvent) -> Bool {
-        guard let step = homeScroll.handle(
-            phase: NotchSwipeTracker.Phase(event),
-            deltaY: event.scrollingDeltaY,
-            deltaX: event.scrollingDeltaX,
-            isPrecise: event.hasPreciseScrollingDeltas,
-            time: event.timestamp
-        ) else { return false }
-        showHomePage(homePage + step)
+        let phase = NotchSwipeTracker.Phase(event)
+        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !event.hasPreciseScrollingDeltas {
+            guard let step = homeScroll.handle(phase: phase, deltaY: event.scrollingDeltaY,
+                deltaX: event.scrollingDeltaX, isPrecise: event.hasPreciseScrollingDeltas,
+                time: event.timestamp) else { return false }
+            showHomePage(homePage + step)
+            return true
+        }
+        return handleHomePreciseScroll(phase: phase, deltaY: event.scrollingDeltaY,
+            deltaX: event.scrollingDeltaX, time: event.timestamp, momentum: !event.momentumPhase.isEmpty)
+    }
+
+    @discardableResult
+    func handleHomePreciseScroll(phase: NotchSwipeTracker.Phase, deltaY: CGFloat, deltaX: CGFloat,
+                                 time: TimeInterval, momentum: Bool = false) -> Bool {
+        // Native momentum belongs to the completed gesture, never to the spring.
+        if momentum {
+            if homeMotion.active { finishHomeScroll(time: time) }
+            return true
+        }
+        if phase == .began {
+            cancelAttentionClose()
+            resetHomeMotion()
+            homeMotion.begin(page: homePage, time: time)
+        }
+        if phase == .ended {
+            finishHomeScroll(time: time)
+            return true
+        }
+        guard phase == .began || phase == .changed, homeMotion.active else { return false }
+        homeMotion.move(y: deltaY, x: deltaX, time: time)
+        guard homeMotion.vertical else { return false }
+        let height = HomeWidgetMetrics.gridArea(in: layout).height
+        let position = homeMotion.position(height: height, count: homePages.count)
+        let direction = position >= CGFloat(homeMotion.origin) ? 1 : -1
+        let lastPage = max(0, homePages.count - 1)
+        let neighbour = min(lastPage, max(0, homeMotion.origin + direction))
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            homeScrollPosition = position
+            homeMovingPages = Array(Set([homeMotion.origin, neighbour])).sorted()
+            chosenHomePage = homeMotion.target(height: height, count: homePages.count, time: time)
+        }
         return true
+    }
+
+    private func finishHomeScroll(time: TimeInterval) {
+        guard homeMotion.active else { return }
+        let target = homeMotion.target(height: HomeWidgetMetrics.gridArea(in: layout).height,
+                                       count: homePages.count, time: time)
+        if homeMovingPages.isEmpty { resetHomeMotion(); return }
+        let revealed = homeMovingPages.first(where: { $0 != homeMotion.origin }) ?? homeMotion.origin
+        let neighbour = target == homeMotion.origin ? revealed : target
+        homeMovingPages = Array(Set([homeMotion.origin, neighbour])).sorted()
+        settleHome(to: target)
     }
 
     /// The module that takes this drag: the current one if it does, else the first by ranking.

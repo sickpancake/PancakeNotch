@@ -183,8 +183,14 @@ out when the symbol already says it (an idle Stopwatch, the Clock).
 - A click on a card opens its module (`openedFromHome(_:)` picks a page, e.g. the Timer's stopwatch); buttons
   inside the card act on their own. Never read anything that could ask macOS for permission (Now Playing reads
   only what its center already knows).
-- Pages change one at a time from a scroll (`HomePageScrollTracker`) or the arrow keys; dots show on the right
-  only with more than one non-empty page.
+- Home's vertical page stack follows precise trackpad deltas point for point inside the clipped grid area.
+  At either end it gently resists further travel. Release settles to the nearest page with a quiet spring;
+  a quick flick selects the adjacent page, never skipping one. Momentum cannot move the settle target.
+  The dots and live widgets follow the predicted settle page; the other mounted page stays still.
+  Only the current page and the neighbour being revealed are mounted during movement.
+- Wheel steps (at most one every 0.3 s), arrow keys and page dots glide between pages. With Reduce Motion,
+  pages cross-fade once per gesture. Editing retains its existing single-page turns and drag-to-dot paging;
+  its drag owner stays mounted. Dots show only when there is more than one page.
 
 ## Page patterns
 
