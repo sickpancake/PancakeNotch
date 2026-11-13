@@ -117,6 +117,14 @@ can try their settings right there.
   it. Drags are private (no pasteboard), so nothing lands in the Shelf. The dragged widget follows the pointer
   with no animation; only the landing spot and the neighbours moving aside animate. Leaving the page (and coming
   back) leaves nothing focused and no size list open.
+  Under the gallery's "Widgets" label, a search field fills the row (30 tall, `AppPalette.hover` fill, 8 corners,
+  hairline border that turns `hairlineStrong` while typing, a magnifying glass and a clear button). It matches
+  the start of any word in a widget's name or its `searchTerms` (`HomeWidgetKind.matches(search:)`); a new set
+  of results cross-fades over the old one in place (0.2 s, instant with Reduce Motion), so widgets never slide
+  to their new spots. Return adds the only addable match, Esc clears
+  and then lets go, and ⌘Z undoes typing rather than Home while the field has the keyboard. With no matches a
+  glass card says so, names any module that's off whose widget would match, and offers Clear Search and Open
+  Modules. Leaving the page clears the search.
 - **Overview:** a hero card with the notch art and the big notch switch, small boxes (update ready, Learn
   progress) with a 16 bold icon tile, stat tiles with big 34 bold numbers, and a tips card.
 - **Statistics:** charts with Swift Charts in white (`AppPalette.ink`, 0.8 for bars not highlighted) on

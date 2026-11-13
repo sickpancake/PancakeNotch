@@ -27,6 +27,9 @@ struct HomeEditorView: View {
     @State private var confirmsReset = false
     /// The widget that has the keyboard (outlined); a click anywhere else on the page, or Esc, lets go.
     @FocusState private var focusedWidget: HomeWidgetKind?
+    /// What's typed in the gallery's search field; cleared when you leave the page.
+    @State private var search = ""
+    @FocusState private var isSearching: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
 
@@ -57,7 +60,7 @@ struct HomeEditorView: View {
         }
         // A click on anything that isn't a widget or a control ends editing the selected widget.
         .contentShape(Rectangle())
-        .onTapGesture { focusedWidget = nil }
+        .onTapGesture { focusedWidget = nil; isSearching = false }
         .coordinateSpace(.named(Self.space))
         .overlay(alignment: .topLeading) { floatingWidget(resolver: resolver) }
         .onAppear {
@@ -72,6 +75,9 @@ struct HomeEditorView: View {
             isPageVisible = false
             cancelDrag()
             focusedWidget = nil
+            // Coming back finds the whole gallery, not an old search.
+            search = ""
+            isSearching = false
             practice.close()
             noteTask?.cancel()
         }
@@ -110,13 +116,14 @@ struct HomeEditorView: View {
             Button { focusedWidget = nil; undo() } label: {
                 Label(String(localized: "Undo"), systemImage: "arrow.uturn.backward")
             }
-            .keyboardShortcut("z", modifiers: .command)
+            // While you type a search, ⌘Z and ⇧⌘Z undo the typing instead of a Home change.
+            .keyboardShortcut(isSearching ? nil : KeyboardShortcut("z", modifiers: .command))
             .disabled(!history.canUndo)
             .help(Text("Undo (⌘Z)"))
             Button { focusedWidget = nil; redo() } label: {
                 Label(String(localized: "Redo"), systemImage: "arrow.uturn.forward")
             }
-            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .keyboardShortcut(isSearching ? nil : KeyboardShortcut("z", modifiers: [.command, .shift]))
             .disabled(!history.canRedo)
             .help(Text("Redo (⇧⌘Z)"))
             Menu {
@@ -346,25 +353,115 @@ struct HomeEditorView: View {
     // MARK: Gallery
 
     private func gallery(resolver: HomeWidgetResolver) -> some View {
-        let kinds = HomeWidgetKind.allCases.filter { kind in kind.moduleID.map(context.isEnabled) ?? true }
+        let available = HomeWidgetKind.allCases.filter { kind in kind.moduleID.map(context.isEnabled) ?? true }
+        let kinds = available.filter { $0.matches(search: search) }
         return VStack(alignment: .leading, spacing: 10) {
             SectionLabel(title: String(localized: "Widgets"))
                 .padding(.horizontal, 20)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                ForEach(kinds) { kind in
-                    GalleryItem(kind: kind, resolver: resolver, isPlaced: home.layout.contains(kind)) {
-                        add(kind)
+            searchField(addable: kinds.filter { !home.layout.contains($0) })
+            // New results cross-fade over the old ones in place: a fresh grid per result set, so widgets
+            // never slide from their old spot to a new one.
+            ZStack(alignment: .top) {
+                if kinds.isEmpty {
+                    noMatches(available: available)
+                        .transition(.opacity)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                        ForEach(kinds) { kind in
+                            GalleryItem(kind: kind, resolver: resolver, isPlaced: home.layout.contains(kind)) {
+                                add(kind)
+                            }
+                            .gesture(dragGesture(kind: kind, size: kind.defaultSize, origin: nil, fromGallery: true),
+                                     including: home.layout.contains(kind) ? .none : .all)
+                        }
                     }
-                    .gesture(dragGesture(kind: kind, size: kind.defaultSize, origin: nil, fromGallery: true),
-                             including: home.layout.contains(kind) ? .none : .all)
+                    .id(kinds)
+                    .transition(.opacity)
                 }
             }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: kinds)
             Text("Click a widget to put it in the first free spot, or drag it onto Home. Each widget can be on Home once. Widgets of modules that are off show up here once you turn them on.")
                 .font(.app(size: 12.5))
                 .foregroundStyle(AppPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 20)
         }
+    }
+
+    /// Narrows the gallery by name or a related word ("music" finds Now Playing). Return adds the widget
+    /// when only one you can add matches; Esc clears the search, then lets go of the field.
+    private func searchField(addable: [HomeWidgetKind]) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppPalette.tertiaryText)
+                .accessibilityHidden(true)
+            TextField(String(localized: "Search Widgets"), text: $search)
+                .textFieldStyle(.plain)
+                .font(.app(size: 13))
+                .focused($isSearching)
+                .onSubmit { if addable.count == 1, let only = addable.first { add(only) } }
+                .onExitCommand { if search.isEmpty { isSearching = false } else { search = "" } }
+                .accessibilityLabel(Text("Search widgets"))
+                .accessibilityHint(Text("Type a name, or a word like music, files or time. Return adds the widget when only one matches."))
+            if !search.isEmpty {
+                Button { search = ""; isSearching = true } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppPalette.tertiaryText)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(Text("Clear Search"))
+                .accessibilityLabel(Text("Clear Search"))
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
+        .background(AppPalette.hover, in: .rect(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(isSearching ? AppPalette.hairlineStrong : AppPalette.hairline))
+        // A click on the magnifying glass or the padding starts typing too, not only on the words.
+        .contentShape(.rect(cornerRadius: 8))
+        .onTapGesture { isSearching = true }
+        .animation(.easeOut(duration: 0.15), value: search.isEmpty)
+        .animation(.easeOut(duration: 0.15), value: isSearching)
+    }
+
+    /// Shown instead of the gallery when nothing matches. If a widget of a module that's off would match,
+    /// it says so and offers the Modules page.
+    private func noMatches(available: [HomeWidgetKind]) -> some View {
+        let typed = search.trimmingCharacters(in: .whitespaces)
+        var offModules: [String] = []
+        for kind in HomeWidgetKind.allCases where !available.contains(kind) && kind.matches(search: search) {
+            if let module = kind.moduleID, !offModules.contains(module) { offModules.append(module) }
+        }
+        let names = offModules.map { AppContext.moduleInfo($0).title }.formatted(.list(type: .and))
+        return VStack(spacing: 6) {
+            Text("No widgets match “\(typed)”.")
+                .font(.app(size: 13.5, weight: .semibold))
+            if !offModules.isEmpty {
+                Text(offModules.count == 1
+                     ? String(localized: "\(names) is off. Turn it on in Modules to use its widgets.")
+                     : String(localized: "\(names) are off. Turn them on in Modules to use their widgets."))
+                    .font(.app(size: 12.5))
+                    .foregroundStyle(AppPalette.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 8) {
+                Button(String(localized: "Clear Search")) { search = ""; isSearching = true }
+                if !offModules.isEmpty {
+                    Button(String(localized: "Open Modules")) { context.navigation.section = .modules }
+                }
+            }
+            .padding(.top, 6)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .glassPanel(cornerRadius: 14)
     }
 
     // MARK: Dragging
