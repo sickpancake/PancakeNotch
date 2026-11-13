@@ -528,7 +528,7 @@ public final class NotchViewModel {
         guard phase == .began || phase == .changed, homeMotion.active else { return false }
         homeMotion.move(y: deltaY, x: deltaX, time: time)
         guard homeMotion.vertical else { return false }
-        let height = HomeWidgetMetrics.gridArea(in: layout).height
+        let height = HomeWidgetMetrics.pageStride(in: HomeWidgetMetrics.gridArea(in: layout))
         let position = homeMotion.position(height: height, count: homePages.count)
         let direction = position >= CGFloat(homeMotion.origin) ? 1 : -1
         let lastPage = max(0, homePages.count - 1)
@@ -545,7 +545,7 @@ public final class NotchViewModel {
 
     private func finishHomeScroll(time: TimeInterval) {
         guard homeMotion.active else { return }
-        let target = homeMotion.target(height: HomeWidgetMetrics.gridArea(in: layout).height,
+        let target = homeMotion.target(height: HomeWidgetMetrics.pageStride(in: HomeWidgetMetrics.gridArea(in: layout)),
                                        count: homePages.count, time: time)
         if homeMovingPages.isEmpty { resetHomeMotion(); return }
         let revealed = homeMovingPages.first(where: { $0 != homeMotion.origin }) ?? homeMotion.origin

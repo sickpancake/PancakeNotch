@@ -121,8 +121,10 @@ struct NotchHomeView: View {
             .contentShape(Rectangle())
             // Alongside, not before, the widgets' own clicks and buttons, so a quick click still works. Once
             // the hold starts editing, the editing grid replaces the widgets, so the release presses nothing.
+            // While editing only the hold is off: `.none` would also switch off the editor's own clicks and
+            // drags (the widget list's choices, moving widgets), and those clicks would finish editing.
             .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in model.beginHomeEditing() },
-                                 including: model.isEditingHome ? .none : .all)
+                                 including: model.isEditingHome ? .subviews : .all)
             .contextMenu {
                 if let open = model.openAppPage {
                     Button(String(localized: "Edit Home…")) {
@@ -151,20 +153,37 @@ struct NotchHomeView: View {
         .accessibilityAction(named: Text("Previous page")) { model.showHomePage(index - 1) }
     }
 
+    /// The pages one above the other, a margin's width apart, like one long column. They scroll through
+    /// the panel's margins above and below the grid and fade out there, so a page leaving never shows a
+    /// hard cut through its widgets. At rest the margins are empty, so nothing on the page is faded.
     private func pageStack(pages: [Int], area: CGSize) -> some View {
         let position = model.homeScrollPosition ?? CGFloat(model.homePage)
+        let stride = HomeWidgetMetrics.pageStride(in: area)
+        let top = HomeWidgetMetrics.topPadding, bottom = HomeWidgetMetrics.bottomPadding
+        let height = area.height + top + bottom
         return ZStack(alignment: .topLeading) {
             ForEach(model.homeRenderedPages, id: \.self) { index in
                 HomePageGrid(model: model, page: pages[index], area: area)
-                    .offset(y: (CGFloat(index) - position) * area.height)
+                    .offset(y: (CGFloat(index) - position) * stride)
                     // A page first mounted by a wheel/key/dot turn starts beside the old page.
-                    .transition(.offset(y: CGFloat(index - (model.homeAnimationOrigin ?? index)) * area.height))
+                    .transition(.offset(y: CGFloat(index - (model.homeAnimationOrigin ?? index)) * stride))
                     .allowsHitTesting(index == model.homePage && model.homeScrollPosition == nil)
                     .accessibilityHidden(index != model.homePage)
             }
         }
         .frame(width: area.width, height: area.height, alignment: .topLeading)
-        .clipped()
+        .padding(.top, top)
+        .padding(.bottom, bottom)
+        .mask {
+            LinearGradient(stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: top / height),
+                .init(color: .black, location: 1 - bottom / height),
+                .init(color: .clear, location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+        }
+        .padding(.top, -top)
+        .padding(.bottom, -bottom)
     }
 }
 

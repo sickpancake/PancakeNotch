@@ -50,6 +50,10 @@ public enum HomeWidgetMetrics {
     public static let topPadding: CGFloat = 8
     public static let bottomPadding: CGFloat = 14
 
+    /// How far apart Home's pages sit as they scroll: a page plus the panel's margins above and below it,
+    /// so the gap between two pages matches the space around one.
+    public static func pageStride(in area: CGSize) -> CGFloat { area.height + topPadding + bottomPadding }
+
     /// A cell's size when the grid fills `area`.
     public static func cellSize(in area: CGSize) -> CGSize {
         CGSize(width: max(0, (area.width - CGFloat(HomeLayout.columns - 1) * gap) / CGFloat(HomeLayout.columns)),
