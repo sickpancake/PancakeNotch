@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Search for widgets.** A search field above the Home editor's widgets finds them by name or by a related word, like "music" for Now Playing or "files" for the Shelf. If a match belongs to a module that's off, it says so.
 - **Hold anywhere below Home’s buttons to edit.** The bottom strip and side margins now work too, and holding a widget button won’t press it.
 - **A quieter Home editor.** Widget badges, size controls and outlines fade away when its window is inactive, and return when you come back.
 - **The whole remove badge works.** Clicking the edge of a widget's − badge removes it, instead of finishing editing.
