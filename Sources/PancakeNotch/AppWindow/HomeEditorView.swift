@@ -10,6 +10,7 @@ import SwiftUI
 /// never land in the Shelf or anywhere outside the editor.
 struct HomeEditorView: View {
     let context: AppContext
+    @State private var isPageVisible = false
     @State private var practice = PracticeSet()
     @State private var history = HomeHistory()
     @State private var page = 0
@@ -32,6 +33,7 @@ struct HomeEditorView: View {
     nonisolated static let space = "homeEditor"
 
     private var home: HomeSettings { context.home }
+    private var isEditingShown: Bool { appearsActive && isPageVisible }
 
     /// The layout as it would be if the dragged widget landed where it is now.
     private var shownLayout: HomeLayout { drag?.preview ?? home.layout }
@@ -59,6 +61,7 @@ struct HomeEditorView: View {
         .coordinateSpace(.named(Self.space))
         .overlay(alignment: .topLeading) { floatingWidget(resolver: resolver) }
         .onAppear {
+            isPageVisible = true
             // Coming back to this page never finds a widget still outlined.
             focusedWidget = nil
             if home.layout.isPageEmpty(page), let first = home.layout.nonEmptyPages.first { page = first }
@@ -66,6 +69,7 @@ struct HomeEditorView: View {
             home.hasSeenIntro = true // the notch's "Home is new" hint has done its job
         }
         .onDisappear {
+            isPageVisible = false
             cancelDrag()
             focusedWidget = nil
             practice.close()
@@ -75,7 +79,10 @@ struct HomeEditorView: View {
         .onExitCommand {
             if drag != nil { cancelDrag() } else { focusedWidget = nil }
         }
-        .onChange(of: appearsActive) { _, active in if !active { cancelDrag() } }
+        .onChange(of: isEditingShown) { _, shown in
+            if !shown { focusedWidget = nil; cancelDrag() }
+        }
+        .onChange(of: page) { _, _ in focusedWidget = nil }
         .onChange(of: Self.practiceKinds(for: context)) { _, kinds in practice.update(kinds) }
         // An edit that empties the page being edited moves on to the nearest page with widgets, so an
         // empty page doesn't linger. A page made with "+" stays: it was empty before the edit too.
@@ -264,8 +271,9 @@ struct HomeEditorView: View {
                             placement: placement, frame: frame, resolver: resolver, pages: pages,
                             isOff: placement.kind.moduleID.map { !context.isEnabled($0) } ?? false,
                             isDimmed: drag != nil,
-                            isLive: appearsActive && drag == nil,
-                            wiggles: !reduceMotion && appearsActive && drag == nil,
+                            isLive: isEditingShown && drag == nil,
+                            isEditingShown: isEditingShown,
+                            wiggles: !reduceMotion && isEditingShown && drag == nil,
                             actions: actions(for: placement, pages: pages),
                             focus: $focusedWidget
                         )
@@ -364,6 +372,7 @@ struct HomeEditorView: View {
     private func dragGesture(kind: HomeWidgetKind, size: HomeWidgetSize, origin: CGRect?, fromGallery: Bool) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.space))
             .onChanged { value in
+                guard isEditingShown else { return }
                 if value.startLocation == cancelledDragStart { return }
                 if drag == nil {
                     let cell = HomeWidgetMetrics.cellSize(in: gridFrame.size)
@@ -381,6 +390,11 @@ struct HomeEditorView: View {
             .onEnded { value in
                 if value.startLocation == cancelledDragStart {
                     cancelledDragStart = nil
+                    return
+                }
+                guard isEditingShown else {
+                    cancelDrag()
+                    cancelledDragStart = nil // This gesture ended; the next drag may start in the same spot.
                     return
                 }
                 dragEnded()
@@ -596,6 +610,7 @@ private struct EditableWidget: View {
     let isDimmed: Bool
     /// The previews tick (a running timer, the clock) only while the window is active and nothing is dragged.
     let isLive: Bool
+    let isEditingShown: Bool
     let wiggles: Bool
     let actions: HomeWidgetActions
     /// The page's choice of widget with the keyboard.
@@ -613,19 +628,26 @@ private struct EditableWidget: View {
             // The outline first, so the remove badge and the size button sit on top of it.
             .overlay {
                 RoundedRectangle(cornerRadius: HomeWidgetMetrics.cornerRadius + 3, style: .continuous)
-                    .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 1.5)
+                    .strokeBorder(.white.opacity(isEditingShown && isFocused ? 0.9 : 0), lineWidth: 1.5)
                     .padding(-3)
-                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                    .animation(.easeInOut(duration: 0.2), value: isEditingShown)
+                    .animation(.easeInOut(duration: 0.2), value: isFocused)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
                 // Only while pointed at or focused, so it doesn't cover the widget's words.
-                if kind.sizes.count > 1, isHovered || isFocused || choosingSize {
+                if isEditingShown, kind.sizes.count > 1, isHovered || isFocused || choosingSize {
                     sizeControl.padding(5).transition(.opacity)
                 }
             }
-            .overlay(alignment: .topLeading) { removeBadge.offset(x: -6, y: -6) }
+            .overlay(alignment: .topLeading) {
+                if isEditingShown { removeBadge.offset(x: -6, y: -6).transition(.opacity) }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isEditingShown)
+            .onChange(of: isEditingShown) { _, shown in
+                if !shown { choosingSize = false; isHovered = false }
+            }
             .modifier(HomeWiggle(isOn: wiggles, seed: WiggleMotion.seed(for: kind)))
             .contentShape(.rect(cornerRadius: HomeWidgetMetrics.cornerRadius))
             .onHover { hovering in withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering } }

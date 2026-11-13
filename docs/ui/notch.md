@@ -300,7 +300,7 @@ When you add a state to a page, add it to the snapshot too, render, and look at 
 
 ## Editing Home in the notch
 
-Hold Home's widget area for half a second to edit, including the gaps or the empty Home note. A short
+Hold anywhere in Home's body below the band for half a second to edit, including widgets, gaps, the empty Home note and all margins. The band's buttons and module tabs keep their own actions; page dots still turn pages on a short click. A short
 click keeps its usual action. While editing, Home stays open, takes keyboard focus and draws every
 widget with a still context. Gentle independent wiggles stop when hidden, when dragging, or with
 Reduce Motion. The shared `HomeWiggle` modifier returns cards to level when disabled.

@@ -118,7 +118,10 @@ struct NotchHomeView: View {
                 }
             }
             .frame(width: area.width, height: area.height, alignment: .topLeading)
+            .padding(.top, HomeWidgetMetrics.topPadding)
+            .frame(width: size.width, height: size.height - notch.height, alignment: .top)
             .contentShape(Rectangle())
+            // Cover the entire body below the band, including the side and bottom margins.
             // Alongside, not before, the widgets' own clicks and buttons, so a quick click still works. Once
             // the hold starts editing, the editing grid replaces the widgets, so the release presses nothing.
             // While editing only the hold is off: `.none` would also switch off the editor's own clicks and
@@ -133,7 +136,6 @@ struct NotchHomeView: View {
                     }
                 }
             }
-            .padding(.top, HomeWidgetMetrics.topPadding)
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .overlay(alignment: .trailing) {
