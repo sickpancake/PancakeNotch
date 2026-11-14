@@ -928,9 +928,12 @@ private struct GalleryItem: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(kind.title)
                             .font(.app(size: 13.5, weight: .semibold))
+                            .lineLimit(1)
+                        // Always room for two lines, so every box is the same height whether it wraps or not.
                         Text(kind.sizes.map(\.title).formatted(.list(type: .and)))
                             .font(.app(size: 11.5))
                             .foregroundStyle(AppPalette.secondaryText)
+                            .lineLimit(2, reservesSpace: true)
                     }
                     Spacer(minLength: 0)
                     if isPlaced {
