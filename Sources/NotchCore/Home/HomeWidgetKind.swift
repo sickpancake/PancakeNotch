@@ -67,3 +67,51 @@ public enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiabl
     public func supports(_ size: HomeWidgetSize) -> Bool { sizes.contains(size) }
     public static func kinds(forModule moduleID: String) -> [Self] { allCases.filter { $0.moduleID == moduleID } }
 }
+
+// MARK: Search
+
+extension HomeWidgetKind {
+    /// Words people might type when looking for this widget, besides its name.
+    public var searchTerms: [String] {
+        let words = switch self {
+        case .nowPlaying: String(localized: "music, song, album, audio, podcast, Spotify, Apple Music, media, play, pause",
+                                 comment: "Words that find the Now Playing widget in the Home widget search, separated by commas")
+        case .timer: String(localized: "countdown, alarm, time, minutes, reminder",
+                            comment: "Words that find the Timer widget in the Home widget search, separated by commas")
+        case .stopwatch: String(localized: "laps, time, count up, timing",
+                                comment: "Words that find the Stopwatch widget in the Home widget search, separated by commas")
+        case .agents: String(localized: "Claude Code, Codex, Cursor, AI, coding, assistant, conversations",
+                             comment: "Words that find the Agents widget in the Home widget search, separated by commas")
+        case .aiUsage: String(localized: "limits, tokens, plan, Claude, Codex, cost, quota",
+                              comment: "Words that find the AI Usage widget in the Home widget search, separated by commas")
+        case .shelf: String(localized: "files, drop, drag, links, AirDrop, share, clipboard",
+                            comment: "Words that find the Shelf widget in the Home widget search, separated by commas")
+        case .keepAwake: String(localized: "sleep, coffee, caffeine, awake, screen, lock, stay on",
+                                comment: "Words that find the Keep Awake widget in the Home widget search, separated by commas")
+        case .allModules: String(localized: "modules, menu, shortcuts, launcher",
+                                 comment: "Words that find the All Modules widget in the Home widget search, separated by commas")
+        case .clock: String(localized: "time, date, hour, day",
+                            comment: "Words that find the Clock widget in the Home widget search, separated by commas")
+        case .battery: String(localized: "power, charge, charging, plugged in, energy",
+                              comment: "Words that find the Battery widget in the Home widget search, separated by commas")
+        case .statistics: String(localized: "stats, numbers, listening, history, charts",
+                                 comment: "Words that find the Statistics widget in the Home widget search, separated by commas")
+        }
+        return words.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// Whether a search finds this widget: each word typed starts a word of its name or its search terms,
+    /// ignoring case and accents ("apple mu" finds Now Playing, "tim" finds Timer). An empty search finds all.
+    public func matches(search: String) -> Bool {
+        let typed = Self.words(in: search)
+        guard !typed.isEmpty else { return true }
+        let own = Self.words(in: ([title] + searchTerms).joined(separator: " "))
+        return typed.allSatisfy { word in own.contains { $0.hasPrefix(word) } }
+    }
+
+    private static func words(in text: String) -> [String] {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+    }
+}
