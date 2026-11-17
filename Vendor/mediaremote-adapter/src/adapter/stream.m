@@ -256,9 +256,15 @@ extern void adapter_stream() {
       internalHandle(true);
     };
 
+    // PancakeNotch patch: callbacks from a retired session must not restore its title.
+    __block NSUInteger sessionGeneration = 0;
+    __block NSUInteger infoGeneration = 0;
+
     void (^requestNowPlayingApplicationPID)() = ^{
+      NSUInteger generation = sessionGeneration;
       g_mediaRemote.getNowPlayingApplicationPID(
           g_serialdispatchQueue, ^(int pid) {
+            if (generation != sessionGeneration) return;
             if (pid == 0) {
                 liveData[kMRAProcessIdentifier] = nil;
                 handle();
@@ -278,7 +284,9 @@ extern void adapter_stream() {
     };
 
     void (^requestNowPlayingParentApplicationBundleIdentifier)() = ^{
+      NSUInteger generation = sessionGeneration;
       g_mediaRemote.getNowPlayingClient(g_serialdispatchQueue, ^(id client) {
+        if (generation != sessionGeneration) return;
         NSString *parentAppBundleID = nil;
         if (client && [client respondsToSelector:@selector
                               (parentApplicationBundleIdentifier)]) {
@@ -298,8 +306,10 @@ extern void adapter_stream() {
     };
 
     void (^requestNowPlayingApplicationIsPlaying)() = ^{
+      NSUInteger generation = sessionGeneration;
       g_mediaRemote.getNowPlayingApplicationIsPlaying(
           g_serialdispatchQueue, ^(bool isPlaying) {
+            if (generation != sessionGeneration) return;
             liveData[kMRAPlaying] = @(isPlaying);
             handle();
           });
@@ -307,7 +317,9 @@ extern void adapter_stream() {
 
     // PancakeNotch patch: the commands the app accepts right now.
     void (^requestEnabledCommandsBlock)() = ^{
+      NSUInteger generation = sessionGeneration;
       requestEnabledCommands(g_serialdispatchQueue, ^(NSArray *enabled) {
+        if (generation != sessionGeneration) return;
         if (enabled != nil) {
             liveData[kMRAEnabledCommands] = enabled;
         } else {
@@ -318,8 +330,11 @@ extern void adapter_stream() {
     };
 
     void (^requestNowPlayingInfo)() = ^{
+      NSUInteger generation = sessionGeneration;
+      NSUInteger request = ++infoGeneration;
       g_mediaRemote.getNowPlayingInfo(g_serialdispatchQueue, ^(
                                           NSDictionary *information) {
+        if (generation != sessionGeneration || request != infoGeneration) return;
         NSString *serviceIdentifier =
             information[kMRMediaRemoteNowPlayingInfoServiceIdentifier];
         if (!isTestMode &&
@@ -381,11 +396,16 @@ extern void adapter_stream() {
     };
 
     void (^resetAll)() = ^{
+      ++sessionGeneration;
+      [debounce cancel];
+      [peculiar_debounce cancel];
+      did_peculiar_debounce = NO;
       [liveData removeAllObjects];
     };
 
     void (^refreshAll)() = ^{
       resetAll();
+      handle();
       requestAll();
     };
 
@@ -438,11 +458,10 @@ extern void adapter_stream() {
                       liveData[kMRABundleIdentifier] = process.bundleIdentifier;
                       requestNowPlayingParentApplicationBundleIdentifier();
                       liveData[kMRAPlaying] = @([isPlayingValue boolValue]);
-                      if (liveData[kMRATitle] == nil) {
-                          requestNowPlayingInfo();
-                      } else {
-                          handle();
-                      }
+                      // Closing a tab may only announce a playback change.
+                      // Re-read metadata even when the old title is cached.
+                      handle();
+                      requestNowPlayingInfo();
                     });
                   });
                 }];
@@ -490,6 +509,19 @@ extern void adapter_stream() {
                     });
                   }];
                 }];
+
+    // PancakeNotch patch: a tab can relinquish its media session while its
+    // browser stays running. These events need not include a process PID.
+    id application_change_observer = [default_center
+        addObserverForName:kMRMediaRemoteNowPlayingApplicationDidChangeNotification
+                    object:nil queue:nil usingBlock:^(NSNotification *notification) {
+          dispatch_async(g_serialdispatchQueue, refreshAll);
+        }];
+    id queue_change_observer = [default_center
+        addObserverForName:kMRMediaRemoteNowPlayingPlaybackQueueDidChangeNotification
+                    object:nil queue:nil usingBlock:^(NSNotification *notification) {
+          dispatch_async(g_serialdispatchQueue, requestNowPlayingInfo);
+        }];
 
     // Register notifications for when applications are closed.
     id app_termination_observer = [shared_workscape_notification_center
@@ -546,6 +578,8 @@ extern void adapter_stream() {
 
     [default_center removeObserver:is_playing_change_observer];
     [default_center removeObserver:info_change_observer];
+    [default_center removeObserver:application_change_observer];
+    [default_center removeObserver:queue_change_observer];
     for (id observer in commands_change_observers) {
         [default_center removeObserver:observer];
     }
