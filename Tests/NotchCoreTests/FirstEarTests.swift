@@ -8,10 +8,11 @@ import Testing
 final class FirstEarModule: NotchModule {
     let moduleID = "keepAwake"
     var isActive = true
-    var prefersFirstEar = true
+    var earPlacement: CompactEarPlacement = .first
 
     func attach(to notch: NotchViewModel?) {}
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: earPlacement) }
     func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
     func peekView(layout: NotchLayout) -> AnyView? { AnyView(EmptyView()) }
 }
@@ -25,6 +26,7 @@ final class WaitingEarModule: NotchModule {
 
     func attach(to notch: NotchViewModel?) {}
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration() }
     func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
 }
 
@@ -119,7 +121,7 @@ struct FirstEarTests {
         let timer = WaitingModule("timer")
         timer.isActive = true
         timer.waitsForYou = true
-        timer.prefersSecondEar = true
+        timer.earPlacement = .second
         model.modules = [music, shelf, agents, timer, awake]
         model.arrangement.swapsEarSides = swapped
         model.open(focusing: "shelf")

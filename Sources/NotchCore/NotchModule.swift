@@ -24,8 +24,11 @@ public protocol NotchModule: AnyObject {
     /// The open panel's content, laid out at `layout.bodySize(for: .expanded)`. Its top band, beside
     /// the hardware notch, leaves `notchModuleBarWidth` (environment) free on the left for the tabs.
     func expandedView(layout: NotchLayout) -> AnyView
-    /// Content for the compact ears, or `nil`. The views stay alive while the notch is closed or open
-    /// (hidden, under the notch), so they can slide in and out.
+    /// Available ear content and its preferred spot, independent of activity. `nil` means no ears.
+    var earConfiguration: CompactEarConfiguration? { get }
+    /// Content matching `earConfiguration`, including its extra view when declared. Return `nil`
+    /// only when the configuration is absent. Views stay alive under the closed or open notch
+    /// so they can slide in and out.
     func compactEars(layout: NotchLayout) -> CompactEars?
     /// A slim strip under the compact notch, shown for a moment by `NotchViewModel.peek(_:for:)`
     /// (the new song's title), laid out at the compact width × `NotchLayout.peekStripHeight`.
@@ -43,14 +46,6 @@ public protocol NotchModule: AnyObject {
     /// here first, before a playing song, and while active it gets a spot beside the notch before modules
     /// that don't wait (ADR-0011 amendment 2026-11-03).
     var waitsForYou: Bool { get }
-
-    /// Takes the second ear (#2: right, or left with Swap sides) while active, whatever its rank, so the
-    /// first module keeps its place (the Timer, ADR-0040). Alone it keeps to #2, or fills both ears with an
-    /// `extra`.
-    var prefersSecondEar: Bool { get }
-    /// Takes the first ear (#1: left, or right with Swap sides) while active, whatever its rank (Keep Awake,
-    /// ADR-0041). A module asking for #2 keeps it; the best-ranked other module takes #2 otherwise.
-    var prefersFirstEar: Bool { get }
 
     /// Read by VoiceOver while the notch is closed or compact (e.g. "Shelf is full").
     var accessibilityStatus: String? { get }
@@ -111,14 +106,13 @@ public extension NotchModule {
     var title: String { moduleID }
     var symbol: String { "square" }
     var menuStatus: String? { nil }
+    var earConfiguration: CompactEarConfiguration? { nil }
     func compactEars(layout: NotchLayout) -> CompactEars? { nil }
     func peekView(layout: NotchLayout) -> AnyView? { nil }
     var isActive: Bool { false }
     var wantsFocus: Bool { false }
     var isIdleForOpening: Bool { false }
     var waitsForYou: Bool { false }
-    var prefersSecondEar: Bool { false }
-    var prefersFirstEar: Bool { false }
     var holdsOpen: Bool { false }
     var accessibilityStatus: String? { nil }
     func notchDidOpen() {}

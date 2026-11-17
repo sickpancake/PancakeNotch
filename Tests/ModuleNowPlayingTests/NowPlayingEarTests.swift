@@ -75,6 +75,8 @@ struct NowPlayingEarTests {
         let (module, backend) = makeModule()
         play(backend)
         let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+        #expect(module.earConfiguration?.hasExtra == true)
+        #expect(module.earConfiguration?.placement == .byRank)
         let ears = module.compactEars(layout: layout)
         #expect(ears != nil)
         #expect(ears?.extra != nil)

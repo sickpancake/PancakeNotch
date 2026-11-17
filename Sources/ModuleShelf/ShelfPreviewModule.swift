@@ -33,6 +33,8 @@ public final class ShelfPreviewModule: NotchModule {
         AnyView(ShelfPreviewPanel(layout: ShelfLayout(layout)))
     }
 
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration() }
+
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(ShelfTrayBadge(count: Self.samples.count)))
     }

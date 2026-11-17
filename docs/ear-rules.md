@@ -5,11 +5,13 @@ for which module shows there and where. In the app and in Help they're called th
 **#1** is the first spot (left) and **#2** the second spot (right). Users read the plain-English version in Help,
 under [What shows beside the notch](https://sickpancake.github.io/PancakeNotch/help/#beside-the-notch).
 
-The logic lives in `NotchViewModel.ears(layout:)`, `activityChanged()` and `moduleUnderPointer()`
-(`Sources/NotchCore`), driven by each module's `isActive`, `waitsForYou`, `wantsFocus`, `prefersFirstEar`,
-`prefersSecondEar` and `compactEars(layout:)`. Tests:
-`EarRulesTests`, `NotchModulesTests`, `FirstEarTests` and `SecondEarTests` (NotchCoreTests), `NowPlayingEarTests`,
-`KeepAwakeEarTests`, and each module's own tests. If you change a rule, change this page, Help and the tests together.
+The logic lives in `EarAllocator`, `NotchViewModel.ears(layout:)`, `activityChanged()` and `moduleUnderPointer()`
+(`Sources/NotchCore`), driven by each module's `isActive`, `waitsForYou`, `wantsFocus`, `earConfiguration`
+(content and preferred spot) and `compactEars(layout:)`. Allocation chooses owners and sides without building
+views; only the chosen owners build their views, and pointer targeting uses the same allocation rules. Tests:
+`EarAllocatorTests` (the pre-refactor allocation across 576,240 combinations), `EarRenderingTests`,
+`EarRulesTests`, `NotchModulesTests`, `FirstEarTests` and `SecondEarTests` (NotchCoreTests),
+`NowPlayingEarTests`, `KeepAwakeEarTests`, and each module's own tests. If you change a rule, change this page, Help and the tests together.
 
 ## When the ears are out
 
@@ -42,10 +44,11 @@ The logic lives in `NotchViewModel.ears(layout:)`, `activityChanged()` and `modu
    **Waiting alerts come first:** a module that `waitsForYou` (an agent that needs you, a Timer showing Done) is
    chosen before every module that doesn't, whatever its rank. Ranking still orders them among themselves.
 7. **Set spots:**
-   - Keep Awake takes **#1** (`prefersFirstEar`), unless #2 is also claimed and another module waits for you:
+   - Keep Awake takes **#1** (`earConfiguration.placement == .first`), unless #2 is also claimed and another
+     module waits for you:
      then the waiting one gets a spot first and Keep Awake waits.
-   - The Timer takes **#2** on "Second spot" (the default) and always while Done (`prefersSecondEar`). On
-     "By order" it ranks like any other module.
+   - The Timer takes **#2** on "Second spot" (the default) and always while Done
+     (`earConfiguration.placement == .second`). On "By order" it ranks like any other module.
    - The after-drop Shelf count, when the Shelf isn't active on its own (under 15 items), borrows **#2**, but
      never from a waiting alert: a waiting Timer keeps #2, and the count shows once a spot is free.
    - Set spots are filled before ordinary activity, never before waiting alerts.
@@ -61,8 +64,10 @@ The logic lives in `NotchViewModel.ears(layout:)`, `activityChanged()` and `modu
 
 11. Hovering (unless "Open on click only" is on) or clicking **any module's ear**, or anywhere on a peek strip,
     opens the notch on that module (`moduleUnderPointer()`). Over the hardware notch in the middle it opens on the
-    best-ranked module that `waitsForYou`, else the best-ranked that `wantsFocus` (music playing, or paused within
-    5 minutes), else on the module used last.
+    best-ranked module that `waitsForYou`, else Home if chosen in settings and available, else the best-ranked
+    that `wantsFocus` (music actually playing, unless you moved on), else the module used last. With Last module,
+    a remembered Now Playing page falls back to Home when paused or empty and Home is available.
+    Home also opens with no modules; Tabs-only navigation keeps Home unavailable.
 12. If you switch away from a song while it plays, Now Playing stops wanting focus (`hasYielded`) until you open it
     again or the music starts after a stop of 10 s or more; the short gap between songs doesn't count. Its ear
     still shows while a song plays.

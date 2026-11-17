@@ -8,7 +8,7 @@ import Testing
 final class SecondEarModule: NotchModule {
     let moduleID: String
     var isActive = true
-    var prefersSecondEar = true
+    var earPlacement: CompactEarPlacement = .second
     /// Has a "Timer done" strip to show (`peekView`).
     var hasStrip = false
     weak var notch: NotchViewModel?
@@ -18,6 +18,7 @@ final class SecondEarModule: NotchModule {
     func attach(to notch: NotchViewModel?) { self.notch = notch }
     func peekView(layout: NotchLayout) -> AnyView? { hasStrip ? AnyView(EmptyView()) : nil }
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: earPlacement) }
     func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(EmptyView()))
     }
@@ -74,7 +75,7 @@ struct SecondEarTests {
 
     @Test func byRankingWhenItDoesntAsk() {
         let (model, music, timer) = makeModel()
-        timer.prefersSecondEar = false
+        timer.earPlacement = .byRank
         music.isActive = true
         model.arrangement.move("timer", to: 0)
         #expect(model.ears(layout: layout).left?.id == "timer.main")

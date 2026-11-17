@@ -222,6 +222,8 @@ public final class ShelfModule: NotchModule {
         AnyView(ShelfView(module: self, layout: ShelfLayout(layout)))
     }
 
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration() }
+
     /// The Shelf's tray with its count, in the ear its ranking gives it (ADR-0011): from 15 items,
     /// after a drop, and in the short shrink after a click while it's the current module.
     public func compactEars(layout: NotchLayout) -> CompactEars? {

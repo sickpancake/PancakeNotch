@@ -22,6 +22,9 @@ final class RankedModule: NotchModule {
 
     func attach(to notch: NotchViewModel?) { self.notch = notch }
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    var earConfiguration: CompactEarConfiguration? {
+        hasEars ? CompactEarConfiguration(hasExtra: hasExtraEar) : nil
+    }
     func compactEars(layout: NotchLayout) -> CompactEars? {
         guard hasEars else { return nil }
         return CompactEars(main: AnyView(EmptyView()), extra: hasExtraEar ? AnyView(EmptyView()) : nil)

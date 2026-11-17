@@ -241,7 +241,7 @@ struct TimerModuleTests {
         #expect(!module.isActive)
         module.center.startTimer(seconds: 60)
         #expect(module.isActive)
-        #expect(module.prefersSecondEar)
+        #expect(module.earConfiguration?.placement == .second)
         _ = clock
     }
 
@@ -250,7 +250,7 @@ struct TimerModuleTests {
         let (module, _, clock) = makeModule { $0.earPlacement = .off }
         module.center.startTimer(seconds: 60)
         #expect(!module.isActive)
-        #expect(!module.prefersSecondEar)
+        #expect(module.earConfiguration?.placement == .byRank)
         clock.advance(60)
         module.center.timeMayHaveJumped()
         #expect(module.isActive)
@@ -411,9 +411,9 @@ struct TimerModuleTests {
     /// With the ear set by order or off, a finished timer still gets the second ear.
     @Test func doneAlwaysGetsAnEar() {
         let (module, _, clock) = makeModule { $0.earPlacement = .ranking }
-        #expect(!module.prefersSecondEar)
+        #expect(module.earConfiguration?.placement == .byRank)
         finish(module, clock)
-        #expect(module.prefersSecondEar)
+        #expect(module.earConfiguration?.placement == .second)
     }
 
     /// Using the Done card's buttons (VoiceOver, pointer elsewhere) keeps the alert from closing it.
