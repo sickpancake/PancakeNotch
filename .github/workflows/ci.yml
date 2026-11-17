@@ -26,6 +26,8 @@ jobs:
       - name: Test
         # Fails with every thread's stack if the tests hang, rather than at the six-hour cutoff.
         run: ./scripts/test-ci.sh 15
+      - name: Adapter session lifecycle regressions
+        run: ./scripts/test-adapter-stream.sh
       - name: Build app bundle
         run: ./scripts/build-app.sh release
       - name: Idle memory budget (ADR-0006)
