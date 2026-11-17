@@ -569,65 +569,41 @@ public final class NotchViewModel {
         public let view: AnyView
     }
 
-    /// What the compact ears show: the top two active modules by ranking, #1's main view on the left
-    /// and #2's on the right (or swapped). Modules that wait for you (an agent's question, a finished
-    /// timer) get a spot before the others, which then wait; the spots still follow the ranking. A module
-    /// that asks for the second ear (the Timer), or one shown briefly (the Shelf's after-drop count),
-    /// takes #2 and leaves #1 to the best other one. A module that asks for the first ear (Keep Awake)
-    /// takes #1, unless #2 is taken and something else waits for you: then that gets #1. A module alone
-    /// fills both ears if it has an extra view. With nothing active, the current module shows for the
-    /// short shrink after a click only, not for a peek strip.
-    public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
+    /// The same ownership decision drives drawing and opening from an ear. Availability is read
+    /// without building views, including when the selected module is the shrink-after-click fallback.
+    private func earAllocation() -> EarAllocator.Allocation {
         var shown = rankedModules.filter { $0.isActive || $0.moduleID == briefModuleID }
-        // Not while a strip is up (peekModuleID lasts until its exit animation ends, so no ear flashes in).
+        // Keep the strip's owner until its exit animation ends, so no fallback ear flashes in.
         if shown.isEmpty, peekModuleID == nil || staysCompact, let selected = selectedModule { shown = [selected] }
-        // Only modules that have ears take a side.
-        let withEars = shown.compactMap { module in module.compactEars(layout: layout).map { (module, $0) } }
-        // Waiting alerts choose first, including among competing second-spot claims.
-        let waiting = withEars.filter { $0.0.waitsForYou }
-        let byPriority = waiting + withEars.filter { !$0.0.waitsForYou }
-        var firstClaim = withEars.first { $0.0.prefersFirstEar }
-        let secondClaim = byPriority.first { $0.0 !== firstClaim?.0 && takesSecondEar($0.0) }
-        // Both claimed while something else waits for you: what needs you comes first.
-        if let claimed = firstClaim, let second = secondClaim,
-           withEars.contains(where: { $0.0.waitsForYou && $0.0 !== claimed.0 && $0.0 !== second.0 }) {
-            firstClaim = nil
+        let candidates = shown.compactMap { module -> EarAllocator.Candidate? in
+            guard let configuration = module.earConfiguration else { return nil }
+            return EarAllocator.Candidate(moduleID: module.moduleID, configuration: configuration,
+                waitsForYou: module.waitsForYou,
+                borrowsSecond: module.moduleID == briefModuleID && !module.isActive)
         }
-        // Set spots reserve remaining room ahead of ordinary activity, never ahead of waiting alerts.
-        let ordinarySecond = withEars.first {
-            !$0.0.waitsForYou && $0.0 !== firstClaim?.0 && takesSecondEar($0.0)
-        }
-        let reserved = [firstClaim, ordinarySecond].compactMap { $0 }.filter { !$0.0.waitsForYou }
-        let candidates = waiting + reserved + withEars.filter { candidate in
-            !candidate.0.waitsForYou && !reserved.contains { $0.0 === candidate.0 }
-        }
-        let chosen = candidates.prefix(2).map(\.0.moduleID)
-        var picked = withEars.filter { chosen.contains($0.0.moduleID) }
-        // Place only the chosen modules. A waiting timer keeps #2 ahead of a brief Shelf badge.
-        let selectedFirst = picked.first { $0.0.prefersFirstEar }
-        let secondCandidates = picked.filter { $0.0.waitsForYou } + picked.filter { !$0.0.waitsForYou }
-        let selectedSecond = secondCandidates.first { $0.0 !== selectedFirst?.0 && takesSecondEar($0.0) }
-        if picked.count > 1,
-           let first = selectedFirst ?? picked.first(where: { $0.0 !== selectedSecond?.0 }),
-           let second = selectedSecond ?? picked.first(where: { $0.0 !== first.0 }) {
-            picked = [first, second]
-        }
-        var slots: [EarSlot?] = []
-        if picked.count == 1, let (module, ears) = picked.first {
-            let main = EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.main)
-            let extra = ears.extra.map { EarSlot(id: module.moduleID + ".extra", moduleID: module.moduleID, view: $0) }
-            slots = module.prefersSecondEar ? [extra, main] : [main, extra]
-        } else {
-            slots = picked.map { module, ears in EarSlot(id: module.moduleID + ".main", moduleID: module.moduleID, view: ears.main) }
-        }
-        let first = slots.first ?? nil
-        let second = slots.count > 1 ? slots[1] : nil
-        return arrangement.swapsEarSides ? (second, first) : (first, second)
+        return EarAllocator.allocate(candidates, swapsSides: arrangement.swapsEarSides)
     }
 
-    /// Asks for #2: the Timer while it runs, or a module shown briefly that isn't active on its own.
-    private func takesSecondEar(_ module: any NotchModule) -> Bool {
-        module.prefersSecondEar || (module.moduleID == briefModuleID && !module.isActive)
+    /// Build content only for the allocated owners. A lone module's main and extra views share
+    /// one construction, and retain their existing animation IDs.
+    public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
+        let allocation = earAllocation()
+        var content: [String: CompactEars] = [:]
+        for owner in [allocation.left?.moduleID, allocation.right?.moduleID].compactMap({ $0 }) {
+            if content[owner] == nil {
+                content[owner] = modules.first { $0.moduleID == owner }?.compactEars(layout: layout)
+            }
+        }
+        func render(_ slot: EarAllocator.Slot?) -> EarSlot? {
+            guard let slot, let ears = content[slot.moduleID] else { return nil }
+            let view: AnyView?
+            switch slot.content {
+            case .main: view = ears.main
+            case .extra: view = ears.extra
+            }
+            return view.map { EarSlot(id: slot.id, moduleID: slot.moduleID, view: $0) }
+        }
+        return (render(allocation.left), render(allocation.right))
     }
 
     /// The module the pointer is on in the compact notch: the strip's module anywhere on the strip, else the
@@ -645,8 +621,8 @@ public final class NotchViewModel {
             return peekModuleID
         }
         guard point.x < notch.minX || point.x >= notch.maxX else { return nil }
-        let ears = ears(layout: layout)
-        return (point.x < notch.minX ? ears.left : ears.right)?.moduleID
+        let allocation = earAllocation()
+        return (point.x < notch.minX ? allocation.left : allocation.right)?.moduleID
     }
 
     /// The peek strip's view while a module is peeking.

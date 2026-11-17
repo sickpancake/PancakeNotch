@@ -45,8 +45,6 @@ public final class KeepAwakeModule: NotchModule {
 
     /// An ear exactly while it keeps the Mac awake.
     public var isActive: Bool { center.isHolding }
-    /// Always the first ear while on; the Timer keeps the second (ADR-0041).
-    public var prefersFirstEar: Bool { true }
     public var accessibilityStatus: String? { center.isHolding ? KeepAwakeStatus.spoken(center) : nil }
 
     public func attach(to notch: NotchViewModel?) {
@@ -66,6 +64,9 @@ public final class KeepAwakeModule: NotchModule {
     public func expandedView(layout: NotchLayout) -> AnyView {
         AnyView(KeepAwakeView(module: self, layout: KeepAwakeLayout(layout)))
     }
+
+    /// Keep Awake reserves the first spot while active, yielding to waiting alerts when needed.
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: .first) }
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(KeepAwakeEar(module: self, width: layout.compactEarWidth, height: layout.geometry.compactHeight)))

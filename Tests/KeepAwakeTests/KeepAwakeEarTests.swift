@@ -16,13 +16,14 @@ struct KeepAwakeEarTests {
         let moduleID: String
         var isActive = false
         var waitsForYou = false
-        var prefersSecondEar = false
+        var earPlacement: CompactEarPlacement = .byRank
         init(_ id: String) { moduleID = id }
         var title: String { moduleID }
         var symbol: String { "circle" }
         var menuStatus: String? { nil }
         func attach(to notch: NotchViewModel?) {}
         func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+        var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: earPlacement) }
         func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
         func peekView(layout: NotchLayout) -> AnyView? { nil }
     }
@@ -52,8 +53,7 @@ struct KeepAwakeEarTests {
     }
 
     @Test func itAsksForTheFirstSpotUnderTheIDTheModulesPageUses() {
-        #expect(keepAwake.prefersFirstEar)
-        #expect(!keepAwake.prefersSecondEar)
+        #expect(keepAwake.earConfiguration?.placement == .first)
         // The Modules page's spot labels and picture look for this ID.
         #expect(keepAwake.moduleID == "keepAwake")
     }
@@ -87,7 +87,7 @@ struct KeepAwakeEarTests {
 
     @Test func somethingWaitingForYouBorrowsTheFirstSpotWhileTheSecondIsTaken() {
         let timer = StandIn("timer"), agent = StandIn("agent")
-        timer.isActive = true; timer.prefersSecondEar = true
+        timer.isActive = true; timer.earPlacement = .second
         agent.isActive = true
         show([timer, agent])
         center.turnOn(.untilStopped)

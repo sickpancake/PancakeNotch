@@ -107,6 +107,8 @@ public final class NowPlayingModule: NotchModule {
         AnyView(NowPlayingView(module: self, layout: NowPlayingLayout(layout)))
     }
 
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(hasExtra: true) }
+
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(
             main: AnyView(NowPlayingArtEar(module: self, height: layout.geometry.compactHeight)),

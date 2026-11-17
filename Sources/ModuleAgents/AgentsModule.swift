@@ -79,6 +79,8 @@ public final class AgentsModule: NotchModule {
         AnyView(AgentsView(module: self, layout: AgentsLayout(layout)))
     }
 
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration() }
+
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(AgentsEar(module: self)))
     }

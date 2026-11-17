@@ -100,6 +100,8 @@ public final class AIUsageModule: NotchModule {
         AnyView(AIUsageView(module: self, layout: AgentsLayout(layout)))
     }
 
+    public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration() }
+
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         CompactEars(main: AnyView(AIUsageEar(module: self)))
     }

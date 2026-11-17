@@ -82,8 +82,6 @@ public final class TimerModule: NotchModule {
     /// Opening the notch while a timer is done lands on its Done card, also while a song plays.
     public var wantsFocus: Bool { center.timer.isDone }
     public var waitsForYou: Bool { center.timer.isDone }
-    /// A finished timer takes #2 whatever the setting, so Done always has an ear.
-    public var prefersSecondEar: Bool { settings.earPlacement == .second || center.timer.isDone }
     public var holdsOpen: Bool { editing != nil }
 
     public var accessibilityStatus: String? {
@@ -120,6 +118,11 @@ public final class TimerModule: NotchModule {
 
     public func expandedView(layout: NotchLayout) -> AnyView {
         AnyView(TimerView(module: self, layout: TimerLayout(layout)))
+    }
+
+    /// Done always takes #2, even with the ear setting off or set to By order.
+    public var earConfiguration: CompactEarConfiguration? {
+        CompactEarConfiguration(placement: settings.earPlacement == .second || center.timer.isDone ? .second : .byRank)
     }
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {

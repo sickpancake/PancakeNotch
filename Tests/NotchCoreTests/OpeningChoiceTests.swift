@@ -11,13 +11,14 @@ final class WaitingModule: NotchModule {
     var wantsFocus = false
     var isIdleForOpening = false
     var waitsForYou = false
-    var prefersSecondEar = false
+    var earPlacement: CompactEarPlacement = .byRank
     weak var notch: NotchViewModel?
 
     init(_ id: String) { moduleID = id }
 
     func attach(to notch: NotchViewModel?) { self.notch = notch }
     func expandedView(layout: NotchLayout) -> AnyView { AnyView(EmptyView()) }
+    var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: earPlacement) }
     func compactEars(layout: NotchLayout) -> CompactEars? { CompactEars(main: AnyView(EmptyView())) }
     func peekView(layout: NotchLayout) -> AnyView? { AnyView(EmptyView()) }
 }
@@ -46,7 +47,7 @@ struct OpeningChoiceTests {
         music.wantsFocus = true
         let agents = WaitingModule("agents")
         let timer = WaitingModule("timer")
-        timer.prefersSecondEar = true
+        timer.earPlacement = .second
         model.modules = [music, RankedModule("shelf"), agents, timer]
         return (model, music, agents, timer)
     }
