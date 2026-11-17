@@ -3,6 +3,7 @@
 #import "adapter/globals.h"
 #import "adapter/enabled_commands.h"
 #import "adapter/keys.h"
+#import "adapter/now_playing.h"
 
 static NSMutableArray<NSDictionary *> *reports;
 static NSDictionary *metadata;
@@ -10,6 +11,17 @@ static BOOL playing = YES;
 static int playerPID;
 static BOOL holdInfo;
 static void (^heldInfo)(NSDictionary *);
+static void (^supersededInfo)(NSDictionary *);
+static BOOL holdStartup;
+static void (^heldPID)(int);
+static void (^heldPlaying)(bool);
+static void (^heldClient)(id);
+static NSUInteger conversions;
+static NSUInteger closedReportCount;
+static NSMutableDictionary *trackConversion(NSDictionary *info, bool micros, bool now, bool noArt) {
+    ++conversions;
+    return convertNowPlayingInformation(info, micros, now, noArt);
+}
 
 static void captureOutput(NSString *line) {
     NSDictionary *message = [NSJSONSerialization JSONObjectWithData:[line dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
@@ -28,7 +40,12 @@ static bool fakeAppForPID(int pid, void (^block)(NSRunningApplication *)) {
 }
 #define appForPID fakeAppForPID
 #define printOutUnique captureOutput
-#include "adapter/stream.m"
+#define convertNowPlayingInformation trackConversion
+#ifndef ADAPTER_STREAM_SOURCE
+#define ADAPTER_STREAM_SOURCE "adapter/stream.m"
+#endif
+#include ADAPTER_STREAM_SOURCE
+#undef convertNowPlayingInformation
 #undef printOutUnique
 #undef appForPID
 
@@ -38,9 +55,15 @@ NSString *kMRAEnabledCommands = @"enabledCommands";
 NSArray *enabledCommandsChangeNotifications(void) { return @[]; }
 void requestEnabledCommands(dispatch_queue_t queue, void (^completion)(NSArray *)) { completion(@[]); }
 
-static void fakePID(dispatch_queue_t queue, void (^done)(int)) { done(playerPID); }
-static void fakeClient(dispatch_queue_t queue, void (^done)(id)) { done(nil); }
-static void fakePlaying(dispatch_queue_t queue, void (^done)(bool)) { done(playing); }
+static void fakePID(dispatch_queue_t queue, void (^done)(int)) {
+    if (holdStartup) heldPID = [done copy]; else done(playerPID);
+}
+static void fakeClient(dispatch_queue_t queue, void (^done)(id)) {
+    if (holdStartup) heldClient = [done copy]; else done(nil);
+}
+static void fakePlaying(dispatch_queue_t queue, void (^done)(bool)) {
+    if (holdStartup) heldPlaying = [done copy]; else done(playing);
+}
 static void fakeInfo(dispatch_queue_t queue, void (^done)(NSDictionary *)) {
     if (holdInfo) { heldInfo = [done copy]; holdInfo = NO; } else { done(metadata); }
 }
@@ -69,6 +92,43 @@ static void runStep(NSUInteger index) {
     next(^{ runStep(index + 1); });
 }
 static void fakeRegister(dispatch_queue_t queue) {
+    if (holdStartup) {
+        steps = @[
+            ^{
+                check(heldPID && heldPlaying && heldClient && heldInfo, @"all startup reads are pending");
+                supersededInfo = heldInfo;
+                holdInfo = YES;
+                post(kMRMediaRemoteNowPlayingPlaybackQueueDidChangeNotification, nil);
+            },
+            ^{
+                supersededInfo(@{kMRMediaRemoteNowPlayingInfoTitle: @"Older pending video"});
+                check(conversions == 0, @"superseded metadata reply ignored while newest read is pending");
+                // This notification takes resetAll + handle without starting a new info read.
+                post(kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification, nil);
+            },
+            ^{
+                closedReportCount = reports.count;
+                check(reports.lastObject.count == 0, @"closed session publishes nothing playing");
+                heldInfo(@{kMRMediaRemoteNowPlayingInfoTitle: @"Closed video"});
+                check(conversions == 0, @"retired metadata must not be accepted into the cache");
+            },
+            ^{
+                heldPID(playerPID);
+                check(reports.count == closedReportCount, @"retired PID callback must be ignored");
+            },
+            ^{
+                heldPlaying(YES);
+                check(reports.count == closedReportCount, @"retired playback callback must be ignored");
+            },
+            ^{
+                heldClient(nil);
+                check(reports.count == closedReportCount, @"retired parent callback must be ignored");
+                check(reports.lastObject.count == 0, @"closed video cannot return after late startup callbacks");
+            }
+        ];
+        next(^{ runStep(0); });
+        return;
+    }
     steps = @[
         ^{
             check([reports.lastObject[@"title"] isEqual:@"Video A"], @"initial video");
@@ -137,6 +197,8 @@ int main(void) {
         reports = [NSMutableArray array];
         metadata = @{kMRMediaRemoteNowPlayingInfoTitle: @"Video A"};
         playerPID = getpid();
+        holdStartup = getenv("ADAPTER_TEST_RETIRED_FIELDS") != NULL;
+        holdInfo = holdStartup;
         g_serialdispatchQueue = dispatch_queue_create("adapter-test", DISPATCH_QUEUE_SERIAL);
         g_mediaRemote = (MediaRemote *)[FakeRemote new];
         // A timeout turns a missing notification handler into a failure, rather than a hanging test.
