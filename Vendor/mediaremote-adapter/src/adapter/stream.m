@@ -4,6 +4,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
+#import <ImageIO/ImageIO.h>
 
 #import "MediaRemoteAdapter.h"
 #import "adapter/enabled_commands.h"
@@ -20,6 +21,42 @@
 #endif
 
 static CFRunLoopRef g_runLoop = NULL;
+
+// Match ArtworkImage's decode limits and displayed size.
+static NSData *makeArtworkPreview(NSData *artwork) {
+    const NSInteger maxPreviewPixels = 256;
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)artwork,
+        (__bridge CFDictionaryRef)@{(__bridge NSString *)kCGImageSourceShouldCache: @NO});
+    if (!source) return nil;
+
+    NSDictionary *properties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, NULL));
+    NSInteger width = [properties[(__bridge NSString *)kCGImagePropertyPixelWidth] integerValue];
+    NSInteger height = [properties[(__bridge NSString *)kCGImagePropertyPixelHeight] integerValue];
+    CGImageRef image = NULL;
+    if (width > 0 && height > 0 && width <= 8192 && height <= 8192 &&
+        width * height <= 16000000 && MAX(width, height) > maxPreviewPixels) {
+        image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)@{
+            (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+            (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform: @YES,
+            (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
+            (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize: @(maxPreviewPixels),
+        });
+    }
+    CFRelease(source);
+    if (!image) return nil;
+
+    NSMutableData *preview = [NSMutableData data];
+    CGImageDestinationRef destination = CGImageDestinationCreateWithData(
+        (__bridge CFMutableDataRef)preview, CFSTR("public.png"), 1, NULL);
+    BOOL encoded = NO;
+    if (destination) {
+        CGImageDestinationAddImage(destination, image, NULL);
+        encoded = CGImageDestinationFinalize(destination);
+        CFRelease(destination);
+    }
+    CGImageRelease(image);
+    return encoded && preview.length > 0 && preview.length < artwork.length ? preview : nil;
+}
 
 static NSString *serializeData(NSDictionary *data, BOOL diff, BOOL pretty) {
     return serializeJsonDictionarySafe(
@@ -205,7 +242,31 @@ extern void adapter_stream() {
     // Control Center shows it, using the application name as the label.
     __block const bool allow_missing_title = (allow_missing_title_option != nil);
 
+    // PancakeNotch patch: keep liveData's artwork fallback and compare/send only
+    // the small preview in wire snapshots and diffs. Cache one source, including
+    // failed conversions, and release it when the artwork is cleared.
+    __block NSData *previousArtwork = nil;
+    __block NSData *artworkPreview = nil;
     void (^localPrintData)(NSDictionary *) = ^(NSDictionary *data) {
+      NSData *artwork = data[kMRAArtworkData];
+      // Issue #84's large JPEG saw much larger savings than the medium cover.
+      // Skip small covers and originals beyond AdapterStreamParser's base64 limit.
+      if (!human_readable && [artwork isKindOfClass:[NSData class]] &&
+          artwork.length >= 512 * 1024 && artwork.length <= 3 * 1024 * 1024) {
+          if (![previousArtwork isEqualToData:artwork]) {
+              artworkPreview = makeArtworkPreview(artwork);
+          }
+          previousArtwork = artwork;
+          if (artworkPreview) {
+              NSMutableDictionary *payload = [data mutableCopy];
+              payload[kMRAArtworkData] = artworkPreview;
+              payload[kMRAArtworkMimeType] = @"image/png";
+              data = payload;
+          }
+      } else {
+          previousArtwork = nil;
+          artworkPreview = nil;
+      }
       printData(data, !no_diff, human_readable);
     };
 
