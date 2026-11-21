@@ -21,7 +21,7 @@ import Foundation
                     var names = 0
                     let start = DispatchTime.now().uptimeNanoseconds
                     for _ in 0..<redraws {
-                        try autoreleasepool {
+                        autoreleasepool {
                             for (item, tile) in zip(items, tiles) {
                                 if old {
                                     let icon = ShelfThumbnails.smallIcon(forFile: item.path!)

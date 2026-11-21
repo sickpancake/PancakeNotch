@@ -22,6 +22,7 @@ for width in (16, 256):
 PY
 {
     echo 'import AppKit'
+    echo 'import Darwin'
     echo '@MainActor enum ShelfThumbnails {'
     echo '    static let pointSize = CGSize(width: 56, height: 56)'
     sed -n '/    static func smallIcon(forFile/,/^    }/p' "$work/base/Sources/ModuleShelf/ShelfThumbnails.swift"
