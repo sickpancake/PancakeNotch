@@ -306,6 +306,74 @@ struct StatsStoreTests {
         #expect(await reopened.summary(days: 1, now: now).totalOpens == 1)
     }
 
+    @Test func aiUsageBatchRebindsNullableCostsAndPersistsProgress() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "StatsTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "statistics.sqlite")
+        let now = date(2026, 10, 11)
+        func record(_ id: String, output: Int64, cost: Double?) -> AIUsageRecord {
+            AIUsageRecord(account: "test", id: id, date: now, model: "model", input: 1, output: output,
+                          cacheWrite: 2, cacheRead: 3, cost: cost)
+        }
+
+        do {
+            let store = StatsStore(url: url, calendar: calendar)
+            store.recordAIUsage([
+                record("a", output: 5, cost: 0.5),
+                record("b", output: 4, cost: 0.25),
+                record("a", output: 7, cost: nil),
+                record("b", output: 4, cost: nil),
+            ], file: "log", progress: AIFileProgress(size: 20, offset: 10))
+            store.recordAIUsage([], file: "log", progress: AIFileProgress(size: 20, offset: 20, state: "end"))
+            store.waitForWrites()
+        }
+        let reopened = StatsStore(url: url, calendar: calendar)
+        let totals = try #require(await reopened.aiTotals(accounts: ["test"], days: 1, now: now).first)
+        #expect(totals.tokens == 23)
+        #expect(totals.cost == 0.25)
+        #expect(totals.unpricedTokens == 13)
+        reopened.queue.sync {
+            reopened.database.query("SELECT size, offset, state FROM ai_files WHERE path = 'log'") { row in
+                #expect(row.integer(0) == 20)
+                #expect(row.integer(1) == 20)
+                #expect(row.text(2) == "end")
+            }
+            var count: Int64 = 0
+            reopened.database.query("SELECT COUNT(*) FROM ai_files") { count = $0.integer(0) }
+            #expect(count == 1)
+        }
+    }
+
+    @Test(arguments: [
+        "BEFORE INSERT ON ai_usage WHEN NEW.id = 'fails'",
+        "BEFORE INSERT ON ai_files",
+    ])
+    func aiUsageBatchRollsBackRecordsAndProgress(trigger: String) async {
+        let store = makeStore()
+        let now = date(2026, 10, 11)
+        store.recordAIUsage([], file: "log", progress: AIFileProgress(size: 10, offset: 10))
+        store.queue.sync {
+            #expect(store.database.execute("CREATE TRIGGER reject_usage \(trigger) BEGIN SELECT RAISE(ABORT, 'fixture'); END"))
+        }
+        let records = ["first", "fails"].map {
+            AIUsageRecord(account: "test", id: $0, date: now, model: "model", input: 1, output: 1,
+                          cacheWrite: 0, cacheRead: 0, cost: nil)
+        }
+        let committed = await withCheckedContinuation { continuation in
+            store.recordAIUsage(records, file: "log", progress: AIFileProgress(size: 20, offset: 20)) {
+                continuation.resume(returning: $0)
+            }
+        }
+        #expect(!committed)
+        #expect(await store.aiTotals(accounts: ["test"], days: 1, now: now).isEmpty)
+        store.queue.sync {
+            var offsets: [Int64] = []
+            store.database.query("SELECT offset FROM ai_files WHERE path = 'log'") { offsets.append($0.integer(0)) }
+            #expect(offsets == [10])
+        }
+    }
+
     @Test func clearLeavesNothingOnDisk() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "StatsTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

@@ -1,3 +1,5 @@
+import AppKit
+import Darwin
 import NotchCore
 import SwiftUI
 
@@ -62,11 +64,15 @@ struct ShelfWidget: View {
 /// A file's Finder icon, or a symbol for text and links.
 private struct ShelfWidgetIcon: View {
     let item: ShelfItem
+    @Environment(\.displayScale) private var displayScale
+    @State private var presentation = ShelfWidgetFilePresentation()
 
     var body: some View {
+        let file = presentation.file(for: item, scale: displayScale)
+        let name = file?.name ?? item.displayName
         Group {
-            if let url = item.fileURL {
-                Image(nsImage: ShelfThumbnails.smallIcon(forFile: url.path))
+            if let file {
+                Image(nsImage: file.icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
@@ -77,13 +83,68 @@ private struct ShelfWidgetIcon: View {
                     .background(.white.opacity(0.08), in: .rect(cornerRadius: 6, style: .continuous))
             }
         }
-        .frame(width: 26, height: 26)
-        .help(Text(item.displayName))
-        .accessibilityLabel(Text(item.displayName))
+        .frame(width: ShelfWidgetFilePresentation.side, height: ShelfWidgetFilePresentation.side)
+        .help(Text(name))
+        .accessibilityLabel(Text(name))
     }
 
     private static func symbol(_ item: ShelfItem) -> String {
         if case .link = item.kind { return "link" }
         return "text.alignleft"
+    }
+}
+
+/// One file icon per mounted tile. SwiftUI releases it with the tile's state.
+@MainActor
+final class ShelfWidgetFilePresentation {
+    static let side: CGFloat = 26
+
+    private struct Key: Equatable {
+        let path: String
+        let version: [Int]
+        let scale: CGFloat
+    }
+
+    private var cached: (key: Key, name: String, icon: NSImage)?
+
+    func file(for item: ShelfItem, scale: CGFloat) -> (name: String, icon: NSImage)? {
+        guard let url = item.fileURL else {
+            cached = nil
+            return nil
+        }
+        let path = url.path
+        var info = stat()
+        // One metadata read detects replacement, content changes, and custom icon changes.
+        let version = stat(path, &info) == 0 ? [
+            Int(info.st_dev), Int(truncatingIfNeeded: info.st_ino),
+            info.st_mtimespec.tv_sec, info.st_mtimespec.tv_nsec,
+            info.st_ctimespec.tv_sec, info.st_ctimespec.tv_nsec,
+        ] : []
+        let key = Key(path: path, version: version, scale: scale)
+        if let cached, cached.key == key { return (cached.name, cached.icon) }
+        let name = item.displayName
+        let icon = Self.icon(path: key.path, scale: scale)
+        cached = (key, name, icon)
+        return (name, icon)
+    }
+
+    private static func icon(path: String, scale: CGFloat) -> NSImage {
+        let points = CGSize(width: side, height: side)
+        let pixels = max(1, Int((side * scale).rounded(.up)))
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        let bounds = CGRect(x: 0, y: 0, width: pixels, height: pixels)
+        var proposed = bounds
+        guard let source = icon.cgImage(forProposedRect: &proposed, context: nil, hints: nil) else {
+            return NSImage(size: points)
+        }
+        // Finder can supply a larger representation than requested.
+        guard source.width > pixels || source.height > pixels,
+              let context = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return NSImage(cgImage: source, size: points) }
+        context.interpolationQuality = .high
+        context.draw(source, in: bounds)
+        return NSImage(cgImage: context.makeImage() ?? source, size: points)
     }
 }

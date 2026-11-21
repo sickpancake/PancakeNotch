@@ -77,28 +77,34 @@ extension StatsStore {
     }
 
     /// Saves a file's records and where its reading stopped, together.
-    public func recordAIUsage(_ records: [AIUsageRecord], file path: String, progress: AIFileProgress) {
+    public func recordAIUsage(_ records: [AIUsageRecord], file path: String, progress: AIFileProgress,
+                              completion: @escaping @Sendable (Bool) -> Void = { _ in }) {
         let keyed = records.map { ($0, dayKey($0.date)) }
         queue.async { [database] in
-            database.execute("BEGIN")
-            for (record, day) in keyed {
-                database.run("""
-                    INSERT INTO ai_usage (account, id, day, model, input, output, cache_write, cache_read, cost)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (account, id) DO UPDATE SET
-                        day = excluded.day, model = excluded.model, input = excluded.input, output = excluded.output,
-                        cache_write = excluded.cache_write, cache_read = excluded.cache_read, cost = excluded.cost
-                    WHERE excluded.output > ai_usage.output
-                    """, [
-                        .text(record.account), .text(record.id), .text(day), .text(record.model),
-                        .integer(record.input), .integer(record.output), .integer(record.cacheWrite), .integer(record.cacheRead),
-                        record.cost.map(SQLValue.real) ?? .null,
-                    ])
+            guard database.execute("BEGIN") else {
+                completion(false)
+                return
             }
-            database.run("INSERT OR REPLACE INTO ai_files (path, size, offset, state) VALUES (?, ?, ?, ?)", [
+            let written = keyed.isEmpty || database.runBatch("""
+                INSERT INTO ai_usage (account, id, day, model, input, output, cache_write, cache_read, cost)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (account, id) DO UPDATE SET
+                    day = excluded.day, model = excluded.model, input = excluded.input, output = excluded.output,
+                    cache_write = excluded.cache_write, cache_read = excluded.cache_read, cost = excluded.cost
+                WHERE excluded.output > ai_usage.output
+                """, keyed.lazy.map { record, day in
+                    [.text(record.account), .text(record.id), .text(day), .text(record.model),
+                     .integer(record.input), .integer(record.output), .integer(record.cacheWrite), .integer(record.cacheRead),
+                     record.cost.map(SQLValue.real) ?? .null]
+                })
+            guard written, database.run("INSERT OR REPLACE INTO ai_files (path, size, offset, state) VALUES (?, ?, ?, ?)", [
                 .text(path), .integer(Int64(clamping: progress.size)), .integer(Int64(clamping: progress.offset)), .text(progress.state),
-            ])
-            database.execute("COMMIT")
+            ]) else {
+                database.execute("ROLLBACK")
+                completion(false)
+                return
+            }
+            completion(database.execute("COMMIT"))
         }
     }
 
