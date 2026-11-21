@@ -92,23 +92,27 @@ struct DevinCloudSession: Decodable, Equatable, Sendable {
         case "error":
             return (.failed, String(localized: "Stopped with an error", comment: "Devin cloud session"))
         case "suspended":
+            // Paused, not finished: Devin can carry on once woken or topped up. Only a real error is red.
             switch statusDetail {
             case "inactivity", nil:
-                return (.done, String(localized: "Asleep", comment: "Devin cloud session: suspended after a while without activity"))
+                return (.stopped, String(localized: "Asleep", comment: "Devin cloud session: paused after a while without activity; it can be woken"))
             case "user_request":
                 return (.stopped, nil)
             case "error":
                 return (.failed, String(localized: "Stopped with an error", comment: "Devin cloud session"))
             case "payment_declined":
-                return (.failed, String(localized: "Payment declined", comment: "Devin cloud session: why it stopped"))
+                return (.stopped, String(localized: "Payment declined", comment: "Devin cloud session: why it paused"))
             default:
                 // Out of credits, quota or a usage limit.
-                return (.failed, String(localized: "Out of usage", comment: "Devin cloud session: why it stopped"))
+                return (.stopped, String(localized: "Out of usage", comment: "Devin cloud session: why it paused"))
             }
         default:
             return nil
         }
     }
+
+    /// Paused for inactivity: it waits for the user to wake it, and won't change by itself.
+    var isAsleep: Bool { status == "suspended" && (statusDetail == "inactivity" || statusDetail == nil) }
 
     /// Its first pull request, as "PR #128 · Merged" (the state only when Devin gives one).
     var pullRequestLabel: String? {
@@ -186,10 +190,13 @@ public struct DevinCloudUsage: Equatable, Sendable {
     public let sessions: [Session]
     /// When Devin was last asked.
     public let updatedAt: Date
+    /// False when there were more sessions than one check reads: the numbers are then too low.
+    public let isComplete: Bool
 
-    public init(sessions: [Session], updatedAt: Date) {
+    public init(sessions: [Session], updatedAt: Date, isComplete: Bool = true) {
         self.sessions = sessions
         self.updatedAt = updatedAt
+        self.isComplete = isComplete
     }
 
     /// The sessions begun in `range` (local calendar days, today included).

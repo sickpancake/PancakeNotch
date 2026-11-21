@@ -20,9 +20,12 @@ struct DevinCloudTests {
         private let lock = NSLock()
         private var _sessions: String = #"{"items": []}"#
         private var _status = 200
+        private var _sessionsStatus: Int?
         private var _requests: [URLRequest] = []
         var sessions: String { get { lock.withLock { _sessions } } set { lock.withLock { _sessions = newValue } } }
         var status: Int { get { lock.withLock { _status } } set { lock.withLock { _status = newValue } } }
+        /// The sessions list's own answer, when it differs from `/self`'s (a 403 for a token without the right).
+        var sessionsStatus: Int? { get { lock.withLock { _sessionsStatus } } set { lock.withLock { _sessionsStatus = newValue } } }
         var requests: [URLRequest] { lock.withLock { _requests } }
 
         var send: DevinCloudAPI.Send {
@@ -30,7 +33,8 @@ struct DevinCloudTests {
                 let (status, body) = lock.withLock { () -> (Int, String) in
                     _requests.append(request)
                     let isSelf = request.url?.path().hasSuffix("/v3/self") == true
-                    return (_status, isSelf ? #"{"user_id": "me", "user_name": "Sam", "org_id": "org-1", "principal_type": "pat_user"}"# : _sessions)
+                    return (isSelf ? _status : (_sessionsStatus ?? _status),
+                            isSelf ? #"{"user_id": "me", "user_name": "Sam", "org_id": "org-1", "principal_type": "pat_user"}"# : _sessions)
                 }
                 let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
                 return (Data(body.utf8), response)
@@ -96,10 +100,14 @@ struct DevinCloudTests {
         #expect(status("running", "finished") == .done)
         #expect(status("exit") == .done)
         #expect(status("error") == .failed)
-        #expect(status("suspended", "inactivity") == .done)
+        // Paused, not finished or broken: no green ✓, no red ✕.
+        #expect(status("suspended", "inactivity") == .stopped)
+        #expect(status("suspended") == .stopped)
         #expect(status("suspended", "user_request") == .stopped)
-        #expect(status("suspended", "out_of_credits") == .failed)
-        #expect(status("suspended", "payment_declined") == .failed)
+        #expect(status("suspended", "out_of_credits") == .stopped)
+        #expect(status("suspended", "usage_limit_exceeded") == .stopped)
+        #expect(status("suspended", "payment_declined") == .stopped)
+        #expect(status("suspended", "error") == .failed)
         // Unknown: left out rather than shown wrong.
         #expect(status("something_new") == nil)
         #expect(status(nil) == nil)
@@ -140,7 +148,37 @@ struct DevinCloudTests {
         #expect(cloud.userName == "Sam")
         #expect(store.read() == "cog_secret123")
         #expect(fake.requests.allSatisfy { $0.url?.host() == "api.devin.ai" && $0.value(forHTTPHeaderField: "Authorization") == "Bearer cog_secret123" })
-        #expect(fake.requests.contains { $0.url?.path() == "/v3/organizations/org-1/sessions" })
+        let list = try #require(fake.requests.first { $0.url?.path() == "/v3/organizations/org-1/sessions" })
+        let query = Dictionary(uniqueKeysWithValues: (URLComponents(url: list.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        // Devin filters to the key owner's sessions: no right to read the whole organization is needed.
+        #expect(query["user_ids"] == "me")
+        #expect(query["is_archived"] == "false")
+        // Changed lately, so a session begun long ago that still runs isn't missed.
+        #expect(query["updated_after"] != nil && query["created_after"] == nil)
+        #expect(UserDefaults.standard.string(forKey: "devinCloud.userName") == nil)
+    }
+
+    @Test func aTokenThatMayNotReadSessionsIsntSavedOrDeleted() async {
+        let fake = FakeDevin()
+        fake.sessionsStatus = 403
+        let store = MemoryStore()
+        let cloud = cloud(fake, store: store)
+        // Connecting: turned down with what's missing, and nothing saved.
+        let reason = await cloud.connect(token: "cog_secret123")
+        #expect(reason?.contains("can't read your Devin sessions") == true)
+        #expect(cloud.phase == .notConnected)
+        #expect(store.read() == nil)
+
+        // Connected, then the right goes away: the token stays (a new one wouldn't help), and it says why.
+        fake.sessionsStatus = nil
+        #expect(await cloud.connect(token: "cog_secret123") == nil)
+        let agents = AgentsCenter(settings: settings())
+        fake.sessionsStatus = 403
+        cloud.follow(agents: agents, usage: nil)
+        await cloud.settle()
+        #expect(cloud.phase == .connected)
+        #expect(store.read() == "cog_secret123")
+        #expect(cloud.problem?.contains("can't read your Devin sessions") == true)
     }
 
     @Test func aRejectedKeyDisconnectsAndSaysSo() async {
@@ -222,6 +260,80 @@ struct DevinCloudTests {
         await cloud.settle()
         #expect(agents.threads.first { $0.id == "devin-cloud:devin-w" }?.status == .stopped)
         #expect(!cloud.hasScheduledCheck)
+    }
+
+    @Test func aNeedsYouRowCountsFromWhenItBeganWaiting() async throws {
+        let now = Date()
+        let fake = FakeDevin()
+        fake.sessions = page(session("devin-w", status: "running", detail: "waiting_for_user", created: now.addingTimeInterval(-3_600),
+                                     updated: now.addingTimeInterval(-60)))
+        let agents = AgentsCenter(settings: settings())
+        let cloud = cloud(fake)
+        cloud.follow(agents: agents, usage: nil)
+        _ = await cloud.connect(token: "cog_secret123")
+        await cloud.settle()
+        let row = try #require(agents.threads.first)
+        #expect(row.status == .needsYou(.input))
+        // "Needs you · 1m", not the hour since the session began.
+        #expect(abs(row.statusSince.timeIntervalSince(now.addingTimeInterval(-60))) < 2)
+    }
+
+    @Test func fallingAsleepWhileWaitingStillNeedsYouWithoutChecking() async throws {
+        let now = Date()
+        let fake = FakeDevin()
+        fake.sessions = page(session("devin-w", status: "running", detail: "waiting_for_user", created: now.addingTimeInterval(-600)))
+        let agents = AgentsCenter(settings: settings())
+        let cloud = cloud(fake)
+        cloud.follow(agents: agents, usage: nil)
+        _ = await cloud.connect(token: "cog_secret123")
+        await cloud.settle()
+        #expect(agents.attention == .needsYou(count: 1))
+
+        fake.sessions = page(session("devin-w", status: "suspended", detail: "inactivity", created: now.addingTimeInterval(-600), updated: now))
+        cloud.check()
+        await cloud.settle()
+        let row = try #require(agents.threads.first)
+        #expect(row.status == .needsYou(.input))
+        #expect(row.request == "Asleep, waiting for you")
+        #expect(agents.attention == .needsYou(count: 1))
+        // It won't change until you answer, so nothing is planned (switching apps still looks again).
+        #expect(!cloud.hasScheduledCheck)
+
+        // A working session that falls asleep is paused, not done: no green ✓.
+        fake.sessions = page(session("devin-x", status: "running", detail: "working", created: now))
+        cloud.check()
+        await cloud.settle()
+        fake.sessions = page(session("devin-x", status: "suspended", detail: "inactivity", created: now, updated: now))
+        cloud.check()
+        await cloud.settle()
+        #expect(agents.threads.first { $0.id == "devin-cloud:devin-x" }?.status == .stopped)
+    }
+
+    @Test func moreSessionsThanOneCheckReadsIsSaid() async throws {
+        let now = Date()
+        let fake = FakeDevin()
+        // Every page says there's another: reading stops after five and says the numbers are low.
+        fake.sessions = #"{"items": [\#(session("devin-1", status: "exit", created: now))], "has_next_page": true, "end_cursor": "next"}"#
+        let usage = UsageCenter(settings: settings(), stats: nil)
+        let cloud = cloud(fake)
+        cloud.follow(agents: nil, usage: usage)
+        _ = await cloud.connect(token: "cog_secret123")
+        await cloud.settle()
+        #expect(usage.devinUsage?.isComplete == false)
+    }
+
+    @Test func theConnectedAccountIsNamedAfterARelaunch() async {
+        let defaults = UserDefaults(suiteName: "DevinCloudTests.\(UUID().uuidString)")!
+        let fake = FakeDevin()
+        let store = MemoryStore()
+        let first = DevinCloud(defaults: defaults, store: store, send: fake.send)
+        _ = await first.connect(token: "cog_secret123")
+        #expect(first.userName == "Sam")
+        let relaunched = DevinCloud(defaults: defaults, store: store, send: fake.send)
+        #expect(relaunched.phase == .connected)
+        #expect(relaunched.userName == "Sam")
+        relaunched.disconnect()
+        #expect(DevinCloud(defaults: defaults, store: store, send: fake.send).userName == nil)
     }
 
     @Test func everythingFinishedMeansNoFurtherChecks() async {

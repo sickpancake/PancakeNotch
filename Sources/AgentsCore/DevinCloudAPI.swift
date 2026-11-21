@@ -5,8 +5,10 @@ import Security
 /// the last 30 days. Only `api.devin.ai`, only with the user's own key, nothing cached or stored on disk.
 struct DevinCloudAPI: Sendable {
     enum Failure: Error, Equatable {
-        /// Devin turned the key down (401 or 403).
+        /// Devin turned the key down: it's wrong, expired or revoked (401).
         case rejected
+        /// The key is fine but may not do this, such as read sessions (403). Making a new key won't help.
+        case forbidden
         /// Too many requests: wait longer before asking again.
         case slowDown
         /// Offline, a server error or an answer that doesn't read.
@@ -39,21 +41,27 @@ struct DevinCloudAPI: Sendable {
         try await get(Self.base.appending(path: "self"), as: DevinCloudIdentity.self)
     }
 
-    /// The organization's sessions begun since `since`, newest pages first as Devin returns them. `complete`
-    /// is false when there were more than `maxPages` pages.
-    func sessions(org: String, since: Date) async throws(Failure) -> (items: [DevinCloudSession], complete: Bool) {
+    /// `user`'s sessions (every one the key may see when nil) that changed since `since`, not archived.
+    /// Asking Devin to filter keeps the answer small and needs no right to read the whole organization.
+    /// `complete` is false when there were more than `maxPages` pages.
+    func sessions(org: String, user: String?, since: Date) async throws(Failure) -> (items: [DevinCloudSession], complete: Bool) {
         var items: [DevinCloudSession] = []
         var cursor: String?
         for _ in 0..<Self.maxPages {
             var url = Self.base.appending(path: "organizations").appending(path: org).appending(path: "sessions")
+            // Changed since, not begun since: a session started long ago that still runs or waits counts.
             // Seconds: should Devin count in milliseconds, this filters nothing and the pages still end.
             var query = [URLQueryItem(name: "first", value: "100"),
-                         URLQueryItem(name: "created_after", value: String(Int(since.timeIntervalSince1970)))]
+                         URLQueryItem(name: "updated_after", value: String(Int(since.timeIntervalSince1970))),
+                         URLQueryItem(name: "is_archived", value: "false")]
+            if let user, !user.isEmpty { query.append(URLQueryItem(name: "user_ids", value: user)) }
             if let cursor { query.append(URLQueryItem(name: "after", value: cursor)) }
             url.append(queryItems: query)
             let page = try await get(url, as: DevinCloudPage.self)
             items += page.items
-            guard page.hasNextPage == true, let next = page.endCursor, !next.isEmpty, next != cursor else { return (items, true) }
+            guard page.hasNextPage == true else { return (items, true) }
+            // More pages, but no new way to reach them: what was read is all there is, and it's not everything.
+            guard let next = page.endCursor, !next.isEmpty, next != cursor else { return (items, false) }
             cursor = next
         }
         return (items, false)
@@ -67,7 +75,8 @@ struct DevinCloudAPI: Sendable {
         do { (data, response) = try await send(request) } catch { throw .unavailable }
         switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
         case 200..<300: break
-        case 401, 403: throw .rejected
+        case 401: throw .rejected
+        case 403: throw .forbidden
         case 429: throw .slowDown
         default: throw .unavailable
         }

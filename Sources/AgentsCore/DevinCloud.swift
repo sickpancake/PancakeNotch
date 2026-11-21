@@ -55,6 +55,7 @@ public final class DevinCloud {
     nonisolated static let history: TimeInterval = 31 * 86_400
     nonisolated static let idPrefix = "devin-cloud:"
     private static let connectedKey = "devinCloud.connected"
+    private static let userNameKey = "devinCloud.userName"
 
     public convenience init() {
         self.init(defaults: .standard, store: DevinKeychain(), send: DevinCloudAPI.ephemeralSend)
@@ -77,6 +78,7 @@ public final class DevinCloud {
         self.store = store
         self.send = send
         phase = defaults.bool(forKey: Self.connectedKey) ? .connected : .notConnected
+        userName = phase == .connected ? defaults.string(forKey: Self.userNameKey) : nil
     }
 
     // MARK: Connecting
@@ -91,11 +93,15 @@ public final class DevinCloud {
         phase = .connecting
         problem = nil
         do throws(DevinCloudAPI.Failure) {
-            let found = try await DevinCloudAPI(token: key, send: send).identity()
-            guard found.sessionsOrg != nil else {
+            let api = DevinCloudAPI(token: key, send: send)
+            let found = try await api.identity()
+            guard let org = found.sessionsOrg else {
                 phase = .notConnected
                 return String(localized: "Devin didn't say which organization this token belongs to.", comment: "Devin cloud: connect failed")
             }
+            // Reading the sessions once proves the token may do what's needed, before anything is saved.
+            let now = Date()
+            let (items, complete) = try await api.sessions(org: org, user: found.userId, since: now.addingTimeInterval(-Self.history))
             guard store.save(key) else {
                 phase = .notConnected
                 return String(localized: "The token couldn't be saved in the Keychain.", comment: "Devin cloud: connect failed")
@@ -104,14 +110,17 @@ public final class DevinCloud {
             identity = found
             userName = found.userName
             defaults.set(true, forKey: Self.connectedKey)
+            defaults.set(found.userName, forKey: Self.userNameKey)
             phase = .connected
-            lastCheck = nil
+            lastCheck = now
+            show(mine(items), complete: complete, now: Date())
             resume()
             return nil
         } catch {
             phase = .notConnected
             return switch error {
             case .rejected: String(localized: "Devin didn't accept this token. Check it hasn't expired.", comment: "Devin cloud: connect failed")
+            case .forbidden: Self.forbiddenText
             case .slowDown, .unavailable: String(localized: "Couldn't reach Devin. Check your connection and try again.", comment: "Devin cloud: connect failed")
             }
         }
@@ -121,6 +130,7 @@ public final class DevinCloud {
     public func disconnect() {
         store.delete()
         defaults.removeObject(forKey: Self.connectedKey)
+        defaults.removeObject(forKey: Self.userNameKey)
         phase = .notConnected
         problem = nil
         userName = nil
@@ -135,6 +145,8 @@ public final class DevinCloud {
 
     /// What it feeds: the Agents list while Agents is on, AI Usage while that's on (nil: off).
     public func follow(agents: AgentsCenter?, usage: UsageCenter?) {
+        // Something new to fill: look now, however recent the last check.
+        if (agents !== self.agents && agents != nil) || (usage !== self.usage && usage != nil) { lastCheck = nil }
         if agents !== self.agents {
             forgetShown()
             self.agents?.onListShown = nil
@@ -227,19 +239,22 @@ public final class DevinCloud {
                 let found = try await api.identity()
                 identity = found
                 userName = found.userName
+                defaults.set(found.userName, forKey: Self.userNameKey)
             }
             guard let org = identity?.sessionsOrg else { throw DevinCloudAPI.Failure.unavailable }
-            let (items, complete) = try await api.sessions(org: org, since: now.addingTimeInterval(-Self.history))
+            let (items, complete) = try await api.sessions(org: org, user: identity?.userId, since: now.addingTimeInterval(-Self.history))
             guard !Task.isCancelled, isFollowing else { return }
             problem = nil
-            let mine = items.filter { $0.isArchived != true && ($0.userId == nil || identity?.userId == nil || $0.userId == identity?.userId) }
-            show(mine, complete: complete, now: Date())
+            show(mine(items), complete: complete, now: Date())
         } catch {
             guard !Task.isCancelled else { return }
             switch error {
             case .rejected:
                 problem = String(localized: "Devin stopped accepting the token. Connect again with a new one.", comment: "Devin cloud")
                 disconnectKeepingProblem()
+            case .forbidden:
+                // The token still works, so it stays: a new one would hit the same wall.
+                problem = Self.forbiddenText
             case .slowDown:
                 schedule(after: Self.slowGap)
             case .unavailable:
@@ -247,6 +262,16 @@ public final class DevinCloud {
                 if shownIDs.contains(where: { agents?.thread($0)?.status.isFinished == false }) { schedule(after: Self.slowGap) }
             }
         }
+    }
+
+    private static var forbiddenText: String {
+        String(localized: "This token can't read your Devin sessions. In Devin, give it permission to view sessions, then connect again.",
+               comment: "Devin cloud: the token works but lacks the right to list sessions")
+    }
+
+    /// The key owner's sessions (Devin filters already; this is a second check), not archived.
+    private func mine(_ items: [DevinCloudSession]) -> [DevinCloudSession] {
+        items.filter { $0.isArchived != true && ($0.userId == nil || identity?.userId == nil || $0.userId == identity?.userId) }
     }
 
     private func disconnectKeepingProblem() {
@@ -260,23 +285,30 @@ public final class DevinCloud {
         usage?.setDevinUsage(DevinCloudUsage(sessions: sessions.compactMap { session in
             guard let started = session.createdAt else { return nil }
             return .init(id: session.sessionId, title: Self.title(session), started: started, acus: session.acusConsumed ?? 0)
-        }, updatedAt: now))
+        }, updatedAt: now, isComplete: complete))
 
         var stillGoing = false, working = false
         if let agents {
             var seen: Set<String> = []
             for session in sessions {
                 guard let mapped = session.agentStatus else { continue }
-                let (status, reason) = mapped
+                var (status, reason) = mapped
                 let id = Self.idPrefix + session.sessionId
-                let known = agents.thread(id) != nil
-                let changed = (session.updatedAt ?? now)
+                let previous = agents.thread(id)
+                let changed = min(now, session.updatedAt ?? now)
+                // Fell asleep while it waited for you: it still waits for you (Devin wakes it when you answer).
+                if session.isAsleep, case .needsYou(let need)? = previous?.status {
+                    status = .needsYou(need)
+                    reason = String(localized: "Asleep, waiting for you", comment: "Devin cloud session: paused while it waited for the user")
+                }
                 // A session that finished a while before it was first seen isn't news.
-                if !known, status.isFinished, now.timeIntervalSince(changed) > AgentsCenter.keepAfterSeen { continue }
+                if previous == nil, status.isFinished, now.timeIntervalSince(changed) > AgentsCenter.keepAfterSeen { continue }
                 seen.insert(id)
-                if !status.isFinished { stillGoing = true }
+                // An asleep session won't change by itself: no checks for it.
+                if !status.isFinished, !session.isAsleep { stillGoing = true }
                 if status == .working { working = true }
-                let at = known ? min(now, changed) : (status.isFinished ? changed : (session.createdAt ?? changed))
+                // Working rows count from the start; the others from when they began waiting or stopped.
+                let at = previous == nil && status == .working ? (session.createdAt ?? changed) : changed
                 agents.apply(.init(
                     id: id, tool: .devin, at: at, title: Self.title(session),
                     status: status, request: .some(status.needsYou ? reason : nil),

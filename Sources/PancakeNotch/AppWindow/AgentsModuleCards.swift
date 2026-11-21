@@ -408,7 +408,9 @@ private struct DevinCloudRow: View {
         }
         if cloud.phase == .connected {
             if let problem = cloud.problem { return problem }
-            return String(localized: "Your Devin sessions in the cloud show up in Agents, and what they use in AI Usage. PancakeNotch asks Devin while one runs, and when you're back at your Mac.")
+            let what = String(localized: "Your Devin sessions in the cloud show up in Agents, and what they use in AI Usage. PancakeNotch asks Devin while one runs, and when you're back at your Mac.")
+            guard let name = cloud.userName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return what }
+            return String(localized: "Connected as \(name). \(what)", comment: "Devin cloud: the Devin account's name, then what connecting does")
         }
         if let problem = cloud.problem { return problem }
         return String(localized: "Sessions that run on Devin's servers, from the web, Slack or anywhere else. Needs a personal access token, since nothing on this Mac hears about them.")

@@ -73,6 +73,13 @@ private struct DevinNumbers: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
+            if !usage.isComplete {
+                // More sessions than one check reads: say the numbers are low rather than hide it.
+                Text("Only your newest 500 sessions")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 ForEach(usage.top(3, in: range)) { session in
                     Text("\(session.title) · \(AIUsageText.acus(session.acus))")

@@ -74,7 +74,7 @@ final class PracticeAgents {
                                  status: .needsYou(.input), statusSince: now.addingTimeInterval(-3 * 60),
                                  request: "Waiting for your reply", canOpen: true, hostName: cloud)
         var failed = AgentThread(id: "devin-cloud:practice-fail", tool: .devin, title: "Speed up the test suite",
-                                 project: "Devin cloud · Out of usage", status: .failed, statusSince: now.addingTimeInterval(-20 * 60),
+                                 project: "Devin cloud · Out of usage", status: .stopped, statusSince: now.addingTimeInterval(-20 * 60),
                                  canOpen: true, hostName: cloud, isSeen: true)
         working.isCloud = true
         asking.isCloud = true
