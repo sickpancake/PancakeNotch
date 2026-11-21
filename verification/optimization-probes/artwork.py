@@ -88,6 +88,7 @@ def build_sender(repo, ref, out):
     sender.write_text('''
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
+#import "MediaRemoteAdapter.h"
 #import "adapter/keys.h"
 #import "utility/helpers.h"
 #include <time.h>
