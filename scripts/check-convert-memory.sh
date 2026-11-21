@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Peak-memory check for Convert (ADR-0006, ADR-0038): runs the conversion helper over generated files
+# near the "Too big" limits. Fails if a conversion uses more than the helper's budget, or more than
+# the estimate the format row used to offer it (the row only stays honest while estimates run high).
+# Runs off screen. Usage: scripts/check-convert-memory.sh [path/to/pancakenotch-convert]
+set -euo pipefail
+
+HELPER="${1:-build/PancakeNotch.app/Contents/MacOS/pancakenotch-convert}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+echo "Making test files…"
+xcrun swiftc -O "$ROOT/scripts/convert-fixtures.swift" -o "$WORK/fixtures"
+"$WORK/fixtures" "$WORK/in"
+IN="$WORK/in"
+FAILED=0
+CHECKED=0
+
+# Each run of the helper gets a time limit: a single stuck conversion on a CI machine once held this check
+# for 6 hours. A normal one takes seconds (the whole check about 4 minutes). Exit 142 means the limit hit.
+LIMIT="${CONVERT_TIME_LIMIT:-120}"
+TIMED_OUT=142
+limited() { perl -e 'alarm shift; exec @ARGV or die "cannot run $ARGV[0]: $!\n"' "$LIMIT" "$@"; }
+
+# check <format> <quality> <file>…
+check() {
+    local format="$1" quality="$2"; shift 2
+    local out; out="$(mktemp -d "$WORK/out.XXXX")"
+    local request
+    request="$(python3 -c 'import json, sys; print(json.dumps({"sources": sys.argv[4:], "format": sys.argv[1], "quality": sys.argv[2], "outputFolder": sys.argv[3], "pageName": "Page"}))' "$format" "$quality" "$out" "$@")"
+    local label="$format/$quality $(cd "$IN" && for f in "$@"; do basename "$f"; done | paste -sd+ -)"
+    local estimate budget
+    read -r estimate budget < <(limited "$HELPER" estimate "$request" | python3 -c 'import json, sys; e = json.load(sys.stdin); print(e.get("peak") or "-", e["budget"])') || true
+    if [[ -z "${budget:-}" ]]; then
+        printf '  %-48s FAILED: no estimate (stuck for %ss or broken)\n' "$label" "$LIMIT"
+        FAILED=$((FAILED + 1)); return
+    fi
+    if [[ "$estimate" != "-" ]] && python3 -c "import sys; sys.exit(0 if $estimate > $budget else 1)"; then
+        printf '  %-48s Too big (estimate %.0f MiB): not offered\n' "$label" "$estimate"
+        return
+    fi
+    local code=0
+    /usr/bin/time -l perl -e 'alarm shift; exec @ARGV or die' "$LIMIT" "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || code=$?
+    CHECKED=$((CHECKED + 1))
+    if (( code == TIMED_OUT )); then
+        printf '  %-48s TIMED OUT after %ss\n' "$label" "$LIMIT"
+        FAILED=$((FAILED + 1)); return
+    fi
+    local result; result="$(tail -1 "$out.log")"
+    local peak; peak="$(awk '/peak memory footprint/ { printf "%.1f", $1 / 1048576 }' "$out.time")"
+    local status="ok"
+    if ! python3 -c 'import json, sys; m = json.loads(sys.argv[1]); sys.exit(0 if m.get("outputs") and not m.get("errors") else 1)' "$result" 2>/dev/null; then
+        status="FAILED to convert: $result"
+    elif python3 -c "import sys; sys.exit(0 if $peak > $budget else 1)"; then
+        status="OVER BUDGET"
+    elif [[ "$estimate" != "-" ]] && python3 -c "import sys; sys.exit(0 if $peak > $estimate + 1 else 1)"; then
+        status="OVER ESTIMATE"
+    fi
+    printf '  %-48s %6.1f MiB (estimate %s) %s\n' "$label" "$peak" "$estimate" "$status"
+    [[ "$status" == "ok" ]] || FAILED=$((FAILED + 1))
+}
+
+echo "Pictures"
+for q in best balanced smaller; do
+    for mp in 3 6 12 24 48; do
+        check jpeg "$q" "$IN/photo$mp.heic"
+        check png "$q" "$IN/photo$mp.jpg"
+        check png "$q" "$IN/photo$mp.heic"
+        check heic "$q" "$IN/photo$mp.jpg"
+        check pdf "$q" "$IN/photo$mp.jpg"
+        check pdf "$q" "$IN/photo$mp.heic"
+    done
+    check jpeg "$q" "$IN/photo6.png"; check heic "$q" "$IN/photo6.png"; check pdf "$q" "$IN/photo6.png"
+    check jpeg "$q" "$IN/photo6.tiff"; check png "$q" "$IN/photo6.tiff"
+    check jpeg "$q" "$IN/clear2.png"; check jpeg "$q" "$IN/clear4.png"; check pdf "$q" "$IN/clear4.png"
+    check png "$q" "$IN/print4.jpg"; check pdf "$q" "$IN/print4.jpg"
+    check tiff "$q" "$IN/photo3.heic"; check tiff "$q" "$IN/photo6.jpg"
+done
+
+echo "Combine"
+for q in best balanced smaller; do
+    check combinedPDF "$q" "$IN/photo24.jpg" "$IN/photo12.jpg" "$IN/turned12.jpg"
+    check combinedPDF "$q" "$IN/photo48.heic" "$IN/photo24.jpg"
+    check combinedPDF "$q" "$IN/photo12.heic" "$IN/photo3.png"
+    check combinedPDF "$q" "$IN/text200.pdf" "$IN/photo6.pdf" "$IN/photo3.jpg"
+    check combinedPDF "$q" "$IN/scan.pdf" "$IN/text200.pdf"
+    check combinedPDF "$q" "$IN/annotated200.pdf" "$IN/text200.pdf"
+done
+
+echo "PDF pages and text"
+for q in best balanced smaller; do
+    for f in text200.pdf annotated200.pdf photo6.pdf scan.pdf; do
+        check pagePNG "$q" "$IN/$f"
+        check pageJPEG "$q" "$IN/$f"
+    done
+done
+check text balanced "$IN/text200.pdf"
+
+echo "Audio and video"
+for f in stereo10min.wav speech.aiff; do
+    check m4a balanced "$IN/$f"; check appleLossless balanced "$IN/$f"
+done
+check aiff balanced "$IN/stereo10min.wav"; check wav balanced "$IN/speech.aiff"
+check mp4 balanced "$IN/clip1080sound.mov"
+check audioOnly balanced "$IN/clip1080sound.mov"
+for q in best balanced smaller; do check gif "$q" "$IN/clip1080.mov"; done
+
+echo "Documents"
+check pdf balanced "$IN/long.txt"; check rtf balanced "$IN/long.txt"
+check pdf balanced "$IN/long.rtf"; check text balanced "$IN/long.docx"
+check pdf balanced "$IN/short.rtf"; check text balanced "$IN/short.rtf"
+check pdf balanced "$IN/short.docx"; check text balanced "$IN/short.docx"
+
+# Refusal must stay small even when the source is huge or highly compressed.
+python3 - "$IN" <<'PYFIXTURES'
+import pathlib, sys, zipfile
+folder = pathlib.Path(sys.argv[1])
+with (folder / 'oversized.txt').open('wb') as file:
+    file.truncate(50 * 1024 * 1024)
+with zipfile.ZipFile(folder / 'bomb.docx', 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+    with archive.open('word/document.xml', 'w') as entry:
+        for _ in range(1024):
+            entry.write(b'x' * 65536)
+PYFIXTURES
+for name in oversized.txt bomb.docx; do
+    out="$(mktemp -d "$WORK/refused.XXXX")"
+    request="$(python3 -c 'import json, sys; print(json.dumps({"sources": [sys.argv[1]], "format": "pdf", "quality": "balanced", "outputFolder": sys.argv[2], "pageName": "Page"}))' "$IN/$name" "$out")"
+    code=0
+    /usr/bin/time -l perl -e 'alarm shift; exec @ARGV or die' "$LIMIT" "$HELPER" convert "$request" > "$out.log" 2> "$out.time" || code=$?
+    if (( code == TIMED_OUT )); then
+        echo "  $name: TIMED OUT after ${LIMIT}s"
+        CHECKED=$((CHECKED + 1)); FAILED=$((FAILED + 1)); continue
+    fi
+    peak="$(awk '/peak memory footprint/ { printf "%.1f", $1 / 1048576 }' "$out.time")"
+    result="$(tail -1 "$out.log")"
+    CHECKED=$((CHECKED + 1))
+    if python3 -c 'import json, sys; m = json.loads(sys.argv[1]); assert not m.get("outputs") and m["errors"][0]["failure"] == "tooBig"; assert float(sys.argv[2]) < 65' "$result" "$peak"; then
+        echo "  $name: Too big, $peak MiB peak on refusal, ok"
+    else
+        echo "  $name: FAILED refusal or memory check"
+        FAILED=$((FAILED + 1))
+    fi
+done
+
+echo "$CHECKED conversions measured, $FAILED failed."
+(( FAILED == 0 )) || { echo "Convert memory check failed"; exit 1; }

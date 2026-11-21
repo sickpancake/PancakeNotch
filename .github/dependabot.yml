@@ -1,0 +1,12 @@
+# Keeps the GitHub Actions the workflows use up to date. They're pinned to exact commits (so a moved
+# tag can't swap in other code); Dependabot opens one pull request a week when any of them has a
+# new release, and CI runs on it like any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

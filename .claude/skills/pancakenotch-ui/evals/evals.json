@@ -1,0 +1,29 @@
+{
+  "skill_name": "pancakenotch-ui",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a simple 'Notes' module to the notch. When you open the notch on it, it shows one quick note you can type into, with a Clear button, and a friendly empty state when there's no note yet. Beside the closed notch it shows a small note icon while a note exists. Keep the note in memory for now (no saving, no settings page, no Learn lesson). Add it to the off-screen snapshot so I can see what it looks like.",
+      "expected_output": "A new notch module whose open page, ear and empty state follow the notch layout (top band, nothing under the cutout, 20 pt padding), reuse NotchPill/NotchRoundButton/PanelNote-style parts, stay monochrome, have VoiceOver labels and Reduce Motion fallbacks, and appear in the snapshot sheet.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "On the General settings page, add a way to reset all of PancakeNotch's settings back to how they were when first installed. It should be hard to do by accident. Statistics and Shelf items should NOT be deleted, just settings.",
+      "expected_output": "A SettingsCard/SettingsRow on the General page with a pill button using the app window's styles, a clear confirmation step in the app's own style and plain wording, real reset behaviour that leaves statistics and Shelf items alone, and an updated app window snapshot.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "In the open Shelf, add a 'Copy all' button next to 'Clear all' in the header, so I can copy every item at once. Make sure it still fits when lots of module tabs are showing.",
+      "expected_output": "A header button that reuses ShelfPillButton (or the shared pill) with matching wording, works via the existing copy action, has a VoiceOver label, degrades gracefully when the header is narrow, and is shown in the snapshot.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "After 'Clear all' in the open Shelf, show a small strip at the bottom of the Shelf page for a few seconds that says how many items were cleared, with an Undo button that puts them all back. If I don't press Undo, the strip goes away on its own. It should feel smooth like the rest of the notch, not just pop in and out.",
+      "expected_output": "A strip that slides/fades in and out with the notch's curves and transitions (with Reduce Motion fallbacks), items that animate back on Undo, a count that uses numericText or similar, an auto-dismiss without Timer/polling (cancellable Task.sleep), a working Undo, localized strings, and the strip in the snapshot sheet.",
+      "files": []
+    }
+  ]
+}

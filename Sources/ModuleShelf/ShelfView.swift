@@ -1,0 +1,648 @@
+import AppKit
+import NotchCore
+import SwiftUI
+
+/// The open Shelf: header beside the notch, then the tile row, drop zones or a card (ADR-0013).
+/// Visuals are plain SwiftUI so the off-screen snapshot can draw them; mouse handling for tiles is an
+/// invisible AppKit overlay (`ShelfTileInteraction`).
+struct ShelfView: View {
+    let module: ShelfModule
+    let layout: ShelfLayout
+
+    var body: some View {
+        if let item = module.detailItem, module.dropZone == nil {
+            ShelfDetailView(module: module, item: item, layout: layout)
+        } else if let session = module.visibleConversion, module.dropZone == nil {
+            ShelfConvertView(module: module, session: session, layout: layout)
+        } else {
+            tiles
+        }
+    }
+
+    private var tiles: some View {
+        VStack(spacing: 0) {
+            ShelfHeader(module: module, layout: layout)
+                .frame(height: layout.bandHeight)
+                .padding(.horizontal, ShelfLayout.sidePadding)
+            content
+                .frame(width: layout.content.width, height: layout.content.height)
+                .padding(.top, layout.content.minY - layout.bandHeight)
+            Spacer(minLength: 0)
+        }
+        .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
+        // Clicks on empty space clear the selection first, then shrink the notch.
+        .background(Color.black.opacity(0.001).onTapGesture { module.backgroundClicked() })
+        .foregroundStyle(.white)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Shelf"))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let zone = module.dropZone {
+            ShelfDropZones(zone: zone, convert: module.convertZone, showsAirDrop: module.dragCanAirDrop, layout: layout)
+        } else if let prompt = module.prompt, !module.isChoosing {
+            ShelfPromptCard(module: module, prompt: prompt)
+        } else if module.store.items.isEmpty {
+            ShelfEmptyView()
+        } else {
+            ShelfTileRow(module: module)
+        }
+    }
+}
+
+
+// MARK: Header
+
+private struct ShelfHeader: View {
+    let module: ShelfModule
+    let layout: ShelfLayout
+    /// The module tabs at the left of the band: the count starts after them, and they name the Shelf.
+    @Environment(\.notchModuleBarWidth) private var barWidth
+
+    var body: some View {
+        let count = module.store.items.count
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                // With many tabs the room beside the notch is small: a shorter title, or none, instead of "1…".
+                if case .choosing = module.prompt {
+                    ViewThatFits(in: .horizontal) {
+                        Text("Choose items to remove")
+                        Text("Choose items", comment: "Short form of \"Choose items to remove\" when space is tight")
+                        Color.clear.frame(width: 0)
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                } else {
+                    if barWidth == 0 {
+                        Text("Shelf")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    if count > 0 {
+                        ViewThatFits(in: .horizontal) {
+                            Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
+                            Color.clear.frame(width: 0)
+                        }
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .monospacedDigit()
+                    }
+                }
+            }
+            .lineLimit(1)
+            .padding(.leading, max(0, barWidth - ShelfLayout.sidePadding))
+            .frame(width: layout.headerSideWidth, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 6) {
+                if case .choosing = module.prompt {
+                    ShelfPillButton(title: String(localized: "Cancel")) {
+                        if case .choosing(let pending) = module.prompt { module.prompt = .full(pending: pending) }
+                        module.selection = []
+                    }
+                    ShelfPillButton(
+                        title: String(localized: "Remove \(module.selection.count)", comment: "Remove the chosen shelf items"),
+                        prominent: true
+                    ) { module.removeChosen() }
+                    .disabled(module.selection.isEmpty)
+                } else if count > 0, module.dropZone == nil, module.prompt == nil {
+                    ShelfDragAllHandle(module: module)
+                    ShelfPillButton(
+                        title: !module.confirmingClear ? String(localized: "Clear all")
+                            : count == 1 ? String(localized: "Clear 1 item?")
+                            : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                        prominent: module.confirmingClear
+                    ) { module.clearAll() }
+                }
+            }
+            .frame(width: layout.headerSideWidth, alignment: .trailing)
+        }
+    }
+}
+
+/// Drags every item on the shelf at once.
+private struct ShelfDragAllHandle: View {
+    let module: ShelfModule
+
+    var body: some View {
+        Image(systemName: "square.stack.3d.up")
+            .font(.system(size: 12, weight: .medium))
+            .frame(width: 28, height: 22)
+            .background(.white.opacity(0.12), in: Capsule())
+            .overlay { if !module.isSnapshot { ShelfTileInteraction(module: module, itemID: nil) } }
+            .help(String(localized: "Drag all items"))
+            .accessibilityElement()
+            .accessibilityLabel(Text("Drag all items"))
+            .accessibilityAction(named: Text("Copy all items")) { module.copy(module.store.items) }
+    }
+}
+
+/// A white ring just outside a button the keyboard is on (Tab), for the monochrome look's focus.
+extension View {
+    func keyFocusRing(_ isOn: Bool, in shape: some Shape) -> some View {
+        overlay { if isOn { shape.stroke(.white.opacity(0.9), lineWidth: 1.5).padding(-3) } }
+    }
+}
+
+struct ShelfPillButton: View {
+    let title: String
+    var prominent = false
+    /// The keyboard (Tab) is on this button.
+    var isKeyFocused = false
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .lineLimit(1)
+                .foregroundStyle(prominent ? .black : .white)
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(.white.opacity(prominent ? (isHovered && isEnabled ? 0.88 : 1) : (isHovered && isEnabled ? 0.2 : 0.14)), in: Capsule())
+                .opacity(isEnabled ? 1 : 0.4)
+                .keyFocusRing(isKeyFocused, in: Capsule())
+                .animation(.easeOut(duration: 0.15), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: Tiles
+
+private struct ShelfTileRow: View {
+    let module: ShelfModule
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if module.isSnapshot {
+            // Off-screen renders can't scroll: show what fits.
+            tiles(limit: 7).frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) { tiles(lazy: true) }
+                    // The arrow keys move the selection (or the ring) along a row that may run past the edge.
+                    .onChange(of: module.selectionCursor) { _, id in
+                        guard let id else { return }
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+                    }
+                    // Back from an item that was open: the row starts at the left again.
+                    .onAppear {
+                        if let id = module.selectionCursor, module.selection.contains(id) { proxy.scrollTo(id) }
+                    }
+            }
+        }
+    }
+
+    /// Lazy in the scroll view: tiles past the edge (and their previews) are made when scrolled to.
+    private func tiles(limit: Int = ShelfStore.capacity, lazy: Bool = false) -> some View {
+        Group {
+            if lazy {
+                LazyHStack(spacing: ShelfLayout.tileSpacing) { tileViews(limit: limit) }
+            } else {
+                HStack(spacing: ShelfLayout.tileSpacing) { tileViews(limit: limit) }
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func tileViews(limit: Int) -> some View {
+        ForEach(module.store.items.prefix(limit)) { item in
+            ShelfTile(
+                module: module,
+                item: item,
+                thumbnail: module.thumbnails.images[item.id],
+                isSelected: module.selection.contains(item.id),
+                isChoosing: module.isChoosing,
+                isCursor: module.selectionCursor == item.id,
+                isCopied: module.copiedID == item.id
+            )
+            .id(item.id)
+            .onAppear { module.thumbnails.load(CollectionOfOne(item), scale: 2) }
+        }
+    }
+}
+
+struct ShelfTile: View {
+    let module: ShelfModule
+    let item: ShelfItem
+    let thumbnail: NSImage?
+    let isSelected: Bool
+    let isChoosing: Bool
+    /// The keyboard's tile: ringed while choosing, when nothing else shows where Space would tick.
+    let isCursor: Bool
+    let isCopied: Bool
+
+    var body: some View {
+        VStack(spacing: 5) {
+            preview
+                .frame(width: 56, height: 56)
+                .animation(.easeOut(duration: 0.2), value: thumbnail != nil)
+                .overlay(alignment: .topTrailing) {
+                    if isChoosing {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white, .black)
+                            .background(Circle().fill(.black.opacity(0.6)))
+                            .offset(x: 5, y: -5)
+                    }
+                }
+                .overlay {
+                    if isCopied {
+                        Text("Copied")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 7)
+                            .frame(height: 18)
+                            .background(.white, in: Capsule())
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.15), value: isCopied)
+            Text(item.displayName)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.white.opacity(isSelected ? 1 : 0.8))
+                .lineLimit(2)
+                // File names keep their extension in view; notes and links read from the start.
+                .truncationMode(item.isFile ? .middle : .tail)
+                .multilineTextAlignment(.center)
+                .frame(width: ShelfLayout.tileSize.width - 8, height: 26, alignment: .top)
+        }
+        .padding(.top, 5)
+        .frame(width: ShelfLayout.tileSize.width, height: ShelfLayout.tileSize.height, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.white.opacity(isSelected ? 0.16 : 0))
+        )
+        .overlay {
+            if isChoosing && isCursor {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.85), lineWidth: 1.5)
+            }
+        }
+        .overlay {
+            if !module.isSnapshot {
+                ShelfTileInteraction(module: module, itemID: item.id).accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction { module.activate(item.id) }
+        .accessibilityActions { accessibilityActions }
+    }
+
+    /// The right-click menu's actions, for VoiceOver.
+    @ViewBuilder
+    private var accessibilityActions: some View {
+        Button(String(localized: "Copy")) { module.copy([item]) }
+        if item.isFile {
+            Button(String(localized: "Open")) { module.open([item]) }
+            Button(String(localized: "Quick Look")) { module.quickLook([item]) }
+            Button(String(localized: "Show in Finder")) { module.reveal([item]) }
+            Button(String(localized: "Copy Path")) { module.copyPaths([item]) }
+            if module.canConvert([item]) {
+                Button(String(localized: "Convert…")) { module.convert([item]) }
+            }
+        }
+        if case .link = item.kind {
+            Button(String(localized: "Open Link")) { module.open([item]) }
+        }
+        Button(String(localized: "AirDrop")) { module.airDrop([item]) }
+        Button(String(localized: "Remove")) { module.remove([item.id]) }
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        switch item.kind {
+        case .file:
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                symbolCard("doc")
+            }
+        case .text(let text):
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(.white.opacity(0.1))
+                .overlay(alignment: .topLeading) {
+                    // Five tiny lines show; only their worth of a long text is laid out.
+                    Text(text.prefix(500))
+                        .font(.system(size: 7.5))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(5)
+                        .padding(6)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "text.quote")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(5)
+                }
+        case .link:
+            symbolCard("link")
+        }
+    }
+
+    private func symbolCard(_ symbol: String) -> some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(.white.opacity(0.1))
+            .overlay {
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+    }
+
+    private var accessibilityLabel: String {
+        switch item.kind {
+        case .file: String(localized: "File, \(item.displayName)")
+        case .text: String(localized: "Text, \(item.displayName)")
+        case .link: String(localized: "Link, \(item.displayName)")
+        }
+    }
+}
+
+private struct ShelfEmptyView: View {
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: "tray.and.arrow.down")
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(.white.opacity(0.45))
+                .accessibilityHidden(true)
+            Text("Drop files here")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text("Files, images, text and links wait here until you need them.")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.45))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: Dropping
+
+/// Shown while a drag is over the open notch: the Shelf, Convert when files are dragged (ADR-0038),
+/// and AirDrop when the content can be sent.
+struct ShelfDropZones: View {
+    let zone: ShelfModule.DropZone
+    var convert: ShelfModule.ConvertZone?
+    let showsAirDrop: Bool
+    let layout: ShelfLayout
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        HStack(spacing: ShelfLayout.zoneSpacing) {
+            target(
+                symbol: "tray.and.arrow.down.fill",
+                title: String(localized: "Drop to add to Shelf"),
+                isTargeted: zone == .shelf
+            )
+            if let convert {
+                target(
+                    symbol: "arrow.triangle.2.circlepath",
+                    title: String(localized: "Convert", comment: "Drop zone that converts files to another format"),
+                    caption: convert == .cantConvert ? String(localized: "Can't convert", comment: "Under the Convert drop zone: these files have no other format") : nil,
+                    isTargeted: zone == .convert && convert == .ready
+                )
+                .opacity(convert == .cantConvert ? 0.45 : 1)
+                .frame(width: ShelfLayout.convertWidth)
+            }
+            if showsAirDrop {
+                target(
+                    symbol: "dot.radiowaves.left.and.right",
+                    title: String(localized: "AirDrop"),
+                    isTargeted: zone == .airDrop
+                )
+                .frame(width: ShelfLayout.airDropWidth)
+            }
+        }
+    }
+
+    private func target(symbol: String, title: String, caption: String? = nil, isTargeted: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.white.opacity(isTargeted ? 0.14 : 0.04))
+            .strokeBorder(
+                .white.opacity(isTargeted ? 0.85 : contrast == .increased ? 0.7 : 0.45),
+                style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+            )
+            .overlay {
+                VStack(spacing: 7) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 20, weight: .medium))
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                    if let caption {
+                        Text(caption)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .padding(.top, -3)
+                    }
+                }
+                .foregroundStyle(.white.opacity(isTargeted ? 1 : 0.6))
+            }
+            .animation(.easeOut(duration: 0.15), value: isTargeted)
+            .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: Cards
+
+/// The duplicate question and the "Shelf is full" warning, shown inside the notch.
+struct ShelfPromptCard: View {
+    let module: ShelfModule
+    let prompt: ShelfModule.Prompt
+    @State private var remember = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .medium))
+                .frame(width: 30)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) { buttons }
+                    .padding(.top, 6)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.white.opacity(0.07))
+                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+        )
+        .overlay(alignment: .topTrailing) {
+            Button { module.dismissPrompt() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22)
+                    .background(.white.opacity(0.12), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(8)
+            .accessibilityLabel(Text("Dismiss"))
+            .accessibilityHint(Text(dismissHint))
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var dismissHint: String {
+        if case .duplicates = prompt { return String(localized: "Adds only the items that aren't on the Shelf yet.") }
+        return String(localized: "The items that didn't fit are not added.")
+    }
+
+    private var symbol: String {
+        if case .duplicates = prompt { return "square.on.square" }
+        return "tray.full"
+    }
+
+    private var title: String {
+        switch prompt {
+        case .duplicates(_, let count):
+            String(localized: "\(count) already on the Shelf", comment: "Duplicate prompt title; count of items")
+        case .full, .choosing:
+            String(localized: "The Shelf is full")
+        }
+    }
+
+    private var message: String {
+        switch prompt {
+        case .duplicates(_, let count):
+            count == 1
+                ? String(localized: "Move it to the front, or add it again?")
+                : String(localized: "Move them to the front, or add them again?")
+        case .full(let pending), .choosing(let pending):
+            String(localized: "\(pending.count) didn't fit. Make room and they'll be added.", comment: "Shelf full card; count of waiting items")
+        }
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        switch prompt {
+        case .duplicates:
+            ShelfPillButton(title: String(localized: "Move to front"), prominent: true) {
+                module.answerDuplicates(.moveToFront, remember: remember)
+            }
+            ShelfPillButton(title: String(localized: "Add again")) {
+                module.answerDuplicates(.addAgain, remember: remember)
+            }
+            Button { remember.toggle() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: remember ? "checkmark.square.fill" : "square")
+                    Text("Don't ask again")
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 4)
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityValue(Text(remember ? "On" : "Off"))
+        case .full, .choosing:
+            let count = module.store.items.count
+            ShelfPillButton(
+                title: !module.confirmingClear ? String(localized: "Clear all")
+                    : count == 1 ? String(localized: "Clear 1 item?")
+                    : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                prominent: true
+            ) { module.clearForPending() }
+            ShelfPillButton(title: String(localized: "Choose items to remove")) { module.startChoosing() }
+        }
+    }
+}
+
+// MARK: Compact
+
+/// The Shelf in the compact notch's ear (the one its ranking gives it, docs/ear-rules.md): a tray with a
+/// count badge, "!" when full (ADR-0013).
+struct ShelfEar: View {
+    let module: ShelfModule
+    /// The number on the badge while it counts up after a drop; `nil` shows the real count.
+    @State private var shownCount: Int?
+    @State private var bounce = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let count = shownCount ?? module.store.items.count
+        ShelfTrayBadge(count: count, bounce: bounce, reduceMotion: reduceMotion)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(ShelfModule.earLabel(count: module.store.items.count)))
+            // The ear lives on while the notch is closed or open: count up each time it comes out.
+            .task(id: module.notch?.state == .compact) {
+                if module.notch?.state == .compact { await countUpAfterDrop() }
+            }
+    }
+
+    /// After a drop: start at the old count, then count up with a bounce once the ear has slid out.
+    private func countUpAfterDrop() async {
+        guard let from = module.countBeforeDrop else { return }
+        module.countBeforeDrop = nil
+        let to = module.store.items.count
+        guard from != to else { return }
+        shownCount = from
+        // Cancelled (the notch opened or closed meanwhile): show the real count straight away.
+        defer { shownCount = nil }
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.5)) {
+            shownCount = to
+            bounce = true
+        }
+        try? await Task.sleep(for: .milliseconds(180))
+        withAnimation(Task.isCancelled ? nil : .spring(response: 0.3, dampingFraction: 0.7)) { bounce = false }
+    }
+}
+
+/// A tray symbol, centred in the ear, with the item count in a white badge hanging off its top-right
+/// corner; at capacity the full tray, "20" and a small "!" at its bottom-left. No badge while empty.
+struct ShelfTrayBadge: View {
+    let count: Int
+    var bounce = false
+    var reduceMotion = false
+
+    private var isFull: Bool { count >= ShelfStore.capacity }
+
+    var body: some View {
+        Image(systemName: isFull ? "tray.full.fill" : "tray.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.9))
+            .overlay(alignment: .topTrailing) {
+                if count > 0 {
+                    Text(verbatim: "\(count)")
+                        .font(.system(size: 9, weight: .bold))
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(count)))
+                        .foregroundStyle(.black)
+                        .fixedSize()
+                        .padding(.horizontal, 3)
+                        .frame(minWidth: 13, minHeight: 13)
+                        .background(.white, in: Capsule())
+                        .scaleEffect(bounce && !reduceMotion ? 1.3 : 1)
+                        .offset(x: 9, y: -8)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if isFull {
+                    Image(systemName: "exclamationmark")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.white)
+                        .offset(x: -4, y: 1)
+                }
+            }
+            // The tray's ink sits a point right of and above its frame's centre: centre what you see.
+            .offset(x: -1, y: 1)
+    }
+}

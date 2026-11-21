@@ -1,0 +1,8 @@
+from base import *
+dots=lambda d,t:''.join(f'<span class="dot" style="background:rgba(255,255,255,{.92 if i<d else .2});margin-right:4px;flex:none"></span>' for i in range(t))
+body=cap("Compact · focus block 2 of 4 (Keep Awake on)")+compact('<span>☕</span><span style="display:inline-flex;align-items:center">'+dots(1,4)+'</span>','<span class="ring" style="--p:25%"></span><span>18:42</span>')
+body+=cap("Peek · break starts")+compact('','<span class="ring" style="--p:5%"></span><span>4:55</span>',peek='<span>Focus done · 5 min break</span><span class="pill" style="height:18px">Skip break</span>',h_scene=96)
+w=f'''<div class="row"><div class="tile" style="background:#000;width:270px;height:104px"><div style="display:flex;justify-content:space-between"><span class="q" style="font-size:11px">FOCUS</span><span>{dots(2,4)}</span></div><div style="display:flex;justify-content:space-between;align-items:end;margin-top:22px"><span class="pill main">▶ Focus 25</span><span class="s" style="font-size:12px">This week 6 h 15 m</span></div></div>
+<div class="tile" style="background:#000;width:270px;height:104px"><div class="q" style="font-size:11px">STATISTICS · FOCUS THIS WEEK</div><div style="display:flex;gap:9px;align-items:end;height:56px;margin-top:10px">'''+''.join(f'<div style="flex:1;height:{h}%;background:rgba(255,255,255,.{8 if h<90 else 9}2);border-radius:3px"></div>' for h in [40,75,55,90,30,10,5])+'</div></div></div>'
+body+=cap("Home widgets · Focus and Statistics")+w
+open("m06.html","w").write(page("Focus sessions","One click runs Timer + Keep Awake + breaks, and Statistics counts focus time.",body))

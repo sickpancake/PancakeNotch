@@ -1,0 +1,391 @@
+import AgentsCore
+import KeepAwakeCore
+import AppKit
+import HotKey
+import Learn
+import ModuleNowPlaying
+import ModuleShelf
+import NotchCore
+import NowPlayingCore
+import Stats
+import SwiftUI
+import TimerCore
+
+/// The app window (Home, Modules, Settings, About). It lives in the same process; the Dock icon
+/// shows only while it's open, and the window is torn down on close to give its memory back
+/// (ADR-0017). It is always dark, like the notch, whatever the system appearance.
+@MainActor
+final class AppWindowController: NSObject, NSWindowDelegate {
+    private let context: AppContext
+    /// Called each time the window opens (an app-health sample for the statistics).
+    var onShow: (() -> Void)?
+    private var window: NSWindow?
+
+    init(context: AppContext) {
+        self.context = context
+    }
+
+    /// Opens the window, on `section` when given (otherwise the page it was on).
+    func show(section: AppSection? = nil) {
+        if let section { context.navigation.section = section }
+        onShow?()
+        let window = self.window ?? makeWindow()
+        self.window = window
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func makeWindow() -> NSWindow {
+        let window = Self.makeWindow(
+            rootView: AppWindowView(context: context),
+            windowClass: NSWindow.self,
+            size: AppWindowView.defaultSize
+        )
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+        window.setFrameAutosaveName("AppWindow")
+        return window
+    }
+
+    /// A dark window whose sidebar runs up under the traffic lights, with no visible title bar.
+    private static func makeWindow(rootView: some View, windowClass: NSWindow.Type, size: CGSize) -> NSWindow {
+        let window = windowClass.init(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = String(localized: "PancakeNotch") // still used by the Window menu and VoiceOver
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = .black
+        window.contentMinSize = AppWindowView.minimumSize
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.sizingOptions = [.minSize]
+        window.contentView = hostingView
+        window.setContentSize(size)
+        return window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Closing the window during the welcome pauses it: it carries on at the same step next time
+        // the window opens, but doesn't open by itself again (ADR-0020).
+        NSApp.setActivationPolicy(.accessory)
+        // Release after AppKit finishes closing, so the SwiftUI view tree is freed (unless it was
+        // opened again straight away).
+        let closing = notification.object as? NSWindow
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let closing, self.window === closing, !closing.isVisible else { return }
+            closing.contentView = nil
+            self.window = nil
+        }
+    }
+}
+
+extension AppWindowController {
+    /// Renders every page off-screen to `<directory>/app-<page>.png` without showing anything
+    /// (design checks; `PANCAKENOTCH_SNAPSHOT_SETTINGS=<directory>`). Uses sample preferences and
+    /// numbers kept in a throwaway defaults domain, never the user's real settings.
+    static func writeSnapshots(to directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let suite = "io.github.sickpancake.PancakeNotch.snapshots"
+        guard let defaults = UserDefaults(suiteName: suite) else { return }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let preferences = Preferences(defaults: defaults)
+        let stats = sampleStats(defaults: defaults)
+        let noShortcut = ShortcutController(defaults: defaults) {}
+        let shelfSettings = ShelfSettings(defaults: defaults)
+        let shelfFolder = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-snapshot-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: shelfFolder) }
+        let shelfStore = ShelfStore(directory: shelfFolder)
+        let progress = LearnProgress(defaults: defaults)
+        progress.onboardingDone = true
+        shelfStore.add(
+            [.text("Meeting notes"), .link(URL(string: "https://github.com")!), .text("Call back at 4"), .text("Address")],
+            duplicates: .addAgain
+        )
+
+        let arrangement = ModuleArrangement()
+        let nowPlayingSettings = NowPlayingSettings(defaults: defaults)
+        let nowPlaying = NowPlayingCenter.practiceSnapshot(playing: true, elapsed: 74)
+        let statsStore = StatsStore(url: nil)
+        sampleStatistics(statsStore)
+        let updates = Updates(snapshotPendingVersion: nil, lastCheck: Date().addingTimeInterval(-3 * 3600))
+        let agentsSettings = AgentsSettings(defaults: defaults)
+        let agents = AgentsCenter.practice()
+        let usage = UsageCenter.practice()
+        let connector = AgentConnector.preview([.claude: .connected, .codex: .notConnected, .cursor: .notFound], settings: agentsSettings)
+        let timerSettings = TimerSettings(defaults: defaults)
+        let timers = TimerCenter()
+        let keepAwakeSettings = KeepAwakeSettings(defaults: defaults)
+        let keepAwake = KeepAwakeCenter(settings: keepAwakeSettings, isPractice: true)
+        let home = HomeSettings()
+        let context = AppContext(
+            preferences: preferences,
+            shortcuts: noShortcut,
+            stats: stats,
+            progress: progress,
+            arrangement: arrangement,
+            home: home,
+            shelfSettings: shelfSettings,
+            shelfStore: shelfStore,
+            nowPlayingSettings: nowPlayingSettings,
+            nowPlaying: nowPlaying,
+            statsStore: statsStore,
+            updates: updates,
+            agentsSettings: agentsSettings,
+            agents: agents,
+            usage: usage,
+            connector: connector,
+            timerSettings: timerSettings,
+            timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+            makeLiveModules: {
+                var modules: [any NotchModule] = []
+                if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
+                if shelfSettings.isEnabled { modules.append(ShelfModule(store: shelfStore, settings: shelfSettings)) }
+                return modules
+            },
+            // Pretend tools, so the offer reads the same on every Mac.
+            detectTools: { [.claude, .codex] }
+        )
+
+        func render(_ name: String, section: AppSection, lesson: LessonID = .basics, shortcuts: ShortcutController = noShortcut,
+                    size: CGSize = AppWindowView.defaultSize, settle: TimeInterval = 0.3) throws {
+            let pageContext = shortcuts === noShortcut ? context : AppContext(
+                preferences: preferences, shortcuts: shortcuts, stats: stats, progress: progress, arrangement: arrangement, home: home,
+                shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+                makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
+            )
+            pageContext.navigation.section = section
+            pageContext.navigation.lesson = lesson
+            try render(name, rootView: AppWindowView(context: pageContext), size: size, settle: settle)
+        }
+
+        /// `then` runs once the page has settled, before a second wait (e.g. to open an item).
+        func render(_ name: String, rootView: some View, size: CGSize = AppWindowView.defaultSize, settle: TimeInterval = 0.3,
+                    then: (() -> Void)? = nil) throws {
+            let window = makeWindow(rootView: rootView, windowClass: SnapshotWindow.self, size: size)
+            // The frame view also draws the traffic lights, so the image looks like the real window.
+            guard let view = window.contentView?.superview ?? window.contentView else { return }
+            view.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(settle))
+            if let then {
+                then()
+                RunLoop.main.run(until: Date().addingTimeInterval(settle))
+            }
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?
+                .write(to: directory.appendingPathComponent("app-\(name).png"))
+        }
+
+        for section in AppSection.allCases {
+            try render(section.rawValue, section: section)
+        }
+        try render("overview-small", section: .overview, size: AppWindowView.minimumSize)
+        try render("home-long", section: .home, size: CGSize(width: 1000, height: 1700))
+        try render("learn-shelf", section: .learn, lesson: .shelf)
+        try render("learn-nowplaying", section: .learn, lesson: .nowPlaying)
+        try render("modules-long", section: .modules, size: CGSize(width: 1000, height: 2200))
+        try render("statistics-long", section: .statistics, size: CGSize(width: 1000, height: 2000))
+        try render("notch-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = true
+        try render("notch-click-only", section: .notch)
+        try render("notch-click-only-long", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.openOnClickOnly = false
+        preferences.fullScreenHiding = .always
+        try render("notch-long-always", section: .notch, size: CGSize(width: 1000, height: 2000))
+        preferences.fullScreenHiding = .whileWatching
+
+        // Now Playing's settings in each sound-bar state (the practice center: nothing is listened to).
+        let soundBarStates: [(String, SoundBarsStyle, SoundBarsAccess)] = [
+            ("gentle", .gentle, .unknown), ("still", .still, .unknown), ("follow", .followMusic, .unknown),
+            ("follow-allowed", .followMusic, .allowed), ("follow-denied", .followMusic, .denied),
+        ]
+        for (name, style, access) in soundBarStates {
+            nowPlayingSettings.soundBars = style
+            nowPlayingSettings.soundBarsAccess = access
+            let rows = NowPlayingSettingsRows(settings: nowPlayingSettings, center: nowPlaying)
+                .frame(width: 760)
+                .glassPanel()
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(AppPalette.background)
+            try render("nowplaying-settings-\(name)", rootView: rows.appWindowStyle(), size: CGSize(width: 820, height: 900))
+        }
+        nowPlayingSettings.soundBars = .gentle
+        nowPlayingSettings.soundBarsAccess = .unknown
+
+        // The Shelf's settings open (the drag-to-top choice shows on macOS 27 and later).
+        let shelfSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["shelf"])
+            .background(AppPalette.background)
+        try render("modules-shelf-settings", rootView: shelfSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 2600))
+
+        // Agents and AI Usage switched on: both modules with their settings open, the lessons, the
+        // Statistics section and Help. Their practice centers show pretend threads and accounts.
+        agentsSettings.agentsEnabled = true
+        agentsSettings.usageEnabled = true
+        let modulesWithSettings = ModulesView(context: context, openLesson: { _ in }, openSettings: ["agents", "aiUsage"])
+            .background(AppPalette.background)
+        try render("modules-agents-long", rootView: modulesWithSettings.appWindowStyle(), size: CGSize(width: 1000, height: 4000))
+        let usageCard = AIUsageModuleCard(context: context, showsSettings: .constant(true), learn: {})
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppPalette.background)
+        try render("aiusage-card", rootView: usageCard.appWindowStyle(), size: CGSize(width: 1000, height: 1500))
+        try render("learn-agents", section: .learn, lesson: .agents)
+        try render("learn-aiusage", section: .learn, lesson: .aiUsage)
+        try render("learn-timer", section: .learn, lesson: .timer)
+        try render("learn-keepawake", section: .learn, lesson: .keepAwake)
+        try render("learn-home", section: .learn, lesson: .home)
+        try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
+        try render("help-long", section: .help, size: CGSize(width: 1000, height: 2900))
+        // Codex connected too: its /hooks step shows.
+        connector.connect(.codex)
+        let agentRows = AgentsSettingsRows(settings: agentsSettings, connector: connector)
+            .frame(width: 760)
+            .glassPanel()
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppPalette.background)
+        try render("agents-settings-codex", rootView: agentRows.appWindowStyle(), size: CGSize(width: 820, height: 1000))
+        connector.disconnect(.codex)
+        agentsSettings.agentsEnabled = false
+        agentsSettings.usageEnabled = false
+
+        // The Timer's settings open, with a named preset and every choice's row.
+        timerSettings.renamePreset(timerSettings.presets[0].id, to: "Tea")
+        let timerSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["timer"])
+            .background(AppPalette.background)
+        try render("modules-timer-settings", rootView: timerSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 5200))
+
+        // Keep Awake's settings open.
+        let keepAwakeSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["keepAwake"])
+            .background(AppPalette.background)
+        try render("modules-keepawake-settings", rootView: keepAwakeSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 5600))
+
+        // The welcome, one image per step, the way a first launch shows it.
+        for step in OnboardingView.Step.allCases {
+            try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(context: context, step: step).appWindowStyle())
+        }
+
+        // The welcome's song check while nothing plays, and the pages in other update states.
+        func variant(nowPlaying: NowPlayingCenter = nowPlaying, updates: Updates = updates) -> AppContext {
+            AppContext(
+                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement, home: home,
+                shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+                makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
+            )
+        }
+        let waiting = variant(nowPlaying: .snapshotNothingPlaying(lastPlayer: nil, seen: []))
+        try render("onboarding-music-waiting", rootView: OnboardingView(context: waiting, step: .music).appWindowStyle())
+        let pending = variant(updates: Updates(snapshotPendingVersion: "0.2.0", lastCheck: Date()))
+        try render("overview-update", rootView: AppWindowView(context: pending))
+        let unbundled = variant(updates: Updates(bundle: Bundle(for: SnapshotWindow.self)))
+        unbundled.navigation.section = .general
+        try render("general-unbundled", rootView: AppWindowView(context: unbundled))
+        try render("onboarding-setup-unbundled", rootView: OnboardingView(context: unbundled, step: .setup).appWindowStyle())
+
+        // The practice Shelf working: open with the example items, then with one item opened.
+        let practice = PracticeShelf(seeded: true)
+        defer { practice.close() }
+        let stage = NotchStage(behavior: preferences.notchBehavior, modules: [practice.module], startState: .expanded)
+            .background(AppPalette.background)
+        try render("stage-open", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
+        try render("stage-item", rootView: stage.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2) {
+            practice.openItem(at: 1)
+        }
+
+        // Home's live notch, open, showing the (sample) real Shelf.
+        let live = NotchStage(
+            behavior: preferences.notchBehavior,
+            arrangement: arrangement,
+            modules: context.makeLiveModules(),
+            startState: .expanded
+        )
+        .background(AppPalette.background)
+        try render("stage-live", rootView: live.appWindowStyle(), size: CGSize(width: 900, height: 600), settle: 1.2)
+
+        for lesson in LessonID.allCases { progress.markDone(lesson) }
+        try render("overview-learned", section: .overview)
+        for lesson in LessonID.allCases { progress.reset(lesson) }
+
+        preferences.notchEnabled = false
+        try render("overview-off", section: .overview)
+        preferences.notchEnabled = true
+
+        // A saved shortcut, so Home shows key caps. Registering it may fail if it's taken; the
+        // key caps still show.
+        if let hotKey = HotKey(keyCode: 45, modifiers: [.option, .command], keyLabel: "N"),
+           let data = try? JSONEncoder().encode(hotKey) {
+            let shortcutDefaults = UserDefaults(suiteName: suite + ".shortcut")
+            shortcutDefaults?.set(data, forKey: "toggleNotchShortcut")
+            defer { shortcutDefaults?.removePersistentDomain(forName: suite + ".shortcut") }
+            if let shortcutDefaults {
+                let withShortcut = ShortcutController(defaults: shortcutDefaults) {}
+                try render("overview-shortcut", section: .overview, shortcuts: withShortcut)
+                try render("keyboard-shortcut", section: .keyboard, shortcuts: withShortcut)
+                try render("notch-long-shortcut", section: .notch, shortcuts: withShortcut, size: CGSize(width: 1000, height: 2000))
+                // Unregisters it: the system hot key mustn't outlive its controller.
+                withShortcut.set(nil)
+            }
+        }
+    }
+
+    /// A week of made-up listening, watching, notch use and memory samples, for the Statistics page snapshot.
+    private static func sampleStatistics(_ store: StatsStore) {
+        let songs: [(String, String, String)] = [
+            ("Pancake Sunrise", "The Flipsides", "com.apple.Music"),
+            ("Golden Edges", "Maple & Co.", "com.spotify.client"),
+            ("Night Owl", "Syrup Static", "com.apple.Music"),
+            ("Butter Blues", "The Flipsides", "com.spotify.client"),
+        ]
+        let videos: [(String, String, String)] = [
+            ("Flipping the Perfect Pancake", "Kitchen Lab", "com.google.Chrome"),
+            ("Late Night Stream", "SyrupPlays", "com.apple.Safari"),
+            ("How Notches Are Made", "Tiny Factory", "com.google.Chrome"),
+        ]
+        for day in 0..<7 {
+            let date = Date().addingTimeInterval(-Double(day) * 86_400)
+            for (index, song) in songs.enumerated() where (day + index) % 3 != 0 {
+                store.recordListening(title: song.0, artist: song.1, album: "", bundleID: song.2, kind: .listen,
+                                      started: date.addingTimeInterval(-Double(index) * 600), seconds: Double(180 * (index + 1 + day % 3)))
+            }
+            for (index, video) in videos.enumerated() where (day + index) % 2 == 0 {
+                store.recordListening(title: video.0, artist: video.1, album: "", bundleID: video.2, kind: .watch,
+                                      started: date.addingTimeInterval(-Double(index + 5) * 900), seconds: Double(420 * (index + 1 + day % 2)))
+            }
+            for _ in 0..<(12 + day * 3) { store.recordNotchOpen(at: date) }
+            for _ in 0..<(8 + day) { store.recordModuleShown("nowPlaying", at: date) }
+            for _ in 0..<(4 + day) { store.recordModuleShown("shelf", at: date) }
+            store.recordShelved(count: day + 1, at: date)
+            store.recordHealth(HealthSample(date: date, footprintBytes: UInt64(31 + day) << 20, helperFootprintBytes: 6 << 20, cpuPercent: 0.2))
+        }
+    }
+
+    /// Stats as if PancakeNotch had been around for a week and a bit.
+    private static func sampleStats(defaults: UserDefaults) -> UsageStats {
+        var clock = Date().addingTimeInterval(-8 * 86_400)
+        let stats = UsageStats(defaults: defaults) { clock }
+        clock = Date().addingTimeInterval(-86_400)
+        for _ in 0..<336 { stats.recordOpen() }
+        clock = Date()
+        for _ in 0..<12 { stats.recordOpen() }
+        return stats
+    }
+}
+
+/// Draws as if it were the focused window, so snapshots show controls in their active colours.
+private final class SnapshotWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
+    override var isMainWindow: Bool { true }
+}

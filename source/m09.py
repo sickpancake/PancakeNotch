@@ -1,0 +1,9 @@
+from base import *
+art='<div style="width:120px;height:120px;border-radius:14px;background:linear-gradient(135deg,#d47a5a,#6a4a8a);flex:none"></div>'
+menu='<div style="position:absolute;right:18px;top:62px;width:190px;background:#1c1c1e;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;font-size:13px;box-shadow:0 8px 20px rgba(0,0,0,.5)">'+''.join(f'<div style="padding:6px 10px;border-radius:7px;{"background:rgba(255,255,255,.1)" if a else ""}">{"✓ " if a else "&nbsp;&nbsp;&nbsp;"}{n}</div>' for n,a in [("AirPods Pro",1),("MacBook Pro Speakers",0),("Studio Display",0),("USB Audio",0)])+'</div>'
+inner=f'''<div style="display:flex;gap:18px">{art}<div style="width:250px;padding-top:4px"><div style="font-size:15px;font-weight:600">Song Title</div><div class="s" style="font-size:13px">Artist — Album</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:11px" class="s">1:12<div class="bar" style="flex:1"><i style="width:33%"></i></div>3:40</div>
+<div style="display:flex;align-items:center;gap:14px;margin-top:12px;font-size:16px">⏮ <span style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.13);display:inline-flex;align-items:center;justify-content:center">⏸</span> ⏭
+</div><div style="display:flex;align-items:center;gap:8px;margin-top:12px"><span class="s" style="font-size:12px">🔈︎</span><div class="bar" style="width:120px"><i style="width:60%"></i></div><span class="pill" style="background:rgba(255,255,255,.2)">🎧︎ AirPods ▾</span></div></div></div>{menu}'''
+body=cap("Open notch · Now Playing with speaker picker and volume")+opened(inner,h=230,tabs='<span class="on">♫</span><span>▤</span>',h_scene=270)
+open("m09.html","w").write(page("Now Playing: choose the speaker and set the volume","Switch between AirPods, speakers and displays where you already control the music.",body))
