@@ -1,0 +1,43 @@
+name: Optimization probes
+
+on:
+  push:
+    branches: [verify-optimization-84-to-88]
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-and-shelf:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash verification/optimization-probes/run.sh | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+  artwork:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/artwork-venv"
+          "$RUNNER_TEMP/artwork-venv/bin/pip" install 'Pillow==12.2.0'
+          "$RUNNER_TEMP/artwork-venv/bin/python" verification/optimization-probes/artwork.py . --candidate "$GITHUB_SHA" --runs 9 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+  checkpoints:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - shell: bash
+        run: |
+          python3 verification/optimization-probes/run-checkpoint-probe.py . 2bd2e2e "$GITHUB_SHA" --runs 11 \
+            | tee -a "$GITHUB_STEP_SUMMARY"

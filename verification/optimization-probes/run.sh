@@ -5,8 +5,8 @@ here=verification/optimization-probes
 work=$(mktemp -d)
 trap 'git worktree remove "$work/base" 2>/dev/null || true; rm -rf "$work"' EXIT
 git worktree add --detach "$work/base" "$base"
-swiftc -O -swift-version 6 -parse-as-library "$work/base"/Sources/Stats/*.swift "$here/batch.swift" -lsqlite3 -o "$work/base-batch"
-swiftc -O -swift-version 6 -parse-as-library Sources/Stats/*.swift "$here/batch.swift" -lsqlite3 -o "$work/candidate-batch"
+swiftc -O -swift-version 6 -package-name PancakeNotch -parse-as-library "$work/base"/Sources/Stats/*.swift "$here/batch.swift" -lsqlite3 -o "$work/base-batch"
+swiftc -O -swift-version 6 -package-name PancakeNotch -parse-as-library Sources/Stats/*.swift "$here/batch.swift" -lsqlite3 -o "$work/candidate-batch"
 python3 - "$work" <<'PY'
 import statistics, subprocess, sys
 from pathlib import Path
