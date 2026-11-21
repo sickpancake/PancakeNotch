@@ -1,4 +1,4 @@
-// pancakenotch-hook: what Claude Code, Codex and Cursor run for PancakeNotch's hooks after Connect
+// pancakenotch-hook: what Claude Code, Codex, Cursor and Devin run for PancakeNotch's hooks after Connect
 // (ADR-0037). Usage: pancakenotch-hook <tool> <event>, with the tool's hook JSON on stdin.
 //
 // It hands the event to PancakeNotch over a Unix socket and, for a permission request, waits for
@@ -33,7 +33,46 @@ static const char *no_opinion(const char *tool, const char *event) {
 }
 
 static int waits_for_answer(const char *tool, const char *event) {
-    return strcmp(event, "PermissionRequest") == 0 && (strcmp(tool, "claude") == 0 || strcmp(tool, "codex") == 0);
+    return strcmp(event, "PermissionRequest") == 0
+        && (strcmp(tool, "claude") == 0 || strcmp(tool, "codex") == 0 || strcmp(tool, "devin") == 0);
+}
+
+static int has_env(const char *name) {
+    const char *value = getenv(name);
+    return value && *value;
+}
+
+// Devin also runs the hooks in Claude Code's settings files. Those runs aren't Claude Code: Devin's own
+// entry (after Connect) reports them, so the Claude one stays out of the way. Devin sets
+// DEVIN_PROJECT_DIR for its hooks; Claude Code sets CLAUDE_PROJECT_DIR for its own.
+static int is_devin_running_claude_hook(const char *tool) {
+    return strcmp(tool, "claude") == 0 && has_env("DEVIN_PROJECT_DIR") && !has_env("CLAUDE_PROJECT_DIR");
+}
+
+// `"dir":"<path>",` for the header: Devin's hook input has no working folder, so the helper adds the
+// project folder Devin gives it (else its own folder). Empty when there's none or it won't fit.
+static void project_dir_field(const char *tool, char *out, size_t size) {
+    out[0] = '\0';
+    if (strcmp(tool, "devin") != 0) return;
+    char here[1024];
+    const char *dir = getenv("DEVIN_PROJECT_DIR");
+    if (!dir || !*dir) dir = getcwd(here, sizeof here);
+    if (!dir || !*dir) return;
+    size_t used = (size_t)snprintf(out, size, "\"dir\":\"");
+    for (const unsigned char *c = (const unsigned char *)dir; *c; c++) {
+        char piece[8];
+        if (*c == '"' || *c == '\\') snprintf(piece, sizeof piece, "\\%c", *c);
+        else if (*c < 0x20) snprintf(piece, sizeof piece, "\\u%04x", *c);
+        else snprintf(piece, sizeof piece, "%c", *c);
+        size_t length = strlen(piece);
+        if (used + length + 3 > size) {
+            out[0] = '\0';
+            return;
+        }
+        memcpy(out + used, piece, length);
+        used += length;
+    }
+    memcpy(out + used, "\",", 3);
 }
 
 static int finish(const char *output) {
@@ -138,6 +177,10 @@ int main(int argc, char **argv) {
 
     size_t length = 0;
     char *input = read_stdin(&length);
+    if (is_devin_running_claude_hook(tool)) {
+        free(input);
+        return finish(fallback);
+    }
     int fd = input ? connect_to_app() : -1;
     if (fd < 0) {
         free(input);
@@ -146,11 +189,14 @@ int main(int argc, char **argv) {
 
     // One header line (with the body's length, so PancakeNotch knows when it has it all and then notices
     // if this process goes away while it waits), then the tool's JSON as it came.
-    char header[320];
+    // Room for the longest macOS path (1024 bytes) even if every byte needs escaping (6 each).
+    char dir[6 * 1024 + 16];
+    project_dir_field(tool, dir, sizeof dir);
+    char header[sizeof dir + 256];
     int waits = waits_for_answer(tool, event);
     int size = snprintf(header, sizeof header,
-                        "{\"v\":1,\"tool\":\"%.16s\",\"event\":\"%.40s\",\"ppid\":%d,\"waits\":%s,\"length\":%zu}\n",
-                        tool, event, (int)getppid(), waits ? "true" : "false", length);
+                        "{\"v\":1,\"tool\":\"%.16s\",\"event\":\"%.40s\",%s\"ppid\":%d,\"waits\":%s,\"length\":%zu}\n",
+                        tool, event, dir, (int)getppid(), waits ? "true" : "false", length);
     int failed = size <= 0 || size >= (int)sizeof header || write_all(fd, header, (size_t)size) != 0
         || write_all(fd, input, length) != 0;
     free(input);

@@ -297,7 +297,7 @@
 
       <section class="topic" id="agents" aria-labelledby="agents-title">
         <h2 id="agents-title">Agents: see your AI agents <a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
-        <p>If you use AI coding agents, the <strong>Agents</strong> module lists every thread that's running on your Mac, from <strong>Claude Code</strong>, <strong>Codex</strong> and <strong>Cursor</strong> (Cursor once you've connected it, see <a class="text-link" href="#agents-connect">Connect</a>). It works with no setup: PancakeNotch reads the files those tools already keep on your Mac.</p>
+        <p>If you use AI coding agents, the <strong>Agents</strong> module lists every thread that's running on your Mac, from <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Cursor</strong> and <strong>Devin</strong> (Cursor and Devin once you've connected them, see <a class="text-link" href="#agents-connect">Connect</a>). It works with no setup: PancakeNotch reads the files those tools already keep on your Mac.</p>
         <h3>Turning it on</h3>
         <ol class="how">
           <li><span>Open the PancakeNotch window and choose <strong>Modules</strong>.</span></li>
@@ -311,7 +311,7 @@
         <ul>
           <li><strong>Name agents by</strong>: the conversation's <strong>Title</strong> as Claude Code or Codex keeps it (its project folder until it has one), the <strong>Last message</strong> you sent it, or the git <strong>Branch</strong> it works on.</li>
           <li><strong>Under the name</strong>: the project <strong>Folder</strong>, the <strong>Last message</strong> you sent it, or the git <strong>Branch</strong>. A row never shows the same words twice: when a thread is already named after its folder, its last message shows underneath instead.</li>
-          <li><strong>Show agents from</strong>: leave out Claude Code, Codex or Cursor.</li>
+          <li><strong>Show agents from</strong>: leave out Claude Code, Codex, Cursor or Devin.</li>
           <li><strong>Keep finished agents</strong>: 5 minutes, 30 minutes, or until you click <strong>Clear finished</strong>.</li>
           <li>Whether to show what each agent is doing, and its subagents.</li>
         </ul>
@@ -332,7 +332,7 @@
 
       <section class="topic" id="agents-connect" aria-labelledby="agents-connect-title">
         <h2 id="agents-connect-title">Connect: instant alerts and Allow/Deny <a class="anchor" href="#agents-connect" aria-label="Link to this section">#</a></h2>
-        <p>Agents works without any setup. If you <strong>Connect</strong> a tool, it tells PancakeNotch what it's doing straight away, so alerts are instant. For Claude Code and Codex, you also get <strong>Allow</strong> and <strong>Deny</strong> buttons right in the notch. Connecting is optional, and you choose it for each tool on its own.</p>
+        <p>Agents works without any setup. If you <strong>Connect</strong> a tool, it tells PancakeNotch what it's doing straight away, so alerts are instant. For Claude Code, Codex and Devin, you also get <strong>Allow</strong> and <strong>Deny</strong> buttons right in the notch. Connecting is optional, and you choose it for each tool on its own.</p>
         <h3>Connecting a tool</h3>
         <ol class="how">
           <li><span>Open the PancakeNotch window and choose <strong>Modules › Agents settings</strong>.</span></li>
@@ -345,24 +345,27 @@
           <li><strong>Claude Code:</strong> <span class="path">~/.claude/settings.json</span></li>
           <li><strong>Codex:</strong> <span class="path">~/.codex/hooks.json</span></li>
           <li><strong>Cursor:</strong> <span class="path">~/.cursor/hooks.json</span></li>
+          <li><strong>Devin</strong> (Devin CLI and the Devin app): <span class="path">~/.config/devin/config.json</span></li>
         </ul>
         <p><strong>Disconnect</strong> removes only that helper and leaves everything else in the file as it was. Cursor gets status only: no Allow or Deny.</p>
         <h3>Allow, Deny and Open</h3>
-        <p>When a Claude Code or Codex agent asks permission to do something, its row shows three buttons:</p>
+        <p>When a Claude Code, Codex or Devin agent asks permission to do something, its row shows three buttons:</p>
         <ul>
           <li><strong>Allow</strong> lets it do that one thing, once.</li>
           <li><strong>Deny</strong> tells it no.</li>
           <li><strong>Open</strong> switches to the tool's app and hands the question back there, so you answer it in the tool itself.</li>
         </ul>
         <p>Codex requests that can be handled automatically carry on without asking you. PancakeNotch shows approval buttons only when Codex confirms that a person should answer. If that information isn't available, the request stays in Codex.</p>
+        <p>For Devin, Allow and Deny appear for commands it wants to run. When it wants to change or read a file, Open takes you to Devin to answer there.</p>
         <p>There is no "always allow": every request asks you again. If PancakeNotch isn't running, the tool simply asks as usual, so nothing gets stuck.</p>
         <h3>If something's missing</h3>
         <ul class="checks">
-          <li><strong>The list is empty</strong>The tool has to be running. Start a thread in Claude Code, Codex or Cursor, and give it a moment to show up.</li>
+          <li><strong>The list is empty</strong>The tool has to be running. Start a thread in Claude Code, Codex, Cursor or Devin, and give it a moment to show up.</li>
           <li><strong>Several rows look the same</strong>Each row is its own conversation. Ones without a title are named after their folder, so in Settings choose <strong>Last message</strong> under <strong>Under the name</strong> or <strong>Name agents by</strong> to tell them apart.</li>
           <li><strong>Codex never says "Needs you"</strong>Approval requests from Codex show up only after you've connected it. Check that you typed <span class="path">/hooks</span> in Codex and trusted the PancakeNotch hook.</li>
           <li><strong>Cursor shows nothing</strong>Cursor shows up only after you've connected it, and only for the agent in the Cursor app (the IDE).</li>
-          <li><strong>No Allow and Deny buttons</strong>They appear for Claude Code and Codex after you've connected them. Cursor can't have them.</li>
+          <li><strong>Devin shows nothing</strong>Devin shows up only after you've connected it, and only for sessions started after that. Devin doesn't run hooks in a workspace opened in Restricted Mode, so trust the workspace first.</li>
+          <li><strong>No Allow and Deny buttons</strong>They appear for Claude Code, Codex and Devin after you've connected them. Cursor can't have them.</li>
         </ul>
       </section>
 
@@ -475,7 +478,7 @@
         <h2 id="uninstall-title">Uninstalling <a class="anchor" href="#uninstall" aria-label="Link to this section">#</a></h2>
         <ol class="how">
           <li><span>If you turned on <strong>Launch at login</strong>, switch it off under <strong>General</strong>.</span></li>
-          <li><span>If you connected Claude Code, Codex or Cursor, click <strong>Disconnect</strong> for each one under <strong>Modules › Agents settings</strong>. That removes PancakeNotch's helper from the tool's settings.</span></li>
+          <li><span>If you connected Claude Code, Codex, Cursor or Devin, click <strong>Disconnect</strong> for each one under <strong>Modules › Agents settings</strong>. That removes PancakeNotch's helper from the tool's settings.</span></li>
           <li><span>Quit PancakeNotch: click the menu bar icon and choose <strong>Quit PancakeNotch</strong> (or use <strong>Quit PancakeNotch</strong> at the bottom of the window's sidebar).</span></li>
           <li><span>Drag <strong>PancakeNotch</strong> from <strong>Applications</strong> to the Trash.</span></li>
         </ol>

@@ -42,8 +42,8 @@ const QUESTIONS: { question: string; answer: ReactNode }[] = [
     question: 'Which AI tools does it work with?',
     answer: (
       <>
-        Agents follows Claude Code and Codex with no setup, and Cursor once you connect it. Connect Claude Code or
-        Codex too, and you can Allow or Deny their requests from the notch. AI Usage shows how much of your Claude
+        Agents follows Claude Code and Codex with no setup, and Cursor and Devin once you connect them. Connect
+        Claude Code, Codex or Devin, and you can Allow or Deny their requests from the notch. AI Usage shows how much of your Claude
         and Codex limits is left. <More href={`${HELP}#agents`}>How Agents works</More>
       </>
     ),

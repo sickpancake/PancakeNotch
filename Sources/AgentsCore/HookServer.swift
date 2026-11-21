@@ -35,15 +35,41 @@ struct HookEvent: Sendable {
     var status: String?
     /// Codex: the session's model ("codex-auto-review" for its automatic reviewer).
     var model: String?
+    /// "Running npm test": what a tool call is doing (Devin's PreToolUse and PostToolUse).
+    var step: String?
+    /// Devin ran a hook from Claude Code's settings (it reads them too): Devin's input (a turn's
+    /// `prompt_id`, no transcript) arriving as Claude Code. The helper usually spots this first, by
+    /// Devin's environment.
+    var isDevinInClaudeHook: Bool
 
-    init(tool: AgentTool, name: String, parentPID: pid_t, payload: [String: Any]) {
+    /// Devin's hook input: its own `session_id` and `prompt_id`, and never the transcript every Claude
+    /// Code hook names.
+    static func looksLikeDevin(_ payload: [String: Any]) -> Bool {
+        payload["prompt_id"] != nil && payload["transcript_path"] == nil
+    }
+
+    /// The only Devin requests the notch may answer: an `exec` command in Devin's main shell, with nothing
+    /// that changes where or how it runs. Devin doesn't document its other tools' input (file edits,
+    /// patches) or other shells, so those go back to Devin rather than risk showing less than Allow
+    /// approves.
+    static func devinCommandIsPlain(tool: String, input: [String: Any]) -> Bool {
+        guard tool == "exec", input["command"] is String else { return false }
+        if let shell = input["shell_id"], shell as? String != "main" { return false }
+        let changesContext = ["cwd", "workdir", "working_directory", "dir", "directory", "env", "environment", "shell", "stdin", "input"]
+        return !changesContext.contains { input[$0] != nil }
+    }
+
+    /// `projectDir`: the project folder the helper adds for tools that don't send one (Devin).
+    init(tool: AgentTool, name: String, parentPID: pid_t, payload: [String: Any], projectDir: String? = nil) {
         self.tool = tool
         self.name = name
         self.parentPID = parentPID
+        isDevinInClaudeHook = tool == .claude && Self.looksLikeDevin(payload)
         sessionID = payload["session_id"] as? String ?? payload["conversation_id"] as? String
         turnID = payload["turn_id"] as? String
         permissionMode = payload["permission_mode"] as? String
         cwd = payload["cwd"] as? String ?? (payload["workspace_roots"] as? [String])?.first
+            ?? projectDir.flatMap { $0.hasPrefix("/") ? $0 : nil }
         transcriptPath = payload["transcript_path"] as? String
         title = payload["session_title"] as? String
         prompt = AgentNames.oneLine(payload["prompt"] as? String)
@@ -55,7 +81,8 @@ struct HookEvent: Sendable {
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
             summary = AgentSteps.request(tool: toolName, input: input)
-            if name == "PermissionRequest" {
+            if name == "PreToolUse" || name == "PostToolUse" { step = AgentSteps.step(tool: toolName, input: input) }
+            if name == "PermissionRequest", tool != .devin || Self.devinCommandIsPlain(tool: toolName, input: input) {
                 review = AgentReview.make(tool: toolName, input: input, cwd: cwd, home: FileManager.default.homeDirectoryForCurrentUser.path)
             }
         } else if name == "afterShellExecution" {
@@ -84,7 +111,8 @@ final class HookServer: @unchecked Sendable {
     private var waiting: [Int: Int32] = [:]
     private var nextRequest = 1
 
-    static let maxHeader = 1024
+    /// Room for Devin's project folder, which the helper adds to the header.
+    static let maxHeader = 8192
     static let maxBody = 4 * 1024 * 1024 + 1024
     /// More connections than this at once are turned away (the tool then asks in its own window).
     static let maxClients = 32
@@ -256,7 +284,8 @@ final class HookServer: @unchecked Sendable {
             close(client)
             return
         }
-        var event = HookEvent(tool: tool, name: name, parentPID: pid_t(clamping: header["ppid"] as? Int ?? 0), payload: payload)
+        var event = HookEvent(tool: tool, name: name, parentPID: pid_t(clamping: header["ppid"] as? Int ?? 0), payload: payload,
+                              projectDir: header["dir"] as? String)
         client.buffer = Data()
         // Codex runs this hook BEFORE automatic review or a user prompt. Only intercept a confirmed
         // user-reviewed turn; closing with no decision lets Codex follow its own approval path.

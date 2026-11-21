@@ -44,13 +44,14 @@ enum AgentSteps {
 
     private static func kind(of name: String) -> Kind {
         switch name {
-        case "Bash", "BashOutput", "shell", "exec_command", "local_shell", "Shell", "run_terminal_cmd", "PowerShell": .run
-        case "Edit", "MultiEdit", "Write", "NotebookEdit", "apply_patch", "write_file", "edit_file": .edit
-        case "Read", "read_file", "view_image": .read
+        // Devin's tools are the lowercase ones: exec, edit, write, read, webfetch, run_subagent, todo_write…
+        case "Bash", "BashOutput", "shell", "exec_command", "local_shell", "Shell", "run_terminal_cmd", "PowerShell", "exec": .run
+        case "Edit", "MultiEdit", "Write", "NotebookEdit", "apply_patch", "write_file", "edit_file", "edit", "write", "notebook_edit": .edit
+        case "Read", "read_file", "view_image", "read", "notebook_read": .read
         case "Grep", "Glob", "LS", "grep", "glob", "codebase_search", "file_search": .search
-        case "WebFetch", "WebSearch", "web_search", "web_fetch": .web
-        case "Task", "Agent", "spawn_agent": .agent
-        case "TodoWrite", "update_plan", "ExitPlanMode": .plan
+        case "WebFetch", "WebSearch", "web_search", "web_fetch", "webfetch": .web
+        case "Task", "Agent", "spawn_agent", "run_subagent": .agent
+        case "TodoWrite", "update_plan", "ExitPlanMode", "todo_write", "exit_plan_mode": .plan
         default: .other(display(name))
         }
     }

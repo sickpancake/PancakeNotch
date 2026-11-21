@@ -17,7 +17,7 @@ const FEATURES: Feature[] = [
   { title: 'Convert', line: 'Turn pictures, PDFs, sound and video into another format in one click.', art: <ConvertArt />, fresh: true },
   { title: 'Timer and Stopwatch', line: 'Count down or keep laps. The time left waits beside the notch.', art: <TimerArt />, top: true, fresh: true },
   { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt />, fresh: true },
-  { title: 'Agents', line: 'Claude Code, Codex and Cursor at work. Allow or Deny from the notch.', art: <AgentsArt /> },
+  { title: 'Agents', line: 'Claude Code, Codex, Cursor and Devin at work. Allow or Deny from the notch.', art: <AgentsArt /> },
   { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, and a heads-up when one resets.', art: <UsageArt /> },
   { title: 'Home', line: 'Every module as a widget, in the open notch. Drag them where you want.', art: <MenuArt /> },
   { title: 'Statistics', line: 'What you listen to, and how light the app stays.', art: <StatsArt /> },

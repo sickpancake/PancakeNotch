@@ -272,12 +272,20 @@ struct HelpView: View {
             } else {
                 SettingsRow(
                     title: String(localized: "What Agents shows"),
-                    subtitle: String(localized: "Every Claude Code, Codex and Cursor thread: working, needs you or done, with its subagents tucked under it. Allow once or Deny a request right in the notch, or click a thread to go to its app.")
+                    subtitle: String(localized: "Every Claude Code, Codex, Cursor and Devin thread: working, needs you or done, with its subagents tucked under it. Allow once or Deny a request right in the notch, or click a thread to go to its app.")
                 ) {
                     EmptyView()
                 }
             }
             MoreOnlineRow(topic: .agents)
+        }
+    }
+
+    private func connectedNote(_ tool: AgentTool) -> String {
+        switch tool {
+        case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks. Disconnect takes the helper out again.")
+        case .devin: String(localized: "New Devin sessions show up, except in a workspace opened in Restricted Mode. Disconnect takes the helper out again.")
+        case .claude, .cursor: String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
         }
     }
 
@@ -296,9 +304,7 @@ struct HelpView: View {
             ForEach(connected, id: \.self) { tool in
                 SettingsRow(
                     title: String(localized: "\(tool.name) is connected"),
-                    subtitle: tool == .codex
-                        ? String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks. Disconnect takes the helper out again.")
-                        : String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
+                    subtitle: connectedNote(tool)
                 ) {
                     Button(String(localized: "Disconnect")) { connector.disconnect(tool) }
                         .accessibilityLabel(Text("Disconnect \(tool.name)"))

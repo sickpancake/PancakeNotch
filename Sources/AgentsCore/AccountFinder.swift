@@ -67,7 +67,7 @@ enum AccountFinder {
         switch tool {
         case .claude: return has("projects") || has("sessions") || has(".claude.json")
         case .codex: return has("auth.json") || has("sessions")
-        case .cursor: return false
+        case .cursor, .devin: return false
         }
     }
 
@@ -88,6 +88,20 @@ enum AccountFinder {
             || fm.fileExists(atPath: "/Applications/Cursor.app")
             || fm.fileExists(atPath: home.appending(path: "Applications/Cursor.app").path)
     }
+
+    /// Devin is on this Mac: the CLI's settings or data folder, or the Devin app (Devin Desktop).
+    static func hasDevin(home: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: home.appending(path: ".config/devin").path)
+            || fm.fileExists(atPath: home.appending(path: ".local/share/devin").path)
+            || fm.fileExists(atPath: "/Applications/Devin.app")
+            || fm.fileExists(atPath: home.appending(path: "Applications/Devin.app").path)
+    }
+
+    /// Devin's user settings, where its hooks go. Devin CLI and Devin Desktop share it.
+    static func devinConfigFile(home: URL) -> URL {
+        home.appending(path: ".config/devin/config.json")
+    }
 }
 
 /// Which supported AI tools are on this Mac, for the "turn on Agents" offer (ADR-0037).
@@ -95,6 +109,7 @@ public enum AgentsDetection {
     public static func foundTools(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [AgentTool] {
         var tools = Set(AccountFinder.find(home: home, added: []).map(\.tool))
         if AccountFinder.hasCursor(home: home) { tools.insert(.cursor) }
+        if AccountFinder.hasDevin(home: home) { tools.insert(.devin) }
         return AgentTool.allCases.filter(tools.contains)
     }
 

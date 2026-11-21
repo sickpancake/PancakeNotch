@@ -11,7 +11,7 @@ struct AgentsModuleCard: View {
     let learn: () -> Void
 
     private let points = [
-        String(localized: "Follows Claude Code and Codex from their own files, and Cursor after Connect"),
+        String(localized: "Follows Claude Code and Codex from their own files, and Cursor and Devin after Connect"),
         String(localized: "A count beside the notch tells you who is working or needs you"),
         String(localized: "Allow once or Deny a request without leaving your app"),
         String(localized: "Click a thread to jump to the app it runs in"),
@@ -171,7 +171,7 @@ struct AgentsSettingsRows: View {
         HairlineRows {
             SettingsRowLabel(
                 title: String(localized: "Connect your tools"),
-                subtitle: String(localized: "Without Connect, PancakeNotch follows Claude Code and Codex from their own files. Connect adds a small helper to the tool's hooks: instant alerts, and Allow once / Deny right in the notch. Cursor shows up only after Connect.")
+                subtitle: String(localized: "Without Connect, PancakeNotch follows Claude Code and Codex from their own files. Connect adds a small helper to the tool's hooks: instant alerts, and Allow once / Deny right in the notch. Cursor and Devin show up only after Connect.")
             )
             .settingsRowPadding()
             ForEach(AgentTool.allCases, id: \.self) { tool in
@@ -319,7 +319,12 @@ private struct ConnectRow: View {
         switch state {
         case .notFound: String(localized: "Not on this Mac")
         case .notConnected: String(localized: "Not connected")
-        case .connected: tool == .codex ? String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks.") : nil
+        case .connected:
+            switch tool {
+            case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks.")
+            case .devin: String(localized: "Start a new Devin session to see it. Devin skips hooks in a workspace opened in Restricted Mode.")
+            case .claude, .cursor: nil
+            }
         }
     }
 }
