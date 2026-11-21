@@ -78,7 +78,8 @@ enum HomeExtras {
         { kind, size, _ in
             switch kind {
             case .battery:
-                AnyView(HomeBatteryWidget(size: size, isLive: false, read: { PowerState(onBattery: true, percent: 76) }))
+                AnyView(HomeBatteryWidget(size: size, isLive: false, read: { PowerState(onBattery: true, percent: 76) },
+                                          fixed: PowerState(onBattery: true, percent: 76)))
             case .statistics:
                 AnyView(HomeStatisticsWidget(size: size, isLive: false,
                                              metric: HomeStatisticsMetric(saved: home?.layout.statisticsMetric),
@@ -106,6 +107,9 @@ private struct HomeBatteryWidget: View {
     let size: HomeWidgetSize
     let isLive: Bool
     let read: () -> PowerState
+    /// The state a fixed (practice/snapshot) provider shows: `body` uses it directly because `.onAppear`
+    /// never runs for a view that is rendered but never appears (off-screen `ImageRenderer` sheets).
+    var fixed: PowerState?
 
     @State private var power: PowerState?
     @State private var watcher = PowerSourceWatcher()
@@ -113,7 +117,7 @@ private struct HomeBatteryWidget: View {
     var body: some View {
         // Never read IOKit in `body`: non-live copies (the editor, the picker, off-screen pages)
         // re-run it on every layout pass. `.onAppear` seeds the cache once; the watcher updates it.
-        let power = power ?? .pluggedIn
+        let power = power ?? fixed ?? .pluggedIn
         Group {
             switch size {
             case .small, .large:
@@ -158,7 +162,7 @@ private struct HomeBatteryWidget: View {
         .accessibilityLabel(Text(String(localized: "Battery, \(Self.percent(power)), \(Self.source(power))",
                                         comment: "Battery widget, spoken")))
         .onAppear {
-            if self.power == nil { self.power = read() }
+            if self.power == nil { self.power = fixed ?? read() }
         }
         .onChange(of: isLive, initial: true) { _, live in
             if live {
