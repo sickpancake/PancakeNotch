@@ -15,6 +15,7 @@ PancakeNotch efficiency patches (marked "PancakeNotch patch" in the code), to re
   the warnings, DynaLoader, File::Spec and File::Basename modules (about 1.6 MiB less memory per helper process).
 - src/adapter/stream.m quits the stream when its parent process (the app) exits, so a crash can't leave it running.
 - src/utility/helpers.m printOutUnique keeps a SHA-256 of the last line, not the line (which can hold the album cover).
+- src/adapter/stream.m caches a 256 px PNG preview for large artwork before serializing snapshots and diffs.
 
 PancakeNotch closed-session patch (re-apply on update): src/adapter/stream.m listens for active-application
 and playback-queue changes, re-reads metadata on playback changes, and clears retired sessions immediately.
