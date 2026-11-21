@@ -102,19 +102,25 @@ enum HomeExtras {
 
 // MARK: Battery
 
-/// The Battery tiles' power state for one Home: read once here and then when a tile appears or macOS
-/// says the power changed (no polling, no read inside `body`, AGENTS.md rule 2). Sharing it across
-/// tiles means a tile that appears for the first time — a page scrolled to, a notch reopened —
-/// already has the state, instead of showing the fallback for a frame.
+/// The Battery tiles' power state for one Home: read once here and then whenever macOS says the power
+/// changed or a tile appears (no polling, no read inside `body`, AGENTS.md rule 2). Sharing it across
+/// tiles means a tile that appears for the first time — a page scrolled to, a notch reopened — already
+/// has the state, instead of showing the fallback or a stale value for a frame. Its own watcher keeps
+/// it current while no tile is on screen (another page, the notch closed).
 @MainActor
 @Observable
 final class HomeBatteryReading {
     private(set) var state: PowerState
     @ObservationIgnored private let read: () -> PowerState
+    @ObservationIgnored private let watcher = PowerSourceWatcher()
 
     init(read: @escaping () -> PowerState) {
         self.read = read
         self.state = read()
+        watcher.start { [weak self] in
+            guard let self else { return }
+            state = read()
+        }
     }
 
     func refresh() {
@@ -131,8 +137,6 @@ private struct HomeBatteryWidget: View {
     /// The state a fixed (practice/snapshot) provider shows: `body` uses it directly because `.onAppear`
     /// never runs for a view that is rendered but never appears (off-screen `ImageRenderer` sheets).
     var fixed: PowerState?
-
-    @State private var watcher = PowerSourceWatcher()
 
     var body: some View {
         // Never read IOKit in `body`: non-live copies (the editor, the picker, off-screen pages)
@@ -181,14 +185,9 @@ private struct HomeBatteryWidget: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(localized: "Battery, \(Self.percent(power)), \(Self.source(power))",
                                         comment: "Battery widget, spoken")))
-        // Every appeared tile keeps the shared state current: live and non-live copies alike refresh
-        // on power-source notifications, so an editor or picker tile never freezes at an old reading.
-        .onChange(of: isLive, initial: true) { _, _ in
-            reading?.refresh()
-            watcher.start { reading?.refresh() }
-        }
+        // `reading`'s own watcher keeps the shared state current even while no tile is on screen;
+        // appearing tiles still re-read once, matching the on-screen-then-notifications contract.
         .onAppear { reading?.refresh() }
-        .onDisappear { watcher.stop() }
     }
 
     private static func percent(_ power: PowerState) -> String {
