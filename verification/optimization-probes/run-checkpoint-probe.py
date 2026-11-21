@@ -143,4 +143,4 @@ if __name__ == "__main__":
         run(opts.repo, opts.base, opts.changed, opts.swift, opts.runs, opts.output.resolve())
     else:
         with tempfile.TemporaryDirectory(prefix="checkpoint-probe-") as directory:
-            run(opts.repo, opts.base, opts.changed, opts.swift, opts.runs, Path(directory))
+            run(opts.repo, opts.base, opts.changed, opts.swift, opts.runs, Path(directory).resolve())

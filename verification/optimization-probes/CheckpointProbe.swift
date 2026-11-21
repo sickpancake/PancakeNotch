@@ -3,7 +3,6 @@ import SQLite3
 import Stats
 
 private let now = Date(timeIntervalSince1970: 1_751_544_000)
-private let manager = FileManager.default
 private let state = #"{"thread":"4b1b03c8-62fd-4640-941a-60b8f8e529af","model":"gpt-5.4","input":32,"cached":8,"output":16,"total":48}"#
 private let logStart = """
 {"type":"session_meta","payload":{"id":"4b1b03c8-62fd-4640-941a-60b8f8e529af"}}
@@ -74,6 +73,7 @@ private func savedOffset(db url: URL, file: URL) -> UInt64 {
 }
 
 private func correctness(_ folder: URL) async throws {
+    let manager = FileManager.default
     let sessions = folder.appending(path: "sessions")
     let archived = folder.appending(path: "archived_sessions")
     try manager.createDirectory(at: sessions, withIntermediateDirectories: true)
@@ -147,7 +147,7 @@ private func correctness(_ folder: URL) async throws {
 
 private func prepare(_ folder: URL, stored: Int, eligible: Int, appended: Int) throws {
     let sessions = folder.appending(path: "sessions/2025/07/03")
-    try manager.createDirectory(at: sessions, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
     let stats = store(folder.appending(path: "stats.sqlite"))
     let log = logStart + event(8)
     let extra = event(9)
