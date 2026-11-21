@@ -104,6 +104,113 @@ struct DevinTests {
         #expect(back.isEmpty)
     }
 
+    @Test func connectAndDisconnectHandleCommentsInDevinConfig() throws {
+        let home = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let file = AccountFinder.devinConfigFile(home: home)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let commented = """
+        // Devin user configuration
+        {
+            /* Block comment before settings */
+            "read_config_from": {
+                "claude": true, // trailing comma with inline comment
+            },
+            "endpoint": "https://example.com/*keep*///keep",
+            "hooks": {
+                // Keep my custom hook
+                "PreToolUse": [
+                    {"hooks": [{"type": "command", "command": "echo \\"//keep\\""}]}, // custom
+                ],
+            },
+        }
+        """
+        try Data(commented.utf8).write(to: file)
+
+        let settings = AgentsSettings(defaults: UserDefaults(suiteName: "DevinTests.\(UUID().uuidString)")!)
+        let connector = AgentConnector(settings: settings, home: home)
+        #expect(connector.state(.devin) == .notConnected)
+
+        try HookFile.update(file, kind: .devin, connect: true)
+        #expect(HookFile.isConnected(file, kind: .devin))
+        let backup = file.appendingPathExtension("before-pancakenotch")
+        #expect(try String(contentsOf: backup, encoding: .utf8) == commented)
+        let connected = try #require(DevinHookConfig(Data(contentsOf: file))?.object)
+        #expect(connected["endpoint"] as? String == "https://example.com/*keep*///keep")
+        #expect((connected["read_config_from"] as? [String: Any])?["claude"] as? Bool == true)
+        let connectedText = try #require(HookFile.read(file))
+        #expect(connectedText.hasPrefix("// Devin user configuration\n"))
+        #expect(connectedText.contains("/* Block comment before settings */"))
+        #expect(connectedText.contains("// trailing comma with inline comment"))
+
+        // Adding comments after connecting still reports Connected and allows Disconnect.
+        let commentedAfter = "// user note\n" + connectedText.replacingOccurrences(
+            of: "\"timeout\":", with: "/* inside generated hook */ \"timeout\":"
+        ) + "\n/* trailing */\n"
+        try Data(commentedAfter.utf8).write(to: file)
+        #expect(HookFile.isConnected(file, kind: .devin))
+        connector.refresh()
+        #expect(connector.state(.devin) == .connected)
+
+        #expect(connector.disconnect(.devin))
+        #expect(connector.state(.devin) == .notConnected)
+        let afterDisconnect = try #require(DevinHookConfig(Data(contentsOf: file))?.object)
+        #expect(afterDisconnect["endpoint"] as? String == "https://example.com/*keep*///keep")
+        let hooks = try #require(afterDisconnect["hooks"] as? [String: [[String: Any]]])
+        #expect(Set(hooks.keys) == ["PreToolUse"])
+        let handlers = try #require(hooks["PreToolUse"]?.first?["hooks"] as? [[String: String]])
+        #expect(handlers.map { $0["command"] } == ["echo \"//keep\""])
+        let disconnectedText = try #require(HookFile.read(file))
+        for comment in ["// user note", "/* trailing */", "/* Block comment before settings */",
+                        "// trailing comma with inline comment", "// Keep my custom hook", "// custom",
+                        "/* inside generated hook */"] {
+            #expect(disconnectedText.contains(comment))
+        }
+
+        for broken in ["{ /* unclosed", #"{"a":1,,}"#, #"{"hooks":{"Stop":false}}"#] {
+            try Data(broken.utf8).write(to: file)
+            #expect(throws: HookFile.Problem.self) { try HookFile.update(file, kind: .devin, connect: true) }
+            #expect(HookFile.read(file) == broken)
+        }
+    }
+
+    @Test func connectEditsCompactDevinConfigWithoutMovingInlineComments() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "config.json")
+        let text = "\u{FEFF}{\"z\":1, \"a\":true /* user setting */}"
+        try Data(text.utf8).write(to: file)
+        try HookFile.update(file, kind: .devin, connect: true)
+        #expect(HookFile.isConnected(file, kind: .devin))
+        #expect(HookFile.read(file)?.contains("\"z\":1, \"a\":true, /* user setting */") == true)
+        #expect(try Data(contentsOf: file).starts(with: [0xEF, 0xBB, 0xBF]))
+        try HookFile.update(file, kind: .devin, connect: false)
+        #expect(!HookFile.isConnected(file, kind: .devin))
+        #expect(HookFile.read(file)?.contains("\"z\":1, \"a\":true /* user setting */") == true)
+    }
+
+    @Test func repeatedConnectAndDisconnectPreserveDevinConfigFormatting() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "config.json")
+        let original = """
+        {
+          "hooks": {
+            "PreToolUse": [
+              {"hooks": [{"command": "./check.sh"}]} // user hook
+            ]
+          }
+        }
+        """
+        try Data(original.utf8).write(to: file)
+        try HookFile.update(file, kind: .devin, connect: true)
+        let connected = try Data(contentsOf: file)
+        try HookFile.update(file, kind: .devin, connect: true)
+        #expect(try Data(contentsOf: file) == connected)
+        try HookFile.update(file, kind: .devin, connect: false)
+        #expect(HookFile.read(file) == original)
+    }
+
     // MARK: Answers
 
     @Test func permissionAnswersUseDevinsFormat() throws {
@@ -183,6 +290,7 @@ struct DevinTests {
         let sources = LiveAgentSources(center: center)
         defer { sources.stop() }
         sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Tidy up"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
         sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 3))
         let thread = center.thread("devin:devin-1")
         #expect(thread?.status == .needsYou(.permission))
@@ -217,6 +325,183 @@ struct DevinTests {
         #expect(center.thread(id)?.step == "Running make clean")
     }
 
+    @Test func parallelToolCallsDoNotClearNeedsYouWhileDevinDialogIsOpen() {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Edit and search"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "grep", "tool_input": ["pattern": "foo"]]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/b.swift"]]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 3))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        #expect(center.thread(id)?.canAnswer == false)
+        #expect(center.thread(id)?.request == "Wants to edit a.swift")
+
+        // Calls that were already running leave Needs you intact.
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "grep", "tool_input": ["pattern": "foo"]]))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        #expect(center.thread(id)?.request == "Wants to edit a.swift")
+        #expect(center.thread(id)?.step == "Searching the code")
+
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/b.swift"]]))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+
+        // Only the waiting edit's own PostToolUse settles Needs you.
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+    }
+
+    @Test func parallelToolCallsAfterHandBackDoNotClearNeedsYou() {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Clean"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "read", "tool_input": ["file_path": "/p/a.swift"]]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "exec", "tool_input": ["command": "make clean"]]))
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "exec", "tool_input": ["command": "make clean"]], requestID: 11))
+        sources.handBack(threadID: id)
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        #expect(center.thread(id)?.canAnswer == false)
+
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "read", "tool_input": ["file_path": "/p/a.swift"]]))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "exec", "tool_input": ["command": "make clean"]]))
+        #expect(center.thread(id)?.status == .working)
+    }
+
+    @Test(arguments: [false, true])
+    func devinResumesAfterDenialOrRewrittenToolInput(denied: Bool) {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+        sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Edit"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 12))
+
+        let tool = denied ? "read" : "edit"
+        let path = denied ? "/p/b.swift" : "/p/a.swift"
+        if denied { sources.handle(devinEvent("PreToolUse", ["tool_name": tool, "tool_input": ["file_path": path]])) }
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        sources.handle(devinEvent("PostToolUse", ["tool_name": tool, "prompt_id": "old", "tool_input": ["file_path": path]]))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        sources.handle(devinEvent("PostToolUse", ["tool_name": tool, "tool_input": ["file_path": path, "normalized": true]]))
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+    }
+
+    @Test func devinCompletionWithChangedInputCanSettleWithoutAStart() {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 13))
+        sources.handle(devinEvent("PostToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift", "replace_all": false]]))
+        #expect(center.thread(id)?.status == .working)
+    }
+
+    @Test(arguments: [false, true])
+    func rewrittenCompletionsDistinguishParallelEdits(olderFinishesFirst: Bool) {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        func edit(_ hook: String, _ file: String, replaceAll: Bool = false, requestID: Int? = nil) {
+            let input: [String: Any] = ["file_path": "/p/\(file).swift", "replace_all": replaceAll]
+            sources.handle(devinEvent(hook, ["tool_name": "edit", "tool_input": input], requestID: requestID))
+        }
+
+        edit("PreToolUse", "older")
+        edit("PreToolUse", "approved")
+        edit("PermissionRequest", "approved", requestID: 15)
+        if olderFinishesFirst {
+            edit("PostToolUse", "older", replaceAll: true)
+            #expect(center.thread(id)?.status == .needsYou(.permission))
+        }
+        edit("PostToolUse", "approved", replaceAll: true)
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+        if !olderFinishesFirst {
+            edit("PostToolUse", "older", replaceAll: true)
+            #expect(center.thread(id)?.status == .working)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func rewrittenCommandSettlesTheApprovedParallelExec(olderFinishesFirst: Bool) {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        func exec(_ hook: String, _ command: String, requestID: Int? = nil, extra: [String: Any] = [:]) {
+            let input = ["command": command, "shell_id": "main"].merging(extra) { _, value in value }
+            sources.handle(devinEvent(hook, ["tool_name": "exec", "tool_input": input], requestID: requestID))
+        }
+
+        exec("PreToolUse", "npm test")
+        exec("PreToolUse", "rm -rf build")
+        exec("PermissionRequest", "rm -rf build", requestID: 16)
+        sources.handBack(threadID: id)
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        #expect(center.thread(id)?.canAnswer == false)
+
+        if olderFinishesFirst {
+            exec("PostToolUse", "npm test", extra: ["timeout": 1000])
+            #expect(center.thread(id)?.status == .needsYou(.permission))
+        }
+        exec("PostToolUse", "rm -rf ./build")
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+        if !olderFinishesFirst {
+            exec("PostToolUse", "npm test")
+            #expect(center.thread(id)?.status == .working)
+        }
+    }
+
+    @Test func identicalParallelCompletionDoesNotSettleTheLaterRequest() {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+        let call: [String: Any] = ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]
+        sources.handle(devinEvent("PreToolUse", call))
+        sources.handle(devinEvent("PreToolUse", call))
+        sources.handle(devinEvent("PermissionRequest", call, requestID: 14))
+        sources.handle(devinEvent("PostToolUse", call))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        sources.handle(devinEvent("PostToolUse", call))
+        #expect(center.thread(id)?.status == .working)
+    }
+
+    @Test func stopAndNewPromptClearWaitingDevinDialog() {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Edit"]))
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 4))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+
+        // Denying in Devin's dialog may end the turn without PostToolUse.
+        sources.handle(devinEvent("Stop", ["stop_hook_active": false]))
+        #expect(center.thread(id)?.status == .done)
+
+        sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/b.swift"]], requestID: 5))
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Never mind"]))
+        #expect(center.thread(id)?.status == .working)
+    }
+
     @Test func onlyAPlainCommandInDevinsMainShellCanBeAllowedFromTheNotch() {
         func review(_ tool: String, _ input: [String: Any]) -> AgentReview? {
             devinEvent("PermissionRequest", ["tool_name": tool, "tool_input": input]).review
@@ -240,11 +525,11 @@ struct DevinTests {
         let theirs = "printf '%s' 'pancakenotch-hook'"
         try JSONSerialization.data(withJSONObject: ["hooks": ["Stop": [["matcher": "", "hooks": [["type": "command", "command": theirs]]]]]])
             .write(to: file)
-        #expect(!HookFile.isConnected(file))
+        #expect(!HookFile.isConnected(file, kind: .devin))
         try HookFile.update(file, kind: .devin, connect: true)
-        #expect(HookFile.isConnected(file))
+        #expect(HookFile.isConnected(file, kind: .devin))
         try HookFile.update(file, kind: .devin, connect: false)
-        #expect(!HookFile.isConnected(file))
+        #expect(!HookFile.isConnected(file, kind: .devin))
         #expect(try #require(HookFile.read(file)).contains("printf"))
 
         #expect(HookFile.isOurs("'/Users/a b/Library/Application Support/PancakeNotch/bin/pancakenotch-hook' devin Stop"))

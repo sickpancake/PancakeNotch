@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import Foundation
 import os
 
@@ -35,8 +36,58 @@ struct HookEvent: Sendable {
     var status: String?
     /// Codex: the session's model ("codex-auto-review" for its automatic reviewer).
     var model: String?
+    struct ToolCallKey: Equatable, Sendable {
+        let promptID: String?
+        let toolName: String
+        let inputDigest: SHA256.Digest
+        let inputFields: [String: SHA256.Digest]
+        private let execCommandDigest: SHA256.Digest?
+
+        init?(promptID: String?, toolName: String, input: [String: Any]) {
+            guard let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) else { return nil }
+            self.promptID = promptID
+            self.toolName = toolName
+            inputDigest = SHA256.hash(data: data)
+            execCommandDigest = toolName == "exec" ? (input["command"] as? String).map(Self.execFingerprint) : nil
+            inputFields = input.compactMapValues { value in
+                guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+                else { return nil }
+                return SHA256.hash(data: data)
+            }
+        }
+
+        func sameTool(as other: Self) -> Bool {
+            promptID == other.promptID && toolName == other.toolName
+        }
+
+        func matchingInputFields(with other: Self) -> Int {
+            inputFields.reduce(0) { count, field in
+                count + (field.value == other.inputFields[field.key] ? 1 : 0)
+            }
+        }
+
+        func matchesExecCommand(of other: Self) -> Bool {
+            execCommandDigest != nil && execCommandDigest == other.execCommandDigest
+        }
+
+        private static func execFingerprint(_ command: String) -> SHA256.Digest {
+            // For hook correlation only; never change the command shown for approval.
+            guard command.range(of: #"\A[A-Za-z0-9._/@%+=,:-]+(?:[ \t]+[A-Za-z0-9._/@%+=,:-]+)*\z"#,
+                                options: .regularExpression) != nil else {
+                return SHA256.hash(data: Data(command.utf8))
+            }
+            let words = command.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            let normalized = words.enumerated().map { index, word in
+                index > 0 && word.hasPrefix("./") && word.count > 2 && !word.hasPrefix("./-") ? word.dropFirst(2) : word
+            }.joined(separator: " ")
+            return SHA256.hash(data: Data(normalized.utf8))
+        }
+    }
+
     /// "Running npm test": what a tool call is doing (Devin's PreToolUse and PostToolUse).
     var step: String?
+    /// Tool call identity when the payload names a tool (`tool_name` + `tool_input`).
+    var toolCall: ToolCallKey?
     /// Devin ran a hook from Claude Code's settings (it reads them too): Devin's input (a turn's
     /// `prompt_id`, no transcript) arriving as Claude Code. The helper usually spots this first, by
     /// Devin's environment.
@@ -80,6 +131,9 @@ struct HookEvent: Sendable {
         model = payload["model"] as? String
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
+            if tool == .devin {
+                toolCall = ToolCallKey(promptID: payload["prompt_id"] as? String, toolName: toolName, input: input)
+            }
             summary = AgentSteps.request(tool: toolName, input: input)
             if name == "PreToolUse" || name == "PostToolUse" { step = AgentSteps.step(tool: toolName, input: input) }
             if name == "PermissionRequest", tool != .devin || Self.devinCommandIsPlain(tool: toolName, input: input) {

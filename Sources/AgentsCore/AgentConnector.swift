@@ -54,7 +54,7 @@ public final class AgentConnector {
                 next[tool] = .notFound
                 continue
             }
-            let connected = files.filter { HookFile.isConnected($0.url) }
+            let connected = files.filter { HookFile.isConnected($0.url, kind: $0.kind) }
             if connected.isEmpty {
                 next[tool] = .notConnected
             } else {
@@ -182,11 +182,23 @@ enum HookFile {
         // A settings file kept as a link (in a dotfiles folder) is changed where it really is.
         let url = link.resolvingSymlinksInPath()
         var root: [String: Any] = [:]
+        var editedDevin: Data?
         if let data = try? Data(contentsOf: url), !data.isEmpty {
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw Problem(message: String(localized: "\(url.path(percentEncoded: false)) isn't valid JSON, so PancakeNotch left it alone. Fix it first, then try again."))
+            let invalid = Problem(message: String(localized: "\(url.path(percentEncoded: false)) isn't valid JSON, so PancakeNotch left it alone. Fix it first, then try again."))
+            if kind == .devin {
+                guard var config = DevinHookConfig(data) else { throw invalid }
+                let entries = events(for: kind).map { event, waits in
+                    (name: event, group: entry(kind: kind, event: event, waits: waits))
+                }
+                do {
+                    editedDevin = try config.update(entries: entries, connect: connect)
+                } catch DevinHookConfig.EditError.invalidHooks {
+                    throw Problem(message: String(localized: "Devin's hook settings have an unexpected format, so PancakeNotch left them alone."))
+                }
+            } else {
+                guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw invalid }
+                root = object
             }
-            root = object
             // One copy of the file as it was before PancakeNotch first touched it.
             let backup = url.appendingPathExtension("before-pancakenotch")
             // Only the user may read it: settings can hold keys.
@@ -205,7 +217,7 @@ enum HookFile {
         root["hooks"] = hooks.isEmpty ? nil : hooks
         if kind == .cursor, root["version"] == nil, !hooks.isEmpty { root["version"] = 1 }
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        let data = try editedDevin ?? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         // Writing a fresh copy would loosen a private file (Devin keeps its settings readable only by
         // the user): keep the old permissions.
         // A new Devin settings file starts private too, as Devin makes it.
@@ -216,9 +228,10 @@ enum HookFile {
     }
 
     /// Whether the file holds one of PancakeNotch's hook entries.
-    static func isConnected(_ url: URL) -> Bool {
-        guard let data = try? Data(contentsOf: url),
-              let hooks = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["hooks"] as? [String: Any] else { return false }
+    static func isConnected(_ url: URL, kind: Kind) -> Bool {
+        guard let data = try? Data(contentsOf: url) else { return false }
+        let object = kind == .devin ? DevinHookConfig(data)?.object : (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+        guard let hooks = object?["hooks"] as? [String: Any] else { return false }
         return hooks.values.contains { value in
             (value as? [Any] ?? []).contains { group in
                 guard let group = group as? [String: Any] else { return false }
