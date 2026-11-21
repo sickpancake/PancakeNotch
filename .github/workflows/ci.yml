@@ -2,13 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, perf-exp-optimization-84-to-88]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
+  optimization-probes:
+    if: github.ref == 'refs/heads/perf-exp-optimization-84-to-88'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash verification/optimization-probes/run.sh | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+
   build-and-test:
     runs-on: macos-15
     # Usually about 11 minutes. A stuck step once held this job for GitHub's 6-hour limit.
