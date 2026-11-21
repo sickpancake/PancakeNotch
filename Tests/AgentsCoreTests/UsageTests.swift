@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Stats
 import Testing
 @testable import AgentsCore
@@ -305,6 +306,45 @@ struct UsageLogTests {
         #expect(totals.tokens == 20)
         let restarted = UsageLedger(stats: stats, progress: await stats.aiFileProgress())
         #expect(restarted.unread([account]).isEmpty)
+    }
+}
+
+struct UsageWriteRecoveryTests {
+    @Test func failedIntermediateBatchLeavesTheLogUnreadForRetry() async throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let projects = folder.appending(path: "projects")
+        try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: false)
+        let now = Date()
+        let stamp = ISO8601DateFormatter().string(from: now)
+        let lines = (0..<257).map { id in
+            #"{"type":"assistant","timestamp":"\#(stamp)","message":{"model":"claude-sonnet-5-5","id":"m\#(id)","usage":{"input_tokens":1,"output_tokens":1}}}"#
+        }
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: projects.appending(path: "session.jsonl"))
+
+        let url = folder.appending(path: "stats.sqlite")
+        let stats = StatsStore(url: url)
+        _ = await stats.aiTotals(accounts: ["test"], days: 1, now: now)
+        var db: OpaquePointer?
+        try #require(sqlite3_open(url.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        try #require(sqlite3_exec(db, """
+            CREATE TRIGGER refuse_batch BEFORE INSERT ON ai_usage WHEN NEW.id = 'm0'
+            BEGIN SELECT RAISE(ABORT, 'fixture'); END
+            """, nil, nil, nil) == SQLITE_OK)
+
+        let ledger = UsageLedger(stats: stats, progress: [:])
+        let account = UsageLedger.Account(id: "test", tool: .claude, folder: folder)
+        let log = try #require(ledger.unread([account], now: now).first)
+        ledger.read(log, now: now)
+        #expect(await stats.aiTotals(accounts: ["test"], days: 1, now: now).isEmpty)
+        let retry = try #require(ledger.unread([account], now: now).first)
+        #expect(retry.start == 0)
+
+        try #require(sqlite3_exec(db, "DROP TRIGGER refuse_batch", nil, nil, nil) == SQLITE_OK)
+        ledger.read(retry, now: now)
+        #expect(ledger.unread([account], now: now).isEmpty)
+        #expect(await stats.aiTotals(accounts: ["test"], days: 1, now: now).first?.tokens == 514)
     }
 }
 
