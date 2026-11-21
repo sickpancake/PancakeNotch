@@ -223,12 +223,12 @@ final class LiveAgentSources {
     }
 
     private func closestDevinStart(to call: HookEvent.ToolCallKey, in starts: [DevinToolStart], waiting: Set<Int>) -> Int? {
-        // Devin supplies no call ID. For rewritten input, prefer more unchanged fields, then a
-        // start waiting on Devin's dialog. Indistinguishable starts otherwise settle oldest first.
-        var best: (index: Int, score: (Int, Int))?
+        // For rewritten input, compare commands and unchanged fields before preferring a waiting
+        // request. Devin supplies no call ID; starts still tied after that settle oldest first.
+        var best: (index: Int, score: (Double, Int, Int))?
         for (index, start) in starts.enumerated() where start.call.sameTool(as: call) {
             let hasWaitingRequest = start.requestSequence.map(waiting.contains) ?? false
-            let score = (start.call.matchingInputFields(with: call), hasWaitingRequest ? 1 : 0)
+            let score = (start.call.commandSimilarity(to: call), start.call.matchingInputFields(with: call), hasWaitingRequest ? 1 : 0)
             if let previous = best?.score, score <= previous { continue }
             best = (index, score)
         }

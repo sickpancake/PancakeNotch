@@ -41,12 +41,14 @@ struct HookEvent: Sendable {
         let toolName: String
         let inputDigest: SHA256.Digest
         let inputFields: [String: SHA256.Digest]
+        private let commandWords: Set<SHA256.Digest>
 
         init?(promptID: String?, toolName: String, input: [String: Any]) {
             guard let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) else { return nil }
             self.promptID = promptID
             self.toolName = toolName
             inputDigest = SHA256.hash(data: data)
+            commandWords = toolName == "exec" ? Self.commandWordDigests(input["command"] as? String ?? "") : []
             inputFields = input.compactMapValues { value in
                 guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
                 else { return nil }
@@ -62,6 +64,23 @@ struct HookEvent: Sendable {
             inputFields.reduce(0) { count, field in
                 count + (field.value == other.inputFields[field.key] ? 1 : 0)
             }
+        }
+
+        func commandSimilarity(to other: Self) -> Double {
+            let shared = commandWords.intersection(other.commandWords).count
+            guard shared > 0 else { return 0 }
+            return Double(shared) / Double(commandWords.count + other.commandWords.count - shared)
+        }
+
+        private static func commandWordDigests(_ command: String) -> Set<SHA256.Digest> {
+            // A bounded hint for UI correlation, not a shell parser or a permission check.
+            let quotes = CharacterSet(charactersIn: "\"'")
+            return Set(command.prefix(4096).split(whereSeparator: \.isWhitespace).prefix(128).compactMap { token in
+                var word = token.trimmingCharacters(in: quotes)[...]
+                if word.hasPrefix("./"), word != "./" { word = word.dropFirst(2) }
+                if word.hasSuffix("/"), word != "/" { word = word.dropLast() }
+                return word.isEmpty ? nil : SHA256.hash(data: Data(word.utf8))
+            })
         }
     }
 

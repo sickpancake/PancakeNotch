@@ -447,9 +447,10 @@ struct DevinTests {
         defer { sources.stop() }
         let id = "devin:devin-1"
 
-        func exec(_ hook: String, _ command: String, requestID: Int? = nil, extra: [String: Any] = [:]) {
-            let input = ["command": command, "shell_id": "main"].merging(extra) { _, value in value }
-            sources.handle(devinEvent(hook, ["tool_name": "exec", "tool_input": input], requestID: requestID))
+        func exec(_ hook: String, _ command: String, requestID: Int? = nil) {
+            sources.handle(devinEvent(hook, [
+                "tool_name": "exec", "tool_input": ["command": command, "shell_id": "main"]
+            ], requestID: requestID))
         }
 
         exec("PreToolUse", "npm test")
@@ -460,8 +461,9 @@ struct DevinTests {
         #expect(center.thread(id)?.canAnswer == false)
 
         if olderFinishesFirst {
-            exec("PostToolUse", "npm test", extra: ["timeout": 1000])
+            exec("PostToolUse", "npm test --silent")
             #expect(center.thread(id)?.status == .needsYou(.permission))
+            #expect(center.thread(id)?.request == "Wants to run: rm -rf build")
         }
         exec("PostToolUse", completedCommand)
         #expect(center.thread(id)?.status == .working)
