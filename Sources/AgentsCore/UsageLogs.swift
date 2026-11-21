@@ -66,21 +66,39 @@ struct CodexUsageLog: Codable, Equatable {
         (try? JSONEncoder().encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? ""
     }
 
+    private enum LineKind {
+        case session, context, tokens
+    }
+
+    private static let prefixLength = 200
+
+    static var spanningLineFilter: (length: Int, accepts: (Data) -> Bool) {
+        (prefixLength, { lineKind($0) != nil })
+    }
+
+    private static func lineKind(_ prefix: Data) -> LineKind? {
+        let head = String(decoding: prefix, as: UTF8.self)
+        if head.contains(#""type":"session_meta""#) { return .session }
+        if head.contains(#""type":"turn_context""#) { return .context }
+        if head.contains(#""type":"event_msg""#), head.contains(#""token_count""#) { return .tokens }
+        return nil
+    }
+
     /// - Parameter fallbackThread: the thread ID in the file's name, for a file whose first line went missing.
     mutating func record(_ line: Data, account: String, fallbackThread: String) -> AIUsageRecord? {
-        let head = String(decoding: line.prefix(200), as: UTF8.self)
-        if head.contains(#""type":"session_meta""#) {
+        switch Self.lineKind(line.prefix(Self.prefixLength)) {
+        case .session:
             if thread == nil, let payload = Self.payload(line)?.payload {
                 thread = payload["id"] as? String ?? payload["session_id"] as? String
             }
             return nil
-        }
-        if head.contains(#""type":"turn_context""#) {
+        case .context:
             if let name = Self.payload(line)?.payload["model"] as? String { model = name }
             return nil
+        case .tokens: break
+        case nil: return nil
         }
-        guard head.contains(#""type":"event_msg""#), head.contains(#""token_count""#),
-              let decoded = Self.payload(line),
+        guard let decoded = Self.payload(line),
               let info = decoded.payload["info"] as? [String: Any],
               let totals = info["total_token_usage"] as? [String: Any] else { return nil }
         let new = (input: count(totals["input_tokens"]), cached: count(totals["cached_input_tokens"]),
@@ -253,7 +271,9 @@ final class UsageLedger: @unchecked Sendable {
         }
         let initial = AIFileProgress(size: file.size, offset: file.start, state: file.state)
         var failed = false
-        let offset = JSONLines.read(file.url, from: file.start, shouldContinue: { !failed && !self.cancelled.withLock { $0 } }) { line in
+        let offset = JSONLines.read(file.url, from: file.start,
+                                    spanningLineFilter: codex == nil ? nil : CodexUsageLog.spanningLineFilter,
+                                    shouldContinue: { !failed && !self.cancelled.withLock { $0 } }) { line in
             // Each line's decoded objects go right away, so a big log never piles up in memory.
             autoreleasepool {
                 let record = codex != nil
