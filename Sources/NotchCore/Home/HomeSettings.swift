@@ -17,6 +17,8 @@ public enum HomeOpening: String, CaseIterable, Sendable {
     public var layout: HomeLayout { didSet { if layout != oldValue { defaults?.set(layout.encoded(), forKey: "home.layout") } } }
     public var opening: HomeOpening { didSet { if opening != oldValue { defaults?.set(opening.rawValue, forKey: "home.opening") } } }
     public var hasSeenIntro: Bool { didSet { if hasSeenIntro != oldValue { defaults?.set(hasSeenIntro, forKey: "home.introSeen") } } }
+    /// Undo steps across every editing surface; in memory, never saved.
+    public var history = HomeHistory()
     @ObservationIgnored private let defaults: UserDefaults?
     public init(defaults: UserDefaults? = nil) {
         self.defaults = defaults

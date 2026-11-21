@@ -4,7 +4,6 @@ import SwiftUI
 struct NotchHomeEditingGrid: View {
     let model: NotchViewModel
     let area: CGSize
-    @State private var history = HomeHistory()
     @State private var dragged: HomeWidgetKind?
     @State private var pointer = CGPoint.zero
     @State private var anchor = CGPoint.zero
@@ -181,7 +180,7 @@ struct NotchHomeEditingGrid: View {
     }
 
     private func edit(_ change: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) {
-        if let refusal = model.home.edit(&history, change) {
+        if let refusal = model.home.edit(change) {
             noteTask?.cancel()
             withAnimation(.easeInOut(duration: 0.15)) { note = refusal.message }
             noteTask = Task { @MainActor in

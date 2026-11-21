@@ -233,7 +233,18 @@ struct HomeLayoutTests {
     /// Assigning unchanged values does not write defaults keys.
     @Test func unchangedDoesNotSave() throws { let name = "HomeLayoutTests-\(UUID())"; let d = try #require(UserDefaults(suiteName: name)); defer { d.removePersistentDomain(forName: name) }; let s = HomeSettings(defaults: d); s.layout = .default; s.opening = .lastModule; s.hasSeenIntro = false; #expect(d.object(forKey: "home.layout") == nil); #expect(d.object(forKey: "home.opening") == nil); #expect(d.object(forKey: "home.introSeen") == nil) }
     /// Failed and unchanged edits leave history empty.
-    @Test func editHistory() { let s = HomeSettings(); var h = HomeHistory(); #expect(s.edit(&h) { $0.adding(.timer) } == .alreadyOnHome); #expect(!h.canUndo); s.edit(&h) { .success($0) }; #expect(!h.canUndo); s.edit(&h) { .success($0.removing(.timer)) }; #expect(h.canUndo); #expect(h.undo(current: s.layout) == .default) }
+    @Test func editHistory() { let s = HomeSettings(); #expect(s.edit { $0.adding(.timer) } == .alreadyOnHome); #expect(!s.history.canUndo); s.edit { .success($0) }; #expect(!s.history.canUndo); s.edit { .success($0.removing(.timer)) }; #expect(s.history.canUndo); #expect(s.history.undo(current: s.layout) == .default) }
+    /// The window editor and the notch share one history (issue #58): Undo steps back the latest
+    /// committed edit on either surface instead of restoring a stale whole-layout snapshot.
+    @Test func sharedHistoryUndoesLatestEditOnly() {
+        let s = HomeSettings()
+        s.edit { .success($0.removing(.clock)) } // the app-window editor
+        s.edit { .success($0.removing(.shelf)) } // the notch's editing grid
+        if let previous = s.history.undo(current: s.layout) { s.layout = previous }
+        #expect(s.layout.contains(.shelf) && !s.layout.contains(.clock))
+        if let previous = s.history.undo(current: s.layout) { s.layout = previous }
+        #expect(s.layout == .default)
+    }
     /// Applying a refusal leaves settings unchanged.
     @Test func applyRefusal() { let s = HomeSettings(); #expect(s.apply(.failure(.full)) == .full); #expect(s.layout == .default); #expect(s.apply(.success(.init())) == nil); #expect(s.layout.isEmpty) }
 }
