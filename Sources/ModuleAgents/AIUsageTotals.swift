@@ -75,7 +75,7 @@ private struct DevinNumbers: View {
                 .lineLimit(1)
             if !usage.isComplete {
                 // More sessions than one check reads: say the numbers are low rather than hide it.
-                Text("Only your newest 500 sessions")
+                Text("Some older sessions aren't counted")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.45))
                     .lineLimit(1)

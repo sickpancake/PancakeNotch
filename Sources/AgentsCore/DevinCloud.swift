@@ -34,6 +34,9 @@ public final class DevinCloud {
     @ObservationIgnored private var identity: DevinCloudIdentity?
     /// The threads it put in the Agents list, and whether the last check saw each one still going.
     @ObservationIgnored private var shownIDs: Set<String> = []
+    /// The cloud sessions that were waiting on the user, kept over relaunches so a session that
+    /// fell asleep while waiting still shows "!".
+    @ObservationIgnored private var waitingIDs: Set<String>
     @ObservationIgnored private var hasCheckedOnce = false
     @ObservationIgnored private var lastCheck: Date?
     @ObservationIgnored private var checking: Task<Void, Never>?
@@ -56,6 +59,7 @@ public final class DevinCloud {
     nonisolated static let idPrefix = "devin-cloud:"
     private static let connectedKey = "devinCloud.connected"
     private static let userNameKey = "devinCloud.userName"
+    private static let waitingKey = "devinCloud.waiting"
 
     public convenience init() {
         self.init(defaults: .standard, store: DevinKeychain(), send: DevinCloudAPI.ephemeralSend)
@@ -77,8 +81,10 @@ public final class DevinCloud {
         self.defaults = defaults
         self.store = store
         self.send = send
-        phase = defaults.bool(forKey: Self.connectedKey) ? .connected : .notConnected
-        userName = phase == .connected ? defaults.string(forKey: Self.userNameKey) : nil
+        let connected = defaults.bool(forKey: Self.connectedKey)
+        phase = connected ? .connected : .notConnected
+        userName = connected ? defaults.string(forKey: Self.userNameKey) : nil
+        waitingIDs = connected ? Set(defaults.stringArray(forKey: Self.waitingKey) ?? []) : []
     }
 
     // MARK: Connecting
@@ -131,6 +137,8 @@ public final class DevinCloud {
         store.delete()
         defaults.removeObject(forKey: Self.connectedKey)
         defaults.removeObject(forKey: Self.userNameKey)
+        defaults.removeObject(forKey: Self.waitingKey)
+        waitingIDs = []
         phase = .notConnected
         problem = nil
         userName = nil
@@ -214,7 +222,8 @@ public final class DevinCloud {
             self.checking = nil
             if self.again {
                 self.again = false
-                self.check()
+                // The check that just ended came back with fresh data: a queued look waits.
+                self.checkIfOlder(than: Self.lookGap)
             }
         }
     }
@@ -254,7 +263,8 @@ public final class DevinCloud {
                 disconnectKeepingProblem()
             case .forbidden:
                 // The token still works, so it stays: a new one would hit the same wall.
-                problem = Self.forbiddenText
+                problem = String(localized: "This token can't read your Devin sessions. In Devin, give it permission to view sessions, then open Agents to try again.",
+                                 comment: "Devin cloud: the token works but lacks the right to list sessions")
             case .slowDown:
                 schedule(after: Self.slowGap)
             case .unavailable:
@@ -296,14 +306,20 @@ public final class DevinCloud {
                 let id = Self.idPrefix + session.sessionId
                 let previous = agents.thread(id)
                 let changed = min(now, session.updatedAt ?? now)
-                // Fell asleep while it waited for you: it still waits for you (Devin wakes it when you answer).
-                if session.isAsleep, case .needsYou(let need)? = previous?.status {
-                    status = .needsYou(need)
-                    reason = String(localized: "Asleep, waiting for you", comment: "Devin cloud session: paused while it waited for the user")
+                // Fell asleep while it waited for you: it still waits for you (Devin wakes it when
+                // you answer). After a relaunch nothing is `previous`, so the remembered ones count too.
+                if session.isAsleep {
+                    var need: AgentNeed?
+                    if case .needsYou(let waiting)? = previous?.status { need = waiting }
+                    if need != nil || waitingIDs.contains(session.sessionId) {
+                        status = .needsYou(need ?? .input)
+                        reason = String(localized: "Asleep, waiting for you", comment: "Devin cloud session: paused while it waited for the user")
+                    }
                 }
                 // A session that finished a while before it was first seen isn't news.
                 if previous == nil, status.isFinished, now.timeIntervalSince(changed) > AgentsCenter.keepAfterSeen { continue }
                 seen.insert(id)
+                if status.needsYou { waitingIDs.insert(session.sessionId) } else { waitingIDs.remove(session.sessionId) }
                 // An asleep session won't change by itself: no checks for it.
                 if !status.isFinished, !session.isAsleep { stillGoing = true }
                 if status == .working { working = true }
@@ -326,6 +342,7 @@ public final class DevinCloud {
                 }
             }
             shownIDs.formUnion(seen)
+            defaults.set(waitingIDs.sorted(), forKey: Self.waitingKey)
         }
         hasCheckedOnce = true
         if working { schedule(after: Self.workingGap) }

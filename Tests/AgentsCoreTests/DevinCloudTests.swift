@@ -309,6 +309,42 @@ struct DevinCloudTests {
         #expect(agents.threads.first { $0.id == "devin-cloud:devin-x" }?.status == .stopped)
     }
 
+    @Test func fallingAsleepWhileWaitingIsRememberedAfterARelaunch() async throws {
+        let now = Date()
+        let defaults = UserDefaults(suiteName: "DevinCloudTests.\(UUID().uuidString)")!
+        let store = MemoryStore()
+        let fake = FakeDevin()
+        fake.sessions = page(session("devin-w", status: "running", detail: "waiting_for_user", created: now.addingTimeInterval(-600)))
+        let agents = AgentsCenter(settings: settings())
+        let first = DevinCloud(defaults: defaults, store: store, send: fake.send)
+        first.follow(agents: agents, usage: nil)
+        _ = await first.connect(token: "cog_secret123")
+        await first.settle()
+        #expect(agents.threads.first?.status == .needsYou(.input))
+
+        fake.sessions = page(session("devin-w", status: "suspended", detail: "inactivity", created: now.addingTimeInterval(-600), updated: now))
+        first.check()
+        await first.settle()
+        #expect(agents.threads.first?.status == .needsYou(.input))
+
+        // Relaunched: no `previous` thread, yet the remembered session still needs you.
+        let relaunchedAgents = AgentsCenter(settings: settings())
+        let relaunched = DevinCloud(defaults: defaults, store: store, send: fake.send)
+        relaunched.follow(agents: relaunchedAgents, usage: nil)
+        await relaunched.settle()
+        let row = try #require(relaunchedAgents.threads.first)
+        #expect(row.status == .needsYou(.input))
+        #expect(row.request == "Asleep, waiting for you")
+        #expect(relaunchedAgents.attention == .needsYou(count: 1))
+
+        // Answered at last (working again, then done): it's forgotten.
+        fake.sessions = page(session("devin-w", status: "running", detail: "working", created: now.addingTimeInterval(-600), updated: now))
+        relaunched.check()
+        await relaunched.settle()
+        #expect(relaunchedAgents.threads.first?.status == .working)
+        #expect(defaults.stringArray(forKey: "devinCloud.waiting") == [])
+    }
+
     @Test func moreSessionsThanOneCheckReadsIsSaid() async throws {
         let now = Date()
         let fake = FakeDevin()
