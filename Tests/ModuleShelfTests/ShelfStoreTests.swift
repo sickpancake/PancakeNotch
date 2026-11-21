@@ -161,6 +161,40 @@ struct ShelfStoreTests {
         #expect(store.items.map(\.displayName) == ["after.txt", "note"])
     }
 
+    @Test func homeFilePresentationReusesAnIconUntilTheFileOrScaleChanges() throws {
+        let fixture = try ShelfFixture()
+        let original = try fixture.file("before.txt")
+        var item = ShelfItem(kind: .file(bookmark: Data(), owned: false), path: original.path, addedAt: fixture.clock)
+        let presentation = ShelfWidgetFilePresentation()
+        let first = try #require(presentation.file(for: item, scale: 2))
+        #expect(presentation.file(for: item, scale: 2)?.icon === first.icon)
+        #expect(first.name == item.displayName)
+        let bitmap = try #require(first.icon.representations.first)
+        #expect(bitmap.pixelsWide <= 52 && bitmap.pixelsHigh <= 52)
+
+        let renamed = original.deletingLastPathComponent().appending(path: "after.txt")
+        try FileManager.default.moveItem(at: original, to: renamed)
+        item.path = renamed.path
+        let moved = try #require(presentation.file(for: item, scale: 2))
+        #expect(moved.name == item.displayName && moved.name != first.name)
+        #expect(moved.icon !== first.icon)
+
+        let replacement = try fixture.file("replacement.txt")
+        try FileManager.default.removeItem(at: renamed)
+        try FileManager.default.moveItem(at: replacement, to: renamed)
+        let replaced = try #require(presentation.file(for: item, scale: 2))
+        #expect(replaced.icon !== moved.icon)
+        let scaled = try #require(presentation.file(for: item, scale: 1))
+        #expect(scaled.icon !== replaced.icon)
+        try FileManager.default.removeItem(at: renamed)
+        #expect(presentation.file(for: item, scale: 1)?.icon !== scaled.icon)
+
+        let note = ShelfItem(kind: .text("note"), addedAt: fixture.clock)
+        let link = ShelfItem(kind: .link(try #require(URL(string: "https://example.com"))), addedAt: fixture.clock)
+        #expect(presentation.file(for: note, scale: 1) == nil)
+        #expect(presentation.file(for: link, scale: 1) == nil)
+    }
+
     @Test func autoClearRemovesOldItems() async throws {
         let fixture = try ShelfFixture()
         let old = fixture.makeStore()
