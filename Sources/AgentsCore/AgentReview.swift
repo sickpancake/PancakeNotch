@@ -82,7 +82,9 @@ public struct AgentReview: Equatable, Sendable {
     /// The review for a permission request, or nil when it can't be shown whole.
     static func make(tool name: String, input: [String: Any], cwd: String?, home: String) -> AgentReview? {
         switch name {
-        case "Bash", "shell", "exec_command", "local_shell", "Shell", "run_terminal_cmd", "PowerShell":
+        // Devin's `exec`. Devin's file tools (`read`, `edit`, `write`) don't say how their input is laid
+        // out, so they go back to Devin rather than risk showing less than Allow would approve.
+        case "Bash", "shell", "exec_command", "local_shell", "Shell", "run_terminal_cmd", "PowerShell", "exec":
             // An argument list is joined differently by each tool: answered there.
             guard let text = (input["command"] ?? input["cmd"]) as? String else { return nil }
             return command(text)

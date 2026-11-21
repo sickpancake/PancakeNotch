@@ -80,7 +80,7 @@ extension HomeWidgetKind {
                             comment: "Words that find the Timer widget in the Home widget search, separated by commas")
         case .stopwatch: String(localized: "laps, time, count up, timing",
                                 comment: "Words that find the Stopwatch widget in the Home widget search, separated by commas")
-        case .agents: String(localized: "Claude Code, Codex, Cursor, AI, coding, assistant, conversations",
+        case .agents: String(localized: "Claude Code, Codex, Cursor, Devin, AI, coding, assistant, conversations",
                              comment: "Words that find the Agents widget in the Home widget search, separated by commas")
         case .aiUsage: String(localized: "limits, tokens, plan, Claude, Codex, cost, quota",
                               comment: "Words that find the AI Usage widget in the Home widget search, separated by commas")

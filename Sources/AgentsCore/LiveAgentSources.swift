@@ -121,11 +121,16 @@ final class LiveAgentSources {
         center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), approval: .some(nil)))
     }
 
-    /// The tools' own answer format (Claude Code and Codex share it).
+    /// The tools' own answer format (Claude Code and Codex share one; Devin has its own).
     nonisolated static func decision(allow: Bool, tool: AgentTool) -> String {
-        var decision: [String: Any] = ["behavior": allow ? "allow" : "deny"]
-        if !allow { decision["message"] = "Denied from PancakeNotch." }
-        let output: [String: Any] = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]
+        let output: [String: Any]
+        if tool == .devin {
+            output = allow ? ["decision": "approve"] : ["decision": "block", "reason": "Denied from PancakeNotch."]
+        } else {
+            var decision: [String: Any] = ["behavior": allow ? "allow" : "deny"]
+            if !allow { decision["message"] = "Denied from PancakeNotch." }
+            output = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]
+        }
         let data = (try? JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
     }
@@ -166,7 +171,8 @@ final class LiveAgentSources {
 
     func handle(_ event: HookEvent) {
         guard !stopped else { return }
-        guard let session = event.sessionID, !session.isEmpty else {
+        // Devin running Claude Code's hooks: not a Claude Code thread. Devin's own entry reports it.
+        guard !event.isDevinInClaudeHook, let session = event.sessionID, !session.isEmpty else {
             if let requestID = event.requestID { server?.answer(requestID, with: nil) }
             return
         }
@@ -199,7 +205,7 @@ final class LiveAgentSources {
         lastActivity[id] = now
         var update = AgentsCenter.Update(id: id, tool: event.tool, at: now, accountID: accountID(for: event),
                                          title: event.title, cwd: event.cwd, processID: event.parentPID)
-        if event.tool != .cursor, let path = event.transcriptPath, !path.isEmpty { hookTranscripts[id] = path }
+        if event.tool.hasTranscripts, let path = event.transcriptPath, !path.isEmpty { hookTranscripts[id] = path }
         switch (event.tool, event.name) {
         case (_, "UserPromptSubmit"), (.cursor, "beforeSubmitPrompt"):
             requestSettled(id)
@@ -256,6 +262,16 @@ final class LiveAgentSources {
         case (.cursor, "afterShellExecution"), (.cursor, "afterFileEdit"):
             update.status = .working
             update.step = .some(event.summary)
+        case (.devin, "PreToolUse"), (.devin, "PostToolUse"):
+            // A request still waiting here can only be answered here (Devin waits for its hook), so another
+            // tool call (one running alongside) leaves it alone. Otherwise a tool call starting or ending
+            // means the agent is at work again: a request handed back was answered in Devin.
+            if pending[id] != nil {
+                center.apply(.init(id: id, tool: .devin, at: now, step: .some(event.step), quietly: true))
+                return
+            }
+            update.status = .working
+            update.step = .some(event.step)
         case (_, "SessionEnd"), (.cursor, "sessionEnd"):
             requestSettled(id)
             center.ended(id, at: now)
@@ -266,11 +282,11 @@ final class LiveAgentSources {
         default:
             return
         }
-        if let prompt = event.fullPrompt { center.noteHelperPrompt(prompt, for: id) }
+        if event.tool.hasTranscripts, let prompt = event.fullPrompt { center.noteHelperPrompt(prompt, for: id) }
         center.apply(update, deferFinishAlert: true)
         if event.tool == .codex { followWorkingCodexRollouts() }
         // A host app's helper gets its task as its first prompt: match it now, while it starts.
-        if event.tool != .cursor, let prompt = event.fullPrompt, !prompt.isEmpty {
+        if event.tool.hasTranscripts, let prompt = event.fullPrompt, !prompt.isEmpty {
             if firstPrompts[id] == nil { firstPrompts[id] = prompt }
             resolveDelegations()
         } else if update.status != nil {
@@ -398,7 +414,7 @@ final class LiveAgentSources {
     private func resolveDelegations() {
         guard !stopped else { return }
         guard !resolvingDelegations else { resolvesAgain = true; return }
-        let threads = center.allThreads.filter { $0.tool != .cursor }
+        let threads = center.allThreads.filter(\.tool.hasTranscripts)
         let ids = Set(threads.map(\.id))
         firstPrompts = firstPrompts.filter { ids.contains($0.key) }
         hookTranscripts = hookTranscripts.filter { ids.contains($0.key) }

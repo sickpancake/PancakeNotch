@@ -21,7 +21,7 @@ struct AgentsView: View {
                     .padding(.bottom, AgentsLayout.bottomPadding)
             } else if threads.isEmpty {
                 PanelNote(symbol: "sparkles", title: "No agents running",
-                          detail: "Start Claude Code or Codex and they'll show up here. Cursor too, after Connect.")
+                          detail: "Start Claude Code or Codex and they'll show up here. Cursor and Devin too, after Connect.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.bottom, AgentsLayout.bottomPadding)
             } else {

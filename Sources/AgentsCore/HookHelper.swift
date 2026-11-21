@@ -9,6 +9,9 @@ enum HookHelper {
     static let marker = "pancakenotch-hook"
     /// How long a tool waits for Allow / Deny before asking in its own window (seconds).
     static let answerTimeout = 600
+    /// The most a tool that waits for every hook (Devin) waits for one that only reports (seconds). The
+    /// helper takes milliseconds; this only matters if something's badly wrong.
+    static let quickTimeout = 5
 
     static var supportFolder: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

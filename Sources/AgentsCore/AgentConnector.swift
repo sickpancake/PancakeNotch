@@ -4,7 +4,8 @@ import os
 
 /// Connect and Disconnect (ADR-0037): adds PancakeNotch's hook helper to a tool's hook settings, or takes
 /// exactly those entries out again. Claude Code: every Claude account folder's `settings.json`. Codex:
-/// every Codex folder's `hooks.json`. Cursor: `~/.cursor/hooks.json`. Whether a tool is connected is read
+/// every Codex folder's `hooks.json`. Cursor: `~/.cursor/hooks.json`. Devin (CLI and Desktop):
+/// `~/.config/devin/config.json`. Whether a tool is connected is read
 /// from those files, never stored separately, so editing them by hand stays in charge.
 @MainActor
 @Observable
@@ -53,7 +54,7 @@ public final class AgentConnector {
                 next[tool] = .notFound
                 continue
             }
-            let connected = files.filter { HookFile.read($0.url)?.contains(HookHelper.marker) ?? false }
+            let connected = files.filter { HookFile.isConnected($0.url) }
             if connected.isEmpty {
                 next[tool] = .notConnected
             } else {
@@ -118,6 +119,9 @@ public final class AgentConnector {
         case .cursor:
             guard AccountFinder.hasCursor(home: home) else { return [] }
             return [Target(url: home.appending(path: ".cursor/hooks.json"), kind: .cursor)]
+        case .devin:
+            guard AccountFinder.hasDevin(home: home) else { return [] }
+            return [Target(url: AccountFinder.devinConfigFile(home: home), kind: .devin)]
         }
     }
 
@@ -139,7 +143,7 @@ public final class AgentConnector {
 /// Reads and edits one hook settings file, keeping everything that isn't PancakeNotch's.
 enum HookFile {
     enum Kind: String {
-        case claude, codex, cursor
+        case claude, codex, cursor, devin
     }
 
     struct Problem: Error {
@@ -160,6 +164,12 @@ enum HookFile {
         case .cursor:
             [("sessionStart", false), ("beforeSubmitPrompt", false), ("afterShellExecution", false),
              ("afterFileEdit", false), ("stop", false), ("sessionEnd", false)]
+        case .devin:
+            // Devin has no background hooks: each one runs before it carries on, so the helper answers
+            // these at once. PreToolUse and PostToolUse give the current step, and show that a request
+            // answered in Devin's own window was settled.
+            [("UserPromptSubmit", false), ("PreToolUse", false), ("PermissionRequest", true), ("PostToolUse", false),
+             ("Stop", false), ("SessionEnd", false)]
         }
     }
 
@@ -196,16 +206,45 @@ enum HookFile {
         if kind == .cursor, root["version"] == nil, !hooks.isEmpty { root["version"] = 1 }
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        // Writing a fresh copy would loosen a private file (Devin keeps its settings readable only by
+        // the user): keep the old permissions.
+        // A new Devin settings file starts private too, as Devin makes it.
+        let kept = (try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions]
+        let permissions: Any? = kept ?? (kind == .devin ? 0o600 : nil)
         try data.write(to: url, options: .atomic)
+        if let permissions { try? fm.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path) }
     }
 
-    /// A matcher group (Claude, Codex) or a plain hook (Cursor) without PancakeNotch's entries; nil when
-    /// nothing else was in it.
+    /// Whether the file holds one of PancakeNotch's hook entries.
+    static func isConnected(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url),
+              let hooks = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["hooks"] as? [String: Any] else { return false }
+        return hooks.values.contains { value in
+            (value as? [Any] ?? []).contains { group in
+                guard let group = group as? [String: Any] else { return false }
+                if let command = group["command"] as? String { return isOurs(command) }
+                return (group["hooks"] as? [Any] ?? []).contains { isOurs(($0 as? [String: Any])?["command"] as? String) }
+            }
+        }
+    }
+
+    /// Exactly the command `entry` writes: `'<folder>/pancakenotch-hook' <tool> <event>`. A user's own
+    /// hook that merely mentions the helper's name stays theirs.
+    static func isOurs(_ command: String?) -> Bool {
+        guard let command, command.hasPrefix("'"),
+              let end = command.range(of: "/\(HookHelper.marker)' ", options: .backwards) else { return false }
+        let words = command[end.upperBound...].split(separator: " ", omittingEmptySubsequences: false)
+        return words.count == 2 && Kind(rawValue: String(words[0])) != nil
+            && !words[1].isEmpty && words[1].allSatisfy { $0.isASCII && $0.isLetter }
+    }
+
+    /// A matcher group (Claude, Codex, Devin) or a plain hook (Cursor) without PancakeNotch's entries; nil
+    /// when nothing else was in it.
     private static func removingOurs(_ value: Any) -> Any? {
         guard var group = value as? [String: Any] else { return value }
-        if let command = group["command"] as? String { return command.contains(HookHelper.marker) ? nil : group }
+        if let command = group["command"] as? String { return isOurs(command) ? nil : group }
         guard let handlers = group["hooks"] as? [Any] else { return group }
-        let kept = handlers.filter { (($0 as? [String: Any])?["command"] as? String)?.contains(HookHelper.marker) != true }
+        let kept = handlers.filter { !isOurs(($0 as? [String: Any])?["command"] as? String) }
         if kept.isEmpty { return nil }
         group["hooks"] = kept
         return group
@@ -226,6 +265,11 @@ enum HookFile {
                 handler["async"] = true
             }
             return ["hooks": [handler]]
+        case .devin:
+            // Devin's own format matches Claude Code's, without `async` (timeouts are in seconds too).
+            var handler: [String: Any] = ["type": "command", "command": command]
+            handler["timeout"] = waits ? HookHelper.answerTimeout : HookHelper.quickTimeout
+            return ["matcher": "", "hooks": [handler]]
         }
     }
 }
