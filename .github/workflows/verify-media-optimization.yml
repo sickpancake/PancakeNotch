@@ -16,6 +16,7 @@ jobs:
           persist-credentials: false
       - shell: bash
         run: |
+          brew install ripgrep
           export TLA2TOOLS="$RUNNER_TEMP/tla2tools.jar"
           curl --fail --silent --show-error --location --retry 3 \
             https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar \
