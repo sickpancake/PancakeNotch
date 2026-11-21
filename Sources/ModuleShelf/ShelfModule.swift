@@ -534,7 +534,8 @@ public final class ShelfModule: NotchModule {
 
     /// A new screenshot caught from the screenshot folder (Shelf settings). It goes to the front with a
     /// short note under the notch. It never opens a card by itself: one already on the Shelf is left
-    /// alone, and with no room the note says so. Returns false when the file couldn't be kept (no access).
+    /// alone, and with no room the note says so — the Shelf's full card when the notch is open.
+    /// Returns false when the file couldn't be kept (no access).
     @discardableResult
     func catchScreenshot(_ url: URL) -> Bool {
         let input = ShelfInput.file(url, owned: false)
@@ -545,7 +546,12 @@ public final class ShelfModule: NotchModule {
             return true
         }
         guard !store.isFull else {
-            showPeek(.screenshotNoRoom)
+            // The notch is open: the Shelf's own full card says so (and the screenshot waits for room).
+            if notch?.state == .expanded {
+                offer([input])
+            } else {
+                showPeek(.screenshotNoRoom)
+            }
             return true
         }
         guard case .done(let added) = store.add([input], duplicates: .addAgain), added > 0 else { return false }

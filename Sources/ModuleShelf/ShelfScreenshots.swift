@@ -31,9 +31,9 @@ public final class ShelfScreenshots {
     @ObservationIgnored private var folderWatcher: FolderWatcher?
     @ObservationIgnored private var watchedFolder: String?
     @ObservationIgnored private var preferencesWatcher: FileChangeWatcher?
-    /// Screenshots already offered, so a later change to the same file (macOS adds its details in
-    /// steps) doesn't add it again after it was removed.
-    @ObservationIgnored private var caught: [String] = []
+    /// Screenshots already offered (by file identity: a rename is still the same file), so a later
+    /// change to the same file (macOS adds its details in steps) doesn't add it again after it was removed.
+    @ObservationIgnored private var caught: [NSObject] = []
     @ObservationIgnored private let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.screenshots", qos: .utility)
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "shelf")
 
@@ -145,8 +145,10 @@ public final class ShelfScreenshots {
     /// New screenshots in the watched folder, oldest first.
     func arrived(_ urls: [URL]) {
         guard isRunning, let shelf else { return }
-        for url in urls where !caught.contains(url.path) {
-            caught.append(url.path)
+        for url in urls {
+            guard let identity = ScreenshotLocation.fileIdentity(url),
+                  !caught.contains(where: { $0.isEqual(identity) }) else { continue }
+            caught.append(identity)
             if caught.count > 50 { caught.removeFirst(caught.count - 50) }
             // A screenshot read and kept means access works (it may have been allowed since).
             let kept = shelf.catchScreenshot(url)
@@ -245,6 +247,11 @@ public struct ScreenshotLocation: Equatable, Sendable {
               values.isRegularFile == true, values.isHidden != true,
               isMarkedAsScreenshot(url) else { return nil }
         return values.creationDate
+    }
+
+    /// The file's identity, so a rename within the freshness window isn't caught a second time.
+    static func fileIdentity(_ url: URL) -> NSObject? {
+        (try? url.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier as? NSObject
     }
 
     static func isMarkedAsScreenshot(_ url: URL) -> Bool {

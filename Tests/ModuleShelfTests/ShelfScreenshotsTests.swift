@@ -170,6 +170,25 @@ struct ShelfScreenshotsTests {
         #expect(module.prompt == nil)
     }
 
+    /// With the notch open and the Shelf full, the Shelf's own full card says so instead, and the
+    /// screenshot waits for room.
+    @Test func showsTheFullCardWhileTheNotchIsOpen() throws {
+        let fixture = try ShelfFixture()
+        let folder = try ScreenshotFolder()
+        let (module, notch) = makeModule(fixture)
+        module.offer(try fixture.files(ShelfStore.capacity))
+        notch.open()
+        #expect(module.catchScreenshot(try folder.add("Screenshot.png")))
+        #expect(module.store.items.count == ShelfStore.capacity)
+        #expect(module.peekNote == nil)
+        #expect(notch.peekModuleID == nil)
+        guard case .full(let pending) = module.prompt else {
+            Issue.record("Expected the Shelf's full card")
+            return
+        }
+        #expect(pending.count == 1)
+    }
+
     /// With the notch open the new tile shows by itself: no strip.
     @Test func noPeekWhileTheNotchIsOpen() throws {
         let fixture = try ShelfFixture()
@@ -238,6 +257,25 @@ struct ShelfScreenshotsTests {
         module.store.clear()
         catcher.arrived([shot])
         #expect(module.store.items.isEmpty)
+    }
+
+    /// Renaming a just-caught screenshot isn't a new screenshot: the file's identity, not its path,
+    /// is what was already offered.
+    @Test func aRenameIsntCaughtTwice() throws {
+        let fixture = try ShelfFixture()
+        let folder = try ScreenshotFolder()
+        let (module, _) = makeModule(fixture)
+        let location = ScreenshotLocation(folder: folder.url, savesFiles: true)
+        let catcher = ShelfScreenshots(settings: module.settings, readLocation: { location }, preferencesFile: nil)
+        module.settings.catchesScreenshots = true
+        catcher.follow(module)
+        let shot = try folder.add("Screenshot.png")
+        catcher.arrived([shot])
+        #expect(module.store.items.count == 1)
+        let renamed = folder.url.appending(path: "Renamed shot.png")
+        try FileManager.default.moveItem(at: shot, to: renamed)
+        catcher.arrived([renamed])
+        #expect(module.store.items.count == 1)
     }
 
     /// Without the Shelf (switched off) nothing is caught.
