@@ -18,3 +18,4 @@ clang ${SOURCE_FLAGS[@]+"${SOURCE_FLAGS[@]}"} -fobjc-arc -Wno-deprecated-declara
   -o "$OUT/closed-session-tests"
 ADAPTER_TEST_RETIRED_FIELDS=1 MEDIAREMOTEADAPTER_OPTION_no_diff=1 "$OUT/closed-session-tests"
 MEDIAREMOTEADAPTER_OPTION_no_diff=1 "$OUT/closed-session-tests"
+ADAPTER_TEST_ARTWORK=1 "$OUT/closed-session-tests"
