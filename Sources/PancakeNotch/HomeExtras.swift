@@ -181,15 +181,13 @@ private struct HomeBatteryWidget: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(localized: "Battery, \(Self.percent(power)), \(Self.source(power))",
                                         comment: "Battery widget, spoken")))
-        .onAppear { reading?.refresh() }
-        .onChange(of: isLive, initial: true) { _, live in
-            if live {
-                reading?.refresh()
-                watcher.start { reading?.refresh() }
-            } else {
-                watcher.stop()
-            }
+        // Every appeared tile keeps the shared state current: live and non-live copies alike refresh
+        // on power-source notifications, so an editor or picker tile never freezes at an old reading.
+        .onChange(of: isLive, initial: true) { _, _ in
+            reading?.refresh()
+            watcher.start { reading?.refresh() }
         }
+        .onAppear { reading?.refresh() }
         .onDisappear { watcher.stop() }
     }
 
