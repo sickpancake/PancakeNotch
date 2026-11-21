@@ -308,19 +308,6 @@ struct NotchGlyph: View {
     }
 }
 
-/// A black notch panel the way it looks when open: ears flaring out at the top, rounded below.
-struct NotchPanelShape: View {
-    var body: some View {
-        NotchShape(topRadius: 12, bottomRadius: 22)
-            .fill(.black)
-            .overlay {
-                NotchShape(topRadius: 12, bottomRadius: 22)
-                    .stroke(.white.opacity(0.07), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.6), radius: 16, y: 8)
-    }
-}
-
 /// The app's name and version, as shown in the window.
 enum AppInfo {
     static var version: String {
