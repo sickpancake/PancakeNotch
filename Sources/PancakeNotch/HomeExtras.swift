@@ -58,11 +58,12 @@ enum HomeStatisticsMetric: String, CaseIterable, Identifiable {
 enum HomeExtras {
     /// The real ones: the battery from IOKit, the statistics from the app's database.
     static func live(statistics: StatsStore, home: HomeSettings, readPower: @escaping () -> PowerState) -> HomeExtraWidgets {
+        let battery = HomeBatteryReading(read: readPower)
         let reading = HomeStatisticsReading { await statistics.summary(days: 7) }
         return { kind, size, context in
             switch kind {
             case .battery:
-                AnyView(HomeBatteryWidget(size: size, isLive: context.isLive, read: readPower))
+                AnyView(HomeBatteryWidget(size: size, isLive: context.isLive, reading: battery))
             case .statistics:
                 AnyView(HomeStatisticsWidget(size: size, isLive: context.isLive,
                                              metric: HomeStatisticsMetric(saved: home.layout.statisticsMetric),
@@ -78,7 +79,8 @@ enum HomeExtras {
         { kind, size, _ in
             switch kind {
             case .battery:
-                AnyView(HomeBatteryWidget(size: size, isLive: false, read: { PowerState(onBattery: true, percent: 76) }))
+                AnyView(HomeBatteryWidget(size: size, isLive: false,
+                                          fixed: PowerState(onBattery: true, percent: 76)))
             case .statistics:
                 AnyView(HomeStatisticsWidget(size: size, isLive: false,
                                              metric: HomeStatisticsMetric(saved: home?.layout.statisticsMetric),
@@ -100,18 +102,42 @@ enum HomeExtras {
 
 // MARK: Battery
 
-/// Small: the charge and whether it's on the battery. Medium: a ring with the same. It reads the battery
-/// when it comes on screen and then only when macOS says the power changed (no polling, AGENTS.md rule 2).
+/// The Battery tiles' power state for one Home: read once here and then when a tile appears or macOS
+/// says the power changed (no polling, no read inside `body`, AGENTS.md rule 2). Sharing it across
+/// tiles means a tile that appears for the first time — a page scrolled to, a notch reopened —
+/// already has the state, instead of showing the fallback for a frame.
+@MainActor
+@Observable
+final class HomeBatteryReading {
+    private(set) var state: PowerState
+    @ObservationIgnored private let read: () -> PowerState
+
+    init(read: @escaping () -> PowerState) {
+        self.read = read
+        self.state = read()
+    }
+
+    func refresh() {
+        state = read()
+    }
+}
+
+/// Small: the charge and whether it's on the battery. Medium: a ring with the same.
 private struct HomeBatteryWidget: View {
     let size: HomeWidgetSize
     let isLive: Bool
-    let read: () -> PowerState
+    /// The live provider's shared power state; nil for a `fixed` (practice/snapshot) tile.
+    var reading: HomeBatteryReading?
+    /// The state a fixed (practice/snapshot) provider shows: `body` uses it directly because `.onAppear`
+    /// never runs for a view that is rendered but never appears (off-screen `ImageRenderer` sheets).
+    var fixed: PowerState?
 
-    @State private var power: PowerState?
     @State private var watcher = PowerSourceWatcher()
 
     var body: some View {
-        let power = power ?? read()
+        // Never read IOKit in `body`: non-live copies (the editor, the picker, off-screen pages)
+        // re-run it on every layout pass. `reading` is shared and already holds the state.
+        let power = reading?.state ?? fixed ?? .pluggedIn
         Group {
             switch size {
             case .small, .large:
@@ -155,14 +181,13 @@ private struct HomeBatteryWidget: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(localized: "Battery, \(Self.percent(power)), \(Self.source(power))",
                                         comment: "Battery widget, spoken")))
-        .onChange(of: isLive, initial: true) { _, live in
-            if live {
-                self.power = read()
-                watcher.start { self.power = read() }
-            } else {
-                watcher.stop()
-            }
+        // Every appeared tile keeps the shared state current: live and non-live copies alike refresh
+        // on power-source notifications, so an editor or picker tile never freezes at an old reading.
+        .onChange(of: isLive, initial: true) { _, _ in
+            reading?.refresh()
+            watcher.start { reading?.refresh() }
         }
+        .onAppear { reading?.refresh() }
         .onDisappear { watcher.stop() }
     }
 
