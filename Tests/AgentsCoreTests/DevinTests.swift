@@ -189,7 +189,8 @@ struct DevinTests {
         #expect(HookFile.read(file)?.contains("\"z\":1, \"a\":true /* user setting */") == true)
     }
 
-    @Test func repeatedConnectAndDisconnectPreserveDevinConfigFormatting() throws {
+    @Test(arguments: [false, true])
+    func repeatedConnectAndDisconnectPreserveDevinConfigFormatting(trailingComma: Bool) throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = folder.appending(path: "config.json")
@@ -198,7 +199,8 @@ struct DevinTests {
           "hooks": {
             "PreToolUse": [
               {"hooks": [{"command": "./check.sh"}]} // user hook
-            ]
+            ],
+            "Stop": [ {"hooks": [{"command": "./stop.sh"}]}\(trailingComma ? "," : "") /* keep inline */ ]
           }
         }
         """
@@ -435,8 +437,11 @@ struct DevinTests {
         }
     }
 
-    @Test(arguments: [false, true])
-    func rewrittenCommandSettlesTheApprovedParallelExec(olderFinishesFirst: Bool) {
+    @Test(arguments: [
+        "rm -rf ./build", "rm -rf build/", #"rm -rf "build""#,
+        "rm -rf --parallel build", "cd /p && rm -rf build"
+    ], [false, true])
+    func rewrittenCommandSettlesTheApprovedParallelExec(completedCommand: String, olderFinishesFirst: Bool) {
         let center = center()
         let sources = LiveAgentSources(center: center)
         defer { sources.stop() }
@@ -458,7 +463,7 @@ struct DevinTests {
             exec("PostToolUse", "npm test", extra: ["timeout": 1000])
             #expect(center.thread(id)?.status == .needsYou(.permission))
         }
-        exec("PostToolUse", "rm -rf ./build")
+        exec("PostToolUse", completedCommand)
         #expect(center.thread(id)?.status == .working)
         #expect(center.thread(id)?.request == nil)
         if !olderFinishesFirst {

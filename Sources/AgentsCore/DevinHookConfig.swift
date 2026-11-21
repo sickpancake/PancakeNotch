@@ -201,17 +201,26 @@ struct DevinHookConfig {
             }
         }
         guard !adding.isEmpty else { return }
+        let open = tokens[container.lowerBound].lowerBound
         let close = tokens[container.upperBound - 1].lowerBound
-        var line = close
-        while line > 0, bytes[line - 1] == 32 || bytes[line - 1] == 9 { line -= 1 }
-        // Append after any trailing comments so they remain next to the user's last entry.
-        let ownLine = line > 0 && (bytes[line - 1] == 10 || bytes[line - 1] == 13)
-        let indent = ownLine ? String(decoding: bytes[line..<close], as: UTF8.self) : ""
-        let childIndent = indent + "  "
-        let text = adding.map { childIndent + $0.replacingOccurrences(of: "\n", with: "\n" + childIndent) }
-            .joined(separator: ",\n")
-        let addition = (ownLine ? "" : "\n") + text + (trailingComma ? "," : "") + "\n"
-        let position = ownLine ? line : close
+        let position: Int
+        let addition: String
+        let suffix = trailingComma ? "," : ""
+        if byte(container.lowerBound) == 0x5B, !bytes[open..<close].contains(where: { $0 == 10 || $0 == 13 }) {
+            position = close
+            addition = adding.joined(separator: ",") + suffix
+        } else {
+            var line = close
+            while line > 0, bytes[line - 1] == 32 || bytes[line - 1] == 9 { line -= 1 }
+            // Append after any trailing comments so they stay next to the user's last entry.
+            let ownLine = line > 0 && (bytes[line - 1] == 10 || bytes[line - 1] == 13)
+            let indent = ownLine ? String(decoding: bytes[line..<close], as: UTF8.self) : ""
+            let childIndent = indent + "  "
+            let text = adding.map { childIndent + $0.replacingOccurrences(of: "\n", with: "\n" + childIndent) }
+                .joined(separator: ",\n")
+            position = ownLine ? line : close
+            addition = (ownLine ? "" : "\n") + text + suffix + "\n"
+        }
         let separator = kept.last.flatMap { items[$0].comma == nil ? tokens[items[$0].tokens.upperBound - 1].upperBound : nil }
         if let separator, separator != position { edits.append((separator..<separator, [0x2C])) }
         edits.append((position..<position, Array(((separator == position ? "," : "") + addition).utf8)))

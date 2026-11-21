@@ -198,9 +198,10 @@ final class LiveAgentSources {
 
     private func devinToolFinished(_ call: HookEvent.ToolCallKey, threadID id: String) {
         var starts = devinStarts[id] ?? []
-        let index = starts.firstIndex(where: { $0.call == call }) ?? closestDevinStart(to: call, in: starts)
-        let completed = index.map { starts.remove(at: $0) }
         var waiting = waitingInDevin[id] ?? []
+        let index = starts.firstIndex(where: { $0.call == call })
+            ?? closestDevinStart(to: call, in: starts, waiting: Set(waiting.map(\.sequence)))
+        let completed = index.map { starts.remove(at: $0) }
         // Devin exposes neither a call ID nor a denial event. A completed call that started after the
         // permission request is evidence of progress; a parallel call already running is not.
         if let completed {
@@ -221,12 +222,13 @@ final class LiveAgentSources {
         waitingInDevin[id] = waiting.isEmpty ? nil : waiting
     }
 
-    private func closestDevinStart(to call: HookEvent.ToolCallKey, in starts: [DevinToolStart]) -> Int? {
-        // A matching exec command is stronger evidence than shared shell settings. Fall back to input
-        // overlap, breaking unresolved ties oldest first.
+    private func closestDevinStart(to call: HookEvent.ToolCallKey, in starts: [DevinToolStart], waiting: Set<Int>) -> Int? {
+        // Devin supplies no call ID. For rewritten input, prefer more unchanged fields, then a
+        // start waiting on Devin's dialog. Indistinguishable starts otherwise settle oldest first.
         var best: (index: Int, score: (Int, Int))?
         for (index, start) in starts.enumerated() where start.call.sameTool(as: call) {
-            let score = (start.call.matchesExecCommand(of: call) ? 1 : 0, start.call.matchingInputFields(with: call))
+            let hasWaitingRequest = start.requestSequence.map(waiting.contains) ?? false
+            let score = (start.call.matchingInputFields(with: call), hasWaitingRequest ? 1 : 0)
             if let previous = best?.score, score <= previous { continue }
             best = (index, score)
         }
