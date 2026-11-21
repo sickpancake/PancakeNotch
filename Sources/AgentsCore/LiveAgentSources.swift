@@ -222,11 +222,13 @@ final class LiveAgentSources {
     }
 
     private func closestDevinStart(to call: HookEvent.ToolCallKey, in starts: [DevinToolStart]) -> Int? {
-        // Inputs can change between hooks. Prefer unchanged fields over arrival order, breaking ties oldest first.
-        var best: (index: Int, score: Int)?
+        // A matching exec command is stronger evidence than shared shell settings. Fall back to input
+        // overlap, breaking unresolved ties oldest first.
+        var best: (index: Int, score: (Int, Int))?
         for (index, start) in starts.enumerated() where start.call.sameTool(as: call) {
-            let score = start.call.matchingInputFields(with: call)
-            if score > (best?.score ?? -1) { best = (index, score) }
+            let score = (start.call.matchesExecCommand(of: call) ? 1 : 0, start.call.matchingInputFields(with: call))
+            if let previous = best?.score, score <= previous { continue }
+            best = (index, score)
         }
         return best?.index
     }

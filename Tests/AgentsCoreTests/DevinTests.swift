@@ -435,6 +435,38 @@ struct DevinTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func rewrittenCommandSettlesTheApprovedParallelExec(olderFinishesFirst: Bool) {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        func exec(_ hook: String, _ command: String, requestID: Int? = nil, extra: [String: Any] = [:]) {
+            let input = ["command": command, "shell_id": "main"].merging(extra) { _, value in value }
+            sources.handle(devinEvent(hook, ["tool_name": "exec", "tool_input": input], requestID: requestID))
+        }
+
+        exec("PreToolUse", "npm test")
+        exec("PreToolUse", "rm -rf build")
+        exec("PermissionRequest", "rm -rf build", requestID: 16)
+        sources.handBack(threadID: id)
+        #expect(center.thread(id)?.status == .needsYou(.permission))
+        #expect(center.thread(id)?.canAnswer == false)
+
+        if olderFinishesFirst {
+            exec("PostToolUse", "npm test", extra: ["timeout": 1000])
+            #expect(center.thread(id)?.status == .needsYou(.permission))
+        }
+        exec("PostToolUse", "rm -rf ./build")
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+        if !olderFinishesFirst {
+            exec("PostToolUse", "npm test")
+            #expect(center.thread(id)?.status == .working)
+        }
+    }
+
     @Test func identicalParallelCompletionDoesNotSettleTheLaterRequest() {
         let center = center()
         let sources = LiveAgentSources(center: center)
