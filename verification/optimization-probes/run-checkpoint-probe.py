@@ -23,18 +23,22 @@ def build(repo, rev, role, directory, swift):
     stats.mkdir(parents=True)
     probe.mkdir()
     extension = '.define("BASELINE")' if role == "base" else ""
+    sqlite_target = '.systemLibrary(name: "SQLite3"),' if linux else ""
+    sqlite_dependency = '"SQLite3"' if linux else ""
+    probe_dependencies = '"Stats", "SQLite3"' if linux else '"Stats"'
     (directory / "Package.swift").write_text(f"""// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(name: "CheckpointProbe", platforms: [.macOS(.v15)], targets: [
-    .systemLibrary(name: "SQLite3"),
-    .target(name: "Stats", dependencies: ["SQLite3"]),
-    .executableTarget(name: "Probe", dependencies: ["Stats", "SQLite3"], swiftSettings: [{extension}])
+    {sqlite_target}
+    .target(name: "Stats", dependencies: [{sqlite_dependency}]),
+    .executableTarget(name: "Probe", dependencies: [{probe_dependencies}], swiftSettings: [{extension}])
 ])
 """)
-    sqlite = sources / "SQLite3"
-    sqlite.mkdir()
-    (sqlite / "module.modulemap").write_text('module SQLite3 [system] { header "sqlite.h" link "sqlite3" export * }\n')
-    (sqlite / "sqlite.h").write_text("""#include <sqlite3.h>
+    if linux:
+        sqlite = sources / "SQLite3"
+        sqlite.mkdir()
+        (sqlite / "module.modulemap").write_text('module SQLite3 [system] { header "sqlite.h" link "sqlite3" export * }\n')
+        (sqlite / "sqlite.h").write_text("""#include <sqlite3.h>
 #ifdef __linux__
 #include <stddef.h>
 void *memmem(const void *haystack, size_t haystack_count, const void *needle, size_t needle_count);
