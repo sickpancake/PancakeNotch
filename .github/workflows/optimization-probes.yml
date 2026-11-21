@@ -41,3 +41,14 @@ jobs:
         run: |
           python3 verification/optimization-probes/run-checkpoint-probe.py . 2bd2e2e "$GITHUB_SHA" --runs 11 \
             | tee -a "$GITHUB_STEP_SUMMARY"
+  codex:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - shell: bash
+        run: |
+          python3 verification/optimization-probes/benchmark_codex_prefix.py --base 2bd2e2e --candidate "$GITHUB_SHA" --tests \
+            | tee -a "$GITHUB_STEP_SUMMARY"
