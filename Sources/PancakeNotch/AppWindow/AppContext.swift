@@ -41,6 +41,8 @@ final class AppContext {
     let home: HomeSettings
     let shelfSettings: ShelfSettings
     let shelfStore: ShelfStore
+    /// Where new screenshots are caught from, for Shelf settings. Nil in snapshots.
+    let screenshots: ShelfScreenshots?
     let nowPlayingSettings: NowPlayingSettings
     /// What's playing, shared with the real notch (one helper process).
     let nowPlaying: NowPlayingCenter
@@ -87,8 +89,10 @@ final class AppContext {
         keepAwakeSettings: KeepAwakeSettings,
         keepAwake: KeepAwakeCenter,
         makeLiveModules: @escaping () -> [any NotchModule],
-        detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() }
+        detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() },
+        screenshots: ShelfScreenshots? = nil
     ) {
+        self.screenshots = screenshots
         self.preferences = preferences
         self.shortcuts = shortcuts
         self.stats = stats

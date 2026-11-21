@@ -431,17 +431,35 @@ private struct ShelfConvertFailedCard: View {
 
 // MARK: Under the notch
 
-/// "✓ Converted Report.pdf" in the strip under the notch, when a conversion ends while it's closed.
-struct ShelfConvertPeek: View {
-    let text: String
-    let failed: Bool
+/// What the strip under the notch says for the Shelf while it's closed.
+struct ShelfPeekNote: Equatable {
+    var text: String
+    var symbol: String
+
+    /// A new screenshot was caught (Shelf settings).
+    static var screenshotAdded: ShelfPeekNote {
+        ShelfPeekNote(text: String(localized: "Screenshot added to the Shelf", comment: "Under the notch, after a new screenshot was caught"),
+                      symbol: "camera.viewfinder")
+    }
+
+    /// A new screenshot arrived while the Shelf holds its 20 items.
+    static var screenshotNoRoom: ShelfPeekNote {
+        ShelfPeekNote(text: String(localized: "Shelf is full, screenshot not added", comment: "Under the notch, when a new screenshot didn't fit"),
+                      symbol: "exclamationmark.circle.fill")
+    }
+}
+
+/// "✓ Converted Report.pdf" in the strip under the notch, when a conversion ends while it's closed, or
+/// "Screenshot added to the Shelf".
+struct ShelfPeekStrip: View {
+    let note: ShelfPeekNote
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: failed ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+            Image(systemName: note.symbol)
                 .font(.system(size: 11, weight: .semibold))
                 .accessibilityHidden(true)
-            Text(text)
+            Text(note.text)
                 .font(.system(size: 11, weight: .semibold))
         }
         .foregroundStyle(.white)

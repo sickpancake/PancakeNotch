@@ -160,8 +160,7 @@ struct ShelfConvertTests {
         #expect(notch.layout.panelHeight == .regular)
 
         try await waitUntil { module.conversion == nil }
-        #expect(module.convertPeekText == ShelfModule.doneText(files: [URL(fileURLWithPath: "/Photo.png")]))
-        #expect(!module.convertPeekFailed)
+        #expect(module.peekNote == ShelfPeekNote(text: ShelfModule.doneText(files: [URL(fileURLWithPath: "/Photo.png")]), symbol: "checkmark.circle.fill"))
         #expect(FileManager.default.fileExists(atPath: fixture.root.appending(path: "Docs/Photo.png").path))
     }
 

@@ -6,6 +6,7 @@ so write them for people using the app: short, plain, no code talk.
 ## Unreleased
 
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.
+- **Screenshots on the Shelf.** Turn on Catch new screenshots in Shelf settings and every new screenshot lands on the Shelf, with a short note under the notch, ready to drag into a chat, AirDrop or convert. It uses the folder your Mac saves screenshots to.
 
 ## 0.4.0 — beta
 
