@@ -12,7 +12,6 @@ struct HomeEditorView: View {
     let context: AppContext
     @State private var isPageVisible = false
     @State private var practice = PracticeSet()
-    @State private var history = HomeHistory()
     @State private var page = 0
     @State private var drag: HomeEditorDrag?
     /// Where the pointer is while dragging. Kept apart from `drag` so a move only redraws the floating
@@ -118,13 +117,13 @@ struct HomeEditorView: View {
             }
             // While you type a search, ⌘Z and ⇧⌘Z undo the typing instead of a Home change.
             .keyboardShortcut(isSearching ? nil : KeyboardShortcut("z", modifiers: .command))
-            .disabled(!history.canUndo)
+            .disabled(!home.history.canUndo)
             .help(Text("Undo (⌘Z)"))
             Button { focusedWidget = nil; redo() } label: {
                 Label(String(localized: "Redo"), systemImage: "arrow.uturn.forward")
             }
             .keyboardShortcut(isSearching ? nil : KeyboardShortcut("z", modifiers: [.command, .shift]))
-            .disabled(!history.canRedo)
+            .disabled(!home.history.canRedo)
             .help(Text("Redo (⇧⌘Z)"))
             Menu {
                 Section(String(localized: "Start from a layout")) {
@@ -527,7 +526,7 @@ struct HomeEditorView: View {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25)) {
             drag = nil
             if let slot = current.landing {
-                let refusal = home.edit(&history) { layout in
+                let refusal = home.edit { layout in
                     current.fromGallery ? layout.inserting(current.kind, size: current.size, at: slot) : layout.moving(current.kind, to: slot)
                 }
                 if let refusal { show(refusal.message) }
@@ -568,7 +567,7 @@ struct HomeEditorView: View {
     private func change(_ edit: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) -> Bool {
         var accepted = true
         withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.25)) {
-            if let refusal = home.edit(&history, edit) {
+            if let refusal = home.edit(edit) {
                 show(refusal.message)
                 accepted = false
             }
@@ -583,12 +582,12 @@ struct HomeEditorView: View {
     }
 
     private func undo() {
-        guard let previous = history.undo(current: home.layout) else { return }
+        guard let previous = home.history.undo(current: home.layout) else { return }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { home.layout = previous }
     }
 
     private func redo() {
-        guard let next = history.redo(current: home.layout) else { return }
+        guard let next = home.history.redo(current: home.layout) else { return }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { home.layout = next }
     }
 
