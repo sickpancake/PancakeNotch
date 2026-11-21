@@ -407,6 +407,34 @@ struct DevinTests {
         #expect(center.thread(id)?.status == .working)
     }
 
+    @Test(arguments: [false, true])
+    func rewrittenCompletionsDistinguishParallelEdits(olderFinishesFirst: Bool) {
+        let center = center()
+        let sources = LiveAgentSources(center: center)
+        defer { sources.stop() }
+        let id = "devin:devin-1"
+
+        func edit(_ hook: String, _ file: String, replaceAll: Bool = false, requestID: Int? = nil) {
+            let input: [String: Any] = ["file_path": "/p/\(file).swift", "replace_all": replaceAll]
+            sources.handle(devinEvent(hook, ["tool_name": "edit", "tool_input": input], requestID: requestID))
+        }
+
+        edit("PreToolUse", "older")
+        edit("PreToolUse", "approved")
+        edit("PermissionRequest", "approved", requestID: 15)
+        if olderFinishesFirst {
+            edit("PostToolUse", "older", replaceAll: true)
+            #expect(center.thread(id)?.status == .needsYou(.permission))
+        }
+        edit("PostToolUse", "approved", replaceAll: true)
+        #expect(center.thread(id)?.status == .working)
+        #expect(center.thread(id)?.request == nil)
+        if !olderFinishesFirst {
+            edit("PostToolUse", "older", replaceAll: true)
+            #expect(center.thread(id)?.status == .working)
+        }
+    }
+
     @Test func identicalParallelCompletionDoesNotSettleTheLaterRequest() {
         let center = center()
         let sources = LiveAgentSources(center: center)

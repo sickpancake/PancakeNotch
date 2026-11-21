@@ -40,9 +40,28 @@ struct HookEvent: Sendable {
         let promptID: String?
         let toolName: String
         let inputDigest: SHA256.Digest
+        let inputFields: [String: SHA256.Digest]
+
+        init?(promptID: String?, toolName: String, input: [String: Any]) {
+            guard let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) else { return nil }
+            self.promptID = promptID
+            self.toolName = toolName
+            inputDigest = SHA256.hash(data: data)
+            inputFields = input.compactMapValues { value in
+                guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+                else { return nil }
+                return SHA256.hash(data: data)
+            }
+        }
 
         func sameTool(as other: Self) -> Bool {
             promptID == other.promptID && toolName == other.toolName
+        }
+
+        func matchingInputFields(with other: Self) -> Int {
+            inputFields.reduce(0) { count, field in
+                count + (field.value == other.inputFields[field.key] ? 1 : 0)
+            }
         }
     }
 
@@ -93,9 +112,8 @@ struct HookEvent: Sendable {
         model = payload["model"] as? String
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
-            if tool == .devin, let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) {
-                toolCall = ToolCallKey(promptID: payload["prompt_id"] as? String, toolName: toolName,
-                                      inputDigest: SHA256.hash(data: data))
+            if tool == .devin {
+                toolCall = ToolCallKey(promptID: payload["prompt_id"] as? String, toolName: toolName, input: input)
             }
             summary = AgentSteps.request(tool: toolName, input: input)
             if name == "PreToolUse" || name == "PostToolUse" { step = AgentSteps.step(tool: toolName, input: input) }

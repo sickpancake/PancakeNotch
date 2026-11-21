@@ -198,7 +198,7 @@ final class LiveAgentSources {
 
     private func devinToolFinished(_ call: HookEvent.ToolCallKey, threadID id: String) {
         var starts = devinStarts[id] ?? []
-        let index = starts.firstIndex(where: { $0.call == call }) ?? starts.firstIndex(where: { $0.call.sameTool(as: call) })
+        let index = starts.firstIndex(where: { $0.call == call }) ?? closestDevinStart(to: call, in: starts)
         let completed = index.map { starts.remove(at: $0) }
         var waiting = waitingInDevin[id] ?? []
         // Devin exposes neither a call ID nor a denial event. A completed call that started after the
@@ -219,6 +219,16 @@ final class LiveAgentSources {
         }
         devinStarts[id] = starts.isEmpty ? nil : starts
         waitingInDevin[id] = waiting.isEmpty ? nil : waiting
+    }
+
+    private func closestDevinStart(to call: HookEvent.ToolCallKey, in starts: [DevinToolStart]) -> Int? {
+        // Inputs can change between hooks. Prefer unchanged fields over arrival order, breaking ties oldest first.
+        var best: (index: Int, score: Int)?
+        for (index, start) in starts.enumerated() where start.call.sameTool(as: call) {
+            let score = start.call.matchingInputFields(with: call)
+            if score > (best?.score ?? -1) { best = (index, score) }
+        }
+        return best?.index
     }
 
     /// Something else happened in the thread: a waiting request was answered elsewhere (T3 Code's own
