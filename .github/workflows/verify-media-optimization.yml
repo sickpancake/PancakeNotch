@@ -1,0 +1,23 @@
+name: Verify media session
+
+on:
+  push:
+    branches: [verify-optimization-media-session]
+
+permissions:
+  contents: read
+
+jobs:
+  native-replays-and-model:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - shell: bash
+        run: |
+          export TLA2TOOLS="$RUNNER_TEMP/tla2tools.jar"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar \
+            --output "$TLA2TOOLS"
+          ./scripts/verify-media-session.sh
