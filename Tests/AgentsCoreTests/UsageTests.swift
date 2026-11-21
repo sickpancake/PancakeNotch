@@ -243,6 +243,82 @@ struct UsageLogTests {
         #expect(end == UInt64(text.utf8.count + 6))
     }
 
+    @Test func codexPrefixFilteringPreservesUsageAndByteOffsets() throws {
+        let file = try temporaryFolder().appending(path: "rollout-test.jsonl")
+        let chunk = 256 * 1024
+        let cap = 2 * chunk
+        let beforeEmoji = #"{"padding":""#
+        func padded(_ head: String, _ tail: String, to length: Int) -> String {
+            head + String(repeating: "a", count: length - head.utf8.count - tail.utf8.count) + tail
+        }
+        func tokens(markerEndsAt: Int, input: Int, length: Int) -> String {
+            let prefix = padded(beforeEmoji + "😀",
+                                #"","timestamp":"2026-10-17T19:41:48Z","type":"event_msg","payload":{"type":"token_count""#,
+                                to: markerEndsAt)
+            return padded(prefix + #","info":{"total_token_usage":{"input_tokens":\#(input),"total_tokens":\#(input)}},"padding":""#,
+                          #""}}"#, to: length)
+        }
+        // The next line's first emoji byte is the last byte in the first chunk.
+        let meta = padded(#"{"type":"session_meta","payload":{"id":"thread","padding":""#, #""}}"#,
+                          to: chunk - beforeEmoji.utf8.count - 2)
+        let accepted = tokens(markerEndsAt: 200, input: 8, length: cap)
+        let rejected = tokens(markerEndsAt: 201, input: 99, length: 1024)
+        let context = #"{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"#
+        let oversized = tokens(markerEndsAt: 200, input: 999, length: cap + 1)
+        let text = [meta, accepted, rejected, context, oversized].joined(separator: "\n") + "\n"
+        try Data(text.utf8).write(to: file)
+
+        typealias Filter = (length: Int, accepts: (Data) -> Bool)
+        func read(filter: Filter?) -> (UInt64, [UInt64], [AIUsageRecord], CodexUsageLog) {
+            var offsets: [UInt64] = []
+            var records: [AIUsageRecord] = []
+            var usage = CodexUsageLog()
+            let end = JSONLines.read(file, from: 0, maxLine: cap, spanningLineFilter: filter) { line, offset in
+                offsets.append(offset)
+                if let record = usage.record(line, account: "x", fallbackThread: "file") { records.append(record) }
+            }
+            return (end, offsets, records, usage)
+        }
+        let (baselineEnd, baselineOffsets, baselineRecords, baselineUsage) = read(filter: nil)
+        let (end, offsets, records, usage) = read(filter: CodexUsageLog.spanningLineFilter)
+        let acceptedStart = UInt64(meta.utf8.count + 1)
+        let rejectedStart = acceptedStart + UInt64(cap + 1)
+        let contextStart = rejectedStart + UInt64(rejected.utf8.count + 1)
+        #expect(baselineOffsets == [0, acceptedStart, rejectedStart, contextStart])
+        #expect(offsets == [0, acceptedStart, contextStart])
+        #expect(end == baselineEnd && end == UInt64(text.utf8.count))
+        #expect(usage == baselineUsage && usage.thread == "thread" && usage.model == "gpt-6.1-sol")
+        #expect(records == baselineRecords && records.map(\.input) == [8])
+    }
+
+    @Test func rejectedSpanningLineCommitsOnlyAtItsNewline() throws {
+        let file = try temporaryFolder().appending(path: "rollout-test.jsonl")
+        let rejected = String(repeating: "x", count: 300_000)
+        let prefix = "first\n" + rejected
+        try Data(prefix.utf8).write(to: file)
+        let filter = (length: 200, accepts: { (prefix: Data) in prefix.first != UInt8(ascii: "x") })
+        var offsets: [UInt64] = []
+        let partial = JSONLines.read(file, from: 0, spanningLineFilter: filter) { _, offset in offsets.append(offset) }
+        #expect(offsets == [0])
+        #expect(partial == 6)
+
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("\nlast\n".utf8))
+        try handle.close()
+        var checks = 0
+        let cancelled = JSONLines.read(file, from: partial, spanningLineFilter: filter, shouldContinue: {
+            checks += 1
+            return checks < 3 // Stop at the rejected line's newline, in the second chunk.
+        }) { _, offset in offsets.append(offset) }
+        #expect(cancelled == partial)
+        #expect(offsets == [0])
+
+        let end = JSONLines.read(file, from: cancelled, spanningLineFilter: filter) { _, offset in offsets.append(offset) }
+        #expect(offsets == [0, UInt64(prefix.utf8.count + 1)])
+        #expect(end == UInt64(prefix.utf8.count + 6))
+    }
+
     @Test func oversizedLinesAreSkippedWholeAndCancellationResumesOnALine() throws {
         let file = try temporaryFolder().appending(path: "large.jsonl")
         let text = "first\n" + String(repeating: "a", count: 300_000) + "\nlast\n"
