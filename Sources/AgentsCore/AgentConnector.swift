@@ -20,6 +20,8 @@ public final class AgentConnector {
     public private(set) var states: [AgentTool: State] = [:]
     /// Why the last Connect or Disconnect didn't work, in plain words.
     public private(set) var problem: String?
+    /// Devin's cloud sessions, connected with a token rather than hooks (issue #55). Nil in previews.
+    public var devinCloud: DevinCloud?
 
     private let home: URL
     private let settings: AgentsSettings

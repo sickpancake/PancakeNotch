@@ -48,6 +48,8 @@ public enum AgentsSnapshot {
             if let thread = previewing.center.threads.first(where: { $0.status == .working }) { previewing.previewForSnapshot(thread.id) }
         }
         row(.expanded, agents(AgentsCenter(settings: emptySettings)))
+        // Devin cloud sessions (issue #55): asking, working, failed and finished with a pull request.
+        row(.expanded, agents(.practiceCloud()))
         // A request to change a file: Review in the list, then the whole change in the taller notch.
         row(.expanded, agents(.practiceWithEdit()))
         let reviewing = agents(.practiceWithEdit())
@@ -62,6 +64,13 @@ public enum AgentsSnapshot {
         let everyone = UsageCenter.practice()
         everyone.selection = .all
         row(.expanded, usage(everyone))
+        // Devin cloud: its ACUs, and its line under all accounts.
+        let devin = UsageCenter.practiceWithDevin()
+        devin.selection = .account(AgentAccount.devinCloud.id)
+        row(.expanded, usage(devin))
+        let devinAll = UsageCenter.practiceWithDevin()
+        devinAll.selection = .all
+        row(.expanded, usage(devinAll))
         let withMenu = usage()
         row(.expanded, withMenu) { _ in withMenu.openMenu() }
         row(.compact, usage())

@@ -348,6 +348,14 @@
           <li><strong>Devin</strong> (Devin CLI and the Devin app): <span class="path">~/.config/devin/config.json</span></li>
         </ul>
         <p><strong>Disconnect</strong> removes only that helper and leaves everything else in the file as it was. Cursor gets status only: no Allow or Deny.</p>
+        <h3 id="agents-devin-cloud">Devin cloud sessions</h3>
+        <p>Devin sessions that run on Devin's servers (started from the web, Slack or anywhere else) never touch your Mac, so no helper can report them. Instead, PancakeNotch can ask Devin about them with a key you give it:</p>
+        <ol class="how">
+          <li><span>In Devin, open <strong>Settings › Devin API › Personal access tokens</strong> and make a token. It starts with <span class="path">cog_</span>.</span></li>
+          <li><span>In PancakeNotch, open <strong>Modules › Agents settings</strong>, click <strong>Connect…</strong> next to <strong>Devin cloud</strong>, paste the token and click <strong>Connect</strong>.</span></li>
+        </ol>
+        <p>Your cloud sessions then show up in Agents next to the others, with <strong>Devin cloud</strong> under their name: working, needs you, done or stopped. A click opens the session in your browser, or its pull request once it's done. AI Usage gets a <strong>Devin</strong> account with the ACUs your sessions used.</p>
+        <p>The token is kept in your Mac's Keychain and only ever sent to Devin. PancakeNotch asks Devin when you connect, when you open Agents or AI Usage, and when you come back to your Mac, and once a minute only while a session is running. With nothing running, it doesn't ask. <strong>Disconnect</strong> removes the token. Allow and Deny aren't offered for cloud sessions: answer them in Devin.</p>
         <h3>Allow, Deny and Open</h3>
         <p>When a Claude Code, Codex or Devin agent asks permission to do something, its row shows three buttons:</p>
         <ul>
@@ -365,7 +373,8 @@
           <li><strong>Codex never says "Needs you"</strong>Approval requests from Codex show up only after you've connected it. Check that you typed <span class="path">/hooks</span> in Codex and trusted the PancakeNotch hook.</li>
           <li><strong>Cursor shows nothing</strong>Cursor shows up only after you've connected it, and only for the agent in the Cursor app (the IDE).</li>
           <li><strong>Devin shows nothing</strong>Devin shows up only after you've connected it, and only for sessions started after that. Devin doesn't run hooks in a workspace opened in Restricted Mode, so trust the workspace first.</li>
-          <li><strong>No Allow and Deny buttons</strong>They appear for Claude Code, Codex and Devin after you've connected them. Cursor can't have them.</li>
+          <li><strong>No Allow and Deny buttons</strong>They appear for Claude Code, Codex and Devin after you've connected them. Cursor and Devin cloud sessions can't have them.</li>
+          <li><strong>A Devin cloud session is late to show up</strong>PancakeNotch asks Devin when you open Agents or switch apps, at most every two minutes, so a new session appears then. If Settings says Devin stopped accepting the token, make a new one and connect again.</li>
         </ul>
       </section>
 
@@ -467,8 +476,9 @@
         <ul>
           <li><strong>Everything stays on your Mac.</strong> No accounts, no ads, no analytics and no tracking.</li>
           <li><strong>One network request:</strong> the once-a-day update check, which only asks GitHub for the latest version. You can turn it off (see <a class="text-link" href="#updates">Updates</a>).</li>
+          <li><strong>Devin cloud, only if you connect it:</strong> PancakeNotch then asks Devin's API about your cloud sessions, with the token you gave it. The token stays in your Keychain and goes nowhere else (see <a class="text-link" href="#agents-devin-cloud">Devin cloud sessions</a>).</li>
           <li><strong>Statistics are a file on your Mac.</strong> What you listen to, what you watch and how you use the notch are counted locally and kept for 90 days. Delete them any time with <strong>Clear Statistics</strong> on the <strong>Statistics</strong> page.</li>
-          <li><strong>Agents and AI Usage keep their history on your Mac.</strong> Codex checks with OpenAI for fresh limits when AI Usage opens. PancakeNotch reads no sign-in tokens or Keychain, and saves only token counts and model names for 90 days, never conversation text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
+          <li><strong>Agents and AI Usage keep their history on your Mac.</strong> Codex checks with OpenAI for fresh limits when AI Usage opens. PancakeNotch reads no tool's sign-in tokens, and saves only token counts and model names for 90 days, never conversation text (see <a class="text-link" href="#ai-usage">AI Usage</a>).</li>
           <li><strong>Permissions only when needed:</strong> controlling Music and Spotify in limited mode, System Audio Recording for the optional "Follow the music" bars, and Login Items if you turn on launch at login.</li>
           <li>This website has no cookies and no analytics either.</li>
         </ul>
@@ -478,7 +488,7 @@
         <h2 id="uninstall-title">Uninstalling <a class="anchor" href="#uninstall" aria-label="Link to this section">#</a></h2>
         <ol class="how">
           <li><span>If you turned on <strong>Launch at login</strong>, switch it off under <strong>General</strong>.</span></li>
-          <li><span>If you connected Claude Code, Codex, Cursor or Devin, click <strong>Disconnect</strong> for each one under <strong>Modules › Agents settings</strong>. That removes PancakeNotch's helper from the tool's settings.</span></li>
+          <li><span>If you connected Claude Code, Codex, Cursor, Devin or Devin cloud, click <strong>Disconnect</strong> for each one under <strong>Modules › Agents settings</strong>. That removes PancakeNotch's helper from the tool's settings, and the Devin token from your Keychain.</span></li>
           <li><span>Quit PancakeNotch: click the menu bar icon and choose <strong>Quit PancakeNotch</strong> (or use <strong>Quit PancakeNotch</strong> at the bottom of the window's sidebar).</span></li>
           <li><span>Drag <strong>PancakeNotch</strong> from <strong>Applications</strong> to the Trash.</span></li>
         </ol>

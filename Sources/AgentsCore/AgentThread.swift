@@ -89,6 +89,8 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     /// The name of the app it runs in ("Terminal", "T3 Code", "Codex"), when known: the row's preview
     /// shows it.
     public var hostName: String?
+    /// It runs on a service's servers (a Devin cloud session), not on this Mac: a click opens its page.
+    public var isCloud = false
     /// The user has seen it finished (the list was on screen).
     public var isSeen: Bool
     /// The helpers it started that are still working, oldest first. Shown under it, never as threads.

@@ -11,7 +11,7 @@ struct AgentsModuleCard: View {
     let learn: () -> Void
 
     private let points = [
-        String(localized: "Follows Claude Code and Codex from their own files, and Cursor and Devin after Connect"),
+        String(localized: "Follows Claude Code and Codex from their own files, and Cursor and Devin after Connect, Devin's cloud sessions too"),
         String(localized: "A count beside the notch tells you who is working or needs you"),
         String(localized: "Allow once or Deny a request without leaving your app"),
         String(localized: "Click a thread to jump to the app it runs in"),
@@ -177,6 +177,9 @@ struct AgentsSettingsRows: View {
             ForEach(AgentTool.allCases, id: \.self) { tool in
                 ConnectRow(tool: tool, connector: connector)
             }
+            if let cloud = connector.devinCloud {
+                DevinCloudRow(cloud: cloud)
+            }
             if let problem = connector.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .font(.app(size: 12.5, weight: .medium))
@@ -324,6 +327,106 @@ private struct ConnectRow: View {
             case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks.")
             case .devin: String(localized: "Start a new Devin session to see it. Devin skips hooks in a workspace opened in Restricted Mode.")
             case .claude, .cursor: nil
+            }
+        }
+    }
+}
+
+/// Devin's cloud sessions: they don't run on this Mac, so Connect takes a personal access token and
+/// PancakeNotch asks Devin about them (issue #55). The token goes to the Keychain, never on screen again.
+private struct DevinCloudRow: View {
+    let cloud: DevinCloud
+    /// The token being pasted; nil when not connecting.
+    @State private var draft: String?
+    @State private var failure: String?
+    @FocusState private var isTyping: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "cloud")
+                .font(.app(size: 13, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(AppPalette.selection, in: .rect(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                SettingsRowLabel(title: String(localized: "Devin cloud"), subtitle: subtitle)
+                if draft != nil {
+                    SecureField(String(localized: "Personal access token (cog_…)"), text: Binding(get: { draft ?? "" }, set: { draft = $0 }))
+                        .textFieldStyle(.plain)
+                        .font(.app(size: 13.5, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(AppPalette.hover, in: .rect(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AppPalette.hairlineStrong))
+                        .focused($isTyping)
+                        .onAppear { isTyping = true }
+                        .onSubmit(save)
+                        .onExitCommand(perform: cancel)
+                        .disabled(cloud.phase == .connecting)
+                        .accessibilityLabel(Text("Devin personal access token"))
+                    Button {
+                        NSWorkspace.shared.open(DevinCloud.tokenPage)
+                    } label: {
+                        Label(String(localized: "Make a token in Devin"), systemImage: "arrow.up.right")
+                            .labelStyle(TrailingIconLabelStyle())
+                    }
+                    .help(Text("Opens Devin's settings in your browser. Make one under Devin API, Personal access tokens."))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                if draft != nil {
+                    Button(String(localized: "Cancel"), action: cancel)
+                    Button(String(localized: "Connect"), action: save)
+                        .buttonStyle(ProminentPillButtonStyle())
+                        .disabled(cloud.phase == .connecting || (draft ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Connect Devin cloud"))
+                } else if cloud.phase == .connected {
+                    ConnectedBadge()
+                    Button(String(localized: "Disconnect")) { cloud.disconnect() }
+                        .accessibilityLabel(Text("Disconnect Devin cloud"))
+                        .accessibilityHint(Text("Removes the token from the Keychain. Your sessions stay on Devin."))
+                } else {
+                    Button(String(localized: "Connect…")) {
+                        failure = nil
+                        draft = ""
+                    }
+                    .accessibilityLabel(Text("Connect Devin cloud"))
+                }
+            }
+            .fixedSize()
+        }
+        .animation(.easeInOut(duration: 0.2), value: draft != nil)
+        .settingsRowPadding()
+    }
+
+    private var subtitle: String {
+        if cloud.phase == .connecting { return String(localized: "Checking the token with Devin…") }
+        if let failure { return failure }
+        if draft != nil {
+            return String(localized: "Paste a personal access token from Devin. It's kept in your Keychain, and PancakeNotch only ever sends it to Devin.")
+        }
+        if cloud.phase == .connected {
+            if let problem = cloud.problem { return problem }
+            return String(localized: "Your Devin sessions in the cloud show up in Agents, and what they use in AI Usage. PancakeNotch asks Devin while one runs, and when you're back at your Mac.")
+        }
+        if let problem = cloud.problem { return problem }
+        return String(localized: "Sessions that run on Devin's servers, from the web, Slack or anywhere else. Needs a personal access token, since nothing on this Mac hears about them.")
+    }
+
+    private func cancel() {
+        draft = nil
+        failure = nil
+    }
+
+    private func save() {
+        guard let token = draft, cloud.phase != .connecting else { return }
+        Task {
+            if let reason = await cloud.connect(token: token) {
+                failure = reason
+            } else {
+                draft = nil
+                failure = nil
             }
         }
     }

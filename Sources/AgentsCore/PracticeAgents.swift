@@ -1,7 +1,7 @@
 import Foundation
 
 /// The practice notch's pretend threads (Modules page, the Agents lesson): one working, one asking to
-/// run a command, one finished. Allow and Deny play out like the real thing, then the pretend threads
+/// run a command, one finished, and a finished Devin cloud session. Allow and Deny play out like the real thing, then the pretend threads
 /// come back so the practice can be tried again.
 @MainActor
 final class PracticeAgents {
@@ -16,6 +16,7 @@ final class PracticeAgents {
     static let askingID = "codex:practice-parser"
     static let doneID = "cursor:practice-readme"
     static let editingID = "claude:practice-button"
+    static let cloudID = "devin-cloud:practice-dates"
 
     /// A thread asking to change a file, for the off-screen snapshot's review screen.
     static func editingThread(now: Date) -> AgentThread {
@@ -60,7 +61,35 @@ final class PracticeAgents {
             AgentThread(id: doneID, tool: .cursor, title: String(localized: "Update the README", comment: "Practice agent thread"),
                         project: "docs", status: .done, statusSince: now.addingTimeInterval(-2 * 60), canOpen: true,
                         hostName: "Cursor", isSeen: true),
+            cloudThread(now: now),
         ]
+    }
+
+    /// Devin cloud sessions working, asking and finished (the off-screen snapshot).
+    static func cloudThreads(now: Date) -> [AgentThread] {
+        let cloud = String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'")
+        var working = AgentThread(id: "devin-cloud:practice-dark", tool: .devin, title: "Add a dark mode", project: "Devin cloud",
+                                  status: .working, statusSince: now.addingTimeInterval(-12 * 60), canOpen: true, hostName: cloud)
+        var asking = AgentThread(id: "devin-cloud:practice-ask", tool: .devin, title: "Move the API to v3", project: "Devin cloud",
+                                 status: .needsYou(.input), statusSince: now.addingTimeInterval(-3 * 60),
+                                 request: "Waiting for your reply", canOpen: true, hostName: cloud)
+        var failed = AgentThread(id: "devin-cloud:practice-fail", tool: .devin, title: "Speed up the test suite",
+                                 project: "Devin cloud · Out of usage", status: .failed, statusSince: now.addingTimeInterval(-20 * 60),
+                                 canOpen: true, hostName: cloud, isSeen: true)
+        working.isCloud = true
+        asking.isCloud = true
+        failed.isCloud = true
+        return [working, asking, cloudThread(now: now), failed]
+    }
+
+    /// A finished Devin cloud session with its pull request (issue #55).
+    private static func cloudThread(now: Date) -> AgentThread {
+        var thread = AgentThread(id: cloudID, tool: .devin, title: String(localized: "Upgrade the date library", comment: "Practice agent thread"),
+                                 project: String(localized: "Devin cloud · PR #128 · Open", comment: "Practice Devin cloud session: its pull request"),
+                                 status: .done, statusSince: now.addingTimeInterval(-6 * 60), canOpen: true,
+                                 hostName: String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'"), isSeen: true)
+        thread.isCloud = true
+        return thread
     }
 
     /// Allow: back to work for a moment, then done. Deny: stopped. A little later everything resets.
