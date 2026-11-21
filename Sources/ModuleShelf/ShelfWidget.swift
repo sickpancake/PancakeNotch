@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import NotchCore
 import SwiftUI
 
@@ -100,9 +101,7 @@ final class ShelfWidgetFilePresentation {
 
     private struct Key: Equatable {
         let path: String
-        let identifier: NSObject?
-        let modified: Date?
-        let attributesModified: Date?
+        let version: [Int]
         let scale: CGFloat
     }
 
@@ -113,12 +112,15 @@ final class ShelfWidgetFilePresentation {
             cached = nil
             return nil
         }
-        let values = try? url.resourceValues(forKeys: [
-            .fileResourceIdentifierKey, .contentModificationDateKey, .attributeModificationDateKey,
-        ])
-        let key = Key(path: url.path, identifier: values?.fileResourceIdentifier as? NSObject,
-                      modified: values?.contentModificationDate, attributesModified: values?.attributeModificationDate,
-                      scale: scale)
+        let path = url.path
+        var info = stat()
+        // One metadata read detects replacement, content changes, and custom icon changes.
+        let version = stat(path, &info) == 0 ? [
+            Int(info.st_dev), Int(truncatingIfNeeded: info.st_ino),
+            info.st_mtimespec.tv_sec, info.st_mtimespec.tv_nsec,
+            info.st_ctimespec.tv_sec, info.st_ctimespec.tv_nsec,
+        ] : []
+        let key = Key(path: path, version: version, scale: scale)
         if let cached, cached.key == key { return (cached.name, cached.icon) }
         let name = item.displayName
         let icon = Self.icon(path: key.path, scale: scale)
