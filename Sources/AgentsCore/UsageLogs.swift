@@ -178,14 +178,12 @@ final class UsageLedger: @unchecked Sendable {
     }
 
     private let stats: StatsStore
-    private var progress: [String: AIFileProgress]
     /// Set from the main actor to stop a long first read early (AI Usage was switched off).
     let cancelled = OSAllocatedUnfairLock(initialState: false)
     private let discardedBefore = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
-    init(stats: StatsStore, progress: [String: AIFileProgress]) {
+    init(stats: StatsStore) {
         self.stats = stats
-        self.progress = progress
     }
 
     /// The user cleared Statistics during an import. Finish advancing file offsets, but keep only
@@ -199,6 +197,19 @@ final class UsageLedger: @unchecked Sendable {
         let oldest = now.addingTimeInterval(-Double(StatsStore.retentionDays) * 86_400)
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
         var files: [LogFile] = []
+        var batch: [(url: URL, path: String, account: Account, size: UInt64)] = []
+        func appendUnread() {
+            guard !batch.isEmpty else { return }
+            let progress = stats.aiFileProgress(for: batch.map(\.path))
+            for file in batch {
+                // If a file was shortened past its offset, start from the beginning again.
+                let saved = progress[file.path].flatMap { $0.offset <= file.size ? $0 : nil }
+                let start = saved?.offset ?? 0
+                guard start < file.size else { continue }
+                files.append(LogFile(url: file.url, account: file.account, size: file.size, start: start, state: saved?.state ?? ""))
+            }
+            batch.removeAll(keepingCapacity: true)
+        }
         for account in accounts {
             let roots = account.tool == .claude ? ["projects"] : ["sessions", "archived_sessions"]
             for root in roots {
@@ -206,20 +217,17 @@ final class UsageLedger: @unchecked Sendable {
                                                                   includingPropertiesForKeys: keys,
                                                                   options: [.skipsHiddenFiles]) else { continue }
                 for case let url as URL in walker where url.pathExtension == "jsonl" {
+                    guard !cancelled.withLock({ $0 }) else { return [] }
                     guard account.tool == .claude || url.lastPathComponent.hasPrefix("rollout-"),
                           let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
-                          let size = values.fileSize.map(UInt64.init), (values.contentModificationDate ?? now) >= oldest
+                          let size = values.fileSize.map(UInt64.init), size > 0, (values.contentModificationDate ?? now) >= oldest
                     else { continue }
-                    let saved = progress[url.path]
-                    if saved?.size == size, saved?.offset == size { continue }
-                    // A file that got shorter was replaced: read it again (records already saved stay single).
-                    let resumes = saved.map { $0.offset <= size } ?? false
-                    let start = resumes ? saved?.offset ?? 0 : 0
-                    guard start < size else { continue }
-                    files.append(LogFile(url: url, account: account, size: size, start: start, state: resumes ? saved?.state ?? "" : ""))
+                    batch.append((url, url.path, account, size))
+                    if batch.count == StatsStore.aiFileProgressBatchSize { appendUnread() }
                 }
             }
         }
+        appendUnread()
         return files
     }
 
@@ -258,7 +266,7 @@ final class UsageLedger: @unchecked Sendable {
         }
         guard !failed else { return }
         let next = AIFileProgress(size: file.size, offset: offset, state: codex?.state ?? "")
-        if flush(next) { progress[file.url.path] = next }
+        _ = flush(next)
     }
 }
 
