@@ -25,7 +25,7 @@ final class LiveUsageSources {
     private var limitWatchers: [FolderWatcher] = []
     private var configWatchers: [FileChangeWatcher] = []
     private var historyWatcher: FolderWatcher?
-    private var ledger: UsageLedger?
+    private let ledger: UsageLedger?
     private var visible = false
     private var scanning = false
     private var scanAgain = false
@@ -34,7 +34,6 @@ final class LiveUsageSources {
     /// Drops totals that arrive after a newer question.
     private var totalsAsked = 0
     private var stopped = false
-    private var discardedBefore: Date?
 
     /// A first read this big shows its progress.
     nonisolated private static let bigRead: UInt64 = 32 * 1024 * 1024
@@ -42,10 +41,11 @@ final class LiveUsageSources {
     init(center: UsageCenter, stats: StatsStore?) {
         self.center = center
         self.stats = stats
+        ledger = stats.map { UsageLedger(stats: $0) }
     }
 
     func start() {
-        discardedBefore = center.settings.historyClearedAt
+        if let date = center.settings.historyClearedAt { ledger?.discardHistory(before: date) }
         refreshAccounts()
     }
 
@@ -224,24 +224,12 @@ final class LiveUsageSources {
     /// Reads whatever the logs gained since last time, then asks for the totals again. One read at a time;
     /// changes during a read start another after it.
     private func scan() {
-        guard let stats, !stopped else { return }
+        guard let ledger, !stopped, !accounts.isEmpty else { return }
         guard !scanning else {
             scanAgain = true
             return
         }
         scanning = true
-        guard let ledger else {
-            // The first time: learn how far each file was read before.
-            Task { [weak self] in
-                let progress = await stats.aiFileProgress()
-                guard let self, !self.stopped else { return }
-                self.ledger = UsageLedger(stats: stats, progress: progress)
-                if let date = self.discardedBefore { self.ledger?.discardHistory(before: date) }
-                self.scanning = false
-                self.scan()
-            }
-            return
-        }
         let shown = accounts.map { UsageLedger.Account(id: $0.id, tool: $0.tool, folder: $0.folder) }
         queue.async { [weak self] in
             let files = ledger.unread(shown)
@@ -323,7 +311,6 @@ final class LiveUsageSources {
     }
 
     func discardHistory(before date: Date) {
-        discardedBefore = date
         ledger?.discardHistory(before: date)
     }
 }

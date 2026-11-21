@@ -61,16 +61,18 @@ public struct AIDayTotal: Sendable, Equatable {
 }
 
 extension StatsStore {
-    /// Every log file's progress, read once before catching up.
-    public func aiFileProgress() async -> [String: AIFileProgress] {
-        await withCheckedContinuation { continuation in
-            queue.async { [database] in
-                var files: [String: AIFileProgress] = [:]
-                database.query("SELECT path, size, offset, state FROM ai_files") { row in
-                    files[row.text(0)] = AIFileProgress(size: UInt64(max(0, row.integer(1))), offset: UInt64(max(0, row.integer(2))), state: row.text(3))
-                }
-                continuation.resume(returning: files)
+    package static let aiFileProgressBatchSize = 256
+
+    /// Reads one batch of up to `aiFileProgressBatchSize` paths on the background usage scan.
+    package func aiFileProgress(for paths: [String]) -> [String: AIFileProgress] {
+        let marks = Array(repeating: "?", count: paths.count).joined(separator: ",")
+        return queue.sync {
+            var files: [String: AIFileProgress] = [:]
+            database.query("SELECT path, size, offset, state FROM ai_files WHERE path IN (\(marks))",
+                           paths.map(SQLValue.text)) { row in
+                files[row.text(0)] = AIFileProgress(size: UInt64(max(0, row.integer(1))), offset: UInt64(max(0, row.integer(2))), state: row.text(3))
             }
+            return files
         }
     }
 

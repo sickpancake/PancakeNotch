@@ -261,6 +261,7 @@ struct UsageLogTests {
 
     @Test func theLedgerReadsEachFileOnceAndKeepsOneRecordPerMessage() async throws {
         let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
         let projects = folder.appending(path: "projects/-tmp-app")
         try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
         let now = Date()
@@ -272,8 +273,9 @@ struct UsageLogTests {
         // Claude writes a message once per content block.
         try Data((message("m1", output: 5) + message("m1", output: 5) + message("m2", output: 7)).utf8).write(to: file)
 
-        let stats = StatsStore(url: nil)
-        let ledger = UsageLedger(stats: stats, progress: [:])
+        let db = folder.appending(path: "stats.sqlite")
+        let stats = StatsStore(url: db)
+        let ledger = UsageLedger(stats: stats)
         let account = UsageLedger.Account(id: "claude:\(folder.path)", tool: .claude, folder: folder)
         for log in ledger.unread([account]) { ledger.read(log) }
         #expect(ledger.unread([account]).isEmpty)
@@ -303,7 +305,7 @@ struct UsageLogTests {
         for log in ledger.unread([account]) { ledger.read(log) }
         totals = LiveUsageSources.totals(await stats.aiTotals(accounts: [account.id], days: 1))
         #expect(totals.tokens == 20)
-        let restarted = UsageLedger(stats: stats, progress: await stats.aiFileProgress())
+        let restarted = UsageLedger(stats: StatsStore(url: db))
         #expect(restarted.unread([account]).isEmpty)
     }
 }
