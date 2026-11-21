@@ -1,3 +1,4 @@
+import FileWatching
 import Foundation
 import os
 import Stats

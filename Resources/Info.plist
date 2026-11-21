@@ -28,6 +28,12 @@
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Only if macOS stops sharing what's playing: PancakeNotch then asks Music and Spotify directly, to show and control the song in the notch.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>PancakeNotch shows the files you put on the Shelf from here, and, if you turn on Catch new screenshots, puts new screenshots saved here on the Shelf.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>PancakeNotch shows the files you put on the Shelf from here, and, if you turn on Catch new screenshots, puts new screenshots saved here on the Shelf.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>PancakeNotch shows the files you put on the Shelf from here, and, if you turn on Catch new screenshots, puts new screenshots saved here on the Shelf.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>PancakeNotch listens to the app that's playing so the sound bars beside the notch can move with the music. Nothing is recorded or saved.</string>
 	<key>SUFeedURL</key>

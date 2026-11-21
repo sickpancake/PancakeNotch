@@ -1,4 +1,5 @@
 import AppKit
+import FileWatching
 import Foundation
 import os
 

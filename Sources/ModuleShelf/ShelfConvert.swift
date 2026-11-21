@@ -407,11 +407,12 @@ extension ShelfModule {
     private func finishedInBackground(_ session: ShelfConversion) {
         switch session.phase {
         case .done(let done):
-            convertPeekText = Self.doneText(files: done.files)
-            convertPeekFailed = false
+            peekNote = ShelfPeekNote(text: Self.doneText(files: done.files), symbol: "checkmark.circle.fill")
         case .failed:
-            convertPeekText = String(localized: "Couldn't convert \(session.title)", comment: "Convert failed while the notch was closed")
-            convertPeekFailed = true
+            peekNote = ShelfPeekNote(
+                text: String(localized: "Couldn't convert \(session.title)", comment: "Convert failed while the notch was closed"),
+                symbol: "exclamationmark.circle.fill"
+            )
         default:
             return
         }

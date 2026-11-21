@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var shelfStore = ShelfStore()
     /// Exists only while the Shelf is switched on.
     private var shelf: ShelfModule?
+    /// Catches new screenshots onto the Shelf: watches only while its setting and the Shelf are on.
+    private lazy var screenshots = ShelfScreenshots(settings: shelfSettings)
     private let nowPlayingSettings = NowPlayingSettings()
     /// What's playing. Its helper process runs only while Now Playing is switched on.
     /// `PANCAKENOTCH_DEBUG_PLAYER=practice` plays the silent practice songs instead (benchmark: CI has
@@ -131,7 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timers: timers,
             keepAwakeSettings: keepAwakeSettings,
             keepAwake: keepAwake,
-            makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
+            makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] },
+            screenshots: screenshots
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
         return controller
@@ -361,6 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shelf = nil
             liveShelf = nil
         }
+        screenshots.follow(shelf)
         if agentsOn {
             if agentsModule == nil {
                 agentsModule = AgentsModule(center: agents)
