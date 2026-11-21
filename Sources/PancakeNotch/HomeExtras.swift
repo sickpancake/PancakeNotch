@@ -111,7 +111,9 @@ private struct HomeBatteryWidget: View {
     @State private var watcher = PowerSourceWatcher()
 
     var body: some View {
-        let power = power ?? read()
+        // Never read IOKit in `body`: non-live copies (the editor, the picker, off-screen pages)
+        // re-run it on every layout pass. `.onAppear` seeds the cache once; the watcher updates it.
+        let power = power ?? .pluggedIn
         Group {
             switch size {
             case .small, .large:
@@ -155,6 +157,9 @@ private struct HomeBatteryWidget: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(localized: "Battery, \(Self.percent(power)), \(Self.source(power))",
                                         comment: "Battery widget, spoken")))
+        .onAppear {
+            if self.power == nil { self.power = read() }
+        }
         .onChange(of: isLive, initial: true) { _, live in
             if live {
                 self.power = read()
