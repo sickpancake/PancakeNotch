@@ -225,6 +225,19 @@ final class Database: @unchecked Sendable {
         } ?? false
     }
 
+    /// Runs the same statement for each row, binding every parameter again after each reset.
+    func runBatch(_ sql: String, _ rows: some Sequence<[SQLValue]>) -> Bool {
+        withStatement(sql, []) { statement in
+            let count = Int(sqlite3_bind_parameter_count(statement))
+            for values in rows {
+                guard values.count == count, bind(values, to: statement),
+                      sqlite3_step(statement) == SQLITE_DONE, sqlite3_reset(statement) == SQLITE_OK
+                else { return false }
+            }
+            return true
+        } ?? false
+    }
+
     /// Steps through every row of a query.
     func query(_ sql: String, _ values: [SQLValue] = [], row: (SQLRow) -> Void) {
         _ = withStatement(sql, values) { statement in
@@ -246,16 +259,22 @@ final class Database: @unchecked Sendable {
             return nil
         }
         defer { sqlite3_finalize(statement) }
+        guard bind(values, to: statement) else { return nil }
+        return body(statement)
+    }
+
+    private func bind(_ values: [SQLValue], to statement: OpaquePointer) -> Bool {
         for (offset, value) in values.enumerated() {
             let index = Int32(offset + 1)
-            switch value {
+            let result = switch value {
             case .text(let text): sqlite3_bind_text(statement, index, text, -1, sqliteTransient)
             case .real(let number): sqlite3_bind_double(statement, index, number)
             case .integer(let number): sqlite3_bind_int64(statement, index, number)
             case .null: sqlite3_bind_null(statement, index)
             }
+            guard result == SQLITE_OK else { return false }
         }
-        return body(statement)
+        return true
     }
 }
 
