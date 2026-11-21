@@ -25,6 +25,10 @@ final class LiveAgentSources {
     private var claudeSessions: [String: (folder: URL, session: ClaudeSession)] = [:]
     /// Permission requests waiting for Allow / Deny, by thread ID.
     private var pending: [String: Int] = [:]
+    /// Tool call of each pending Devin request, so handing it back keeps tracking it in Devin's dialog.
+    private var pendingToolCall: [String: HookEvent.ToolCallKey] = [:]
+    /// Devin permission requests waiting in Devin's own dialog (not reviewable in the notch, or handed back).
+    private var waitingInDevin: [String: [(call: HookEvent.ToolCallKey, summary: String?)]] = [:]
     /// The last hook event per thread: the session list only overrides what's newer than it.
     private var lastHookEvent: [String: Date] = [:]
     /// The last sign of life per Codex and Cursor thread, for spotting ones that quit without a word.
@@ -91,6 +95,8 @@ final class LiveAgentSources {
         activationObserver = nil
         claudeSessions = [:]
         pending = [:]
+        pendingToolCall = [:]
+        waitingInDevin = [:]
         lastHookEvent = [:]
         lastActivity = [:]
         codexHelpers = [:]
@@ -116,9 +122,15 @@ final class LiveAgentSources {
     func answer(threadID: String, requestID: Int, allow: Bool) {
         guard let thread = center.thread(threadID), pending[threadID] == requestID else { return }
         pending[threadID] = nil
+        pendingToolCall[threadID] = nil
         server?.answer(requestID, with: Self.decision(allow: allow, tool: thread.tool))
-        // Either way the agent carries on: with the command, or with the news that it was denied.
-        center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), approval: .some(nil)))
+        if let remaining = waitingInDevin[threadID]?.last {
+            center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince,
+                               request: .some(remaining.summary), approval: .some(nil), quietly: true))
+        } else {
+            // Either way the agent carries on: with the command, or with the news that it was denied.
+            center.apply(.init(id: threadID, tool: thread.tool, at: .now, status: .working, request: .some(nil), approval: .some(nil)))
+        }
     }
 
     /// The tools' own answer format (Claude Code and Codex share one; Devin has its own).
@@ -138,6 +150,9 @@ final class LiveAgentSources {
     /// The request goes back to the tool's own window (Open, or the user switched to that app).
     func handBack(threadID: String) {
         guard let requestID = pending.removeValue(forKey: threadID) else { return }
+        if let call = pendingToolCall.removeValue(forKey: threadID) {
+            waitingInDevin[threadID, default: []].append((call, center.thread(threadID)?.request))
+        }
         server?.answer(requestID, with: nil)
         if let thread = center.thread(threadID) {
             center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, approval: .some(nil), quietly: true))
@@ -152,6 +167,9 @@ final class LiveAgentSources {
     private func helperGone(_ requestID: Int) {
         guard let threadID = pending.first(where: { $0.value == requestID })?.key else { return }
         pending[threadID] = nil
+        if let call = pendingToolCall.removeValue(forKey: threadID) {
+            waitingInDevin[threadID, default: []].append((call, center.thread(threadID)?.request))
+        }
         if let thread = center.thread(threadID) {
             center.apply(.init(id: threadID, tool: thread.tool, at: thread.statusSince, approval: .some(nil), quietly: true))
         }
@@ -159,7 +177,13 @@ final class LiveAgentSources {
 
     /// Something else happened in the thread: a waiting request was answered elsewhere (T3 Code's own
     /// buttons, the terminal), so drop it.
-    private func requestSettled(_ threadID: String) {
+    private func requestSettled(_ threadID: String, keepWaitingInDevin: Bool = false) {
+        let displaced = pendingToolCall.removeValue(forKey: threadID)
+        if keepWaitingInDevin {
+            if let displaced { waitingInDevin[threadID, default: []].append((displaced, center.thread(threadID)?.request)) }
+        } else {
+            waitingInDevin[threadID] = nil
+        }
         guard let requestID = pending.removeValue(forKey: threadID) else { return }
         server?.answer(requestID, with: nil)
         if let thread = center.thread(threadID), thread.approval != nil {
@@ -217,17 +241,24 @@ final class LiveAgentSources {
             update.status = .needsYou(.permission)
             update.request = .some(event.summary)
             if let requestID = event.requestID {
-                requestSettled(id)
+                requestSettled(id, keepWaitingInDevin: true)
                 center.apply(update, deferFinishAlert: true)
                 // Already looking at its app, or more to it than the notch can show: ask there right away.
                 if center.isFrontmost(id) || event.review == nil {
                     server?.answer(requestID, with: nil)
+                    if event.tool == .devin, let call = event.toolCall {
+                        waitingInDevin[id, default: []].append((call, event.summary))
+                    }
                 } else if let review = event.review {
                     pending[id] = requestID
+                    if event.tool == .devin, let call = event.toolCall { pendingToolCall[id] = call }
                     center.apply(.init(id: id, tool: event.tool, at: now,
                                        approval: .some(PendingApproval(requestID: requestID, review: review)), quietly: true))
                 }
                 return
+            }
+            if event.tool == .devin, let call = event.toolCall {
+                waitingInDevin[id, default: []].append((call, event.summary))
             }
         case (.claude, "Notification"):
             switch event.notificationType {
@@ -263,11 +294,17 @@ final class LiveAgentSources {
             update.status = .working
             update.step = .some(event.summary)
         case (.devin, "PreToolUse"), (.devin, "PostToolUse"):
-            // A request still waiting here can only be answered here (Devin waits for its hook), so another
-            // tool call (one running alongside) leaves it alone. Otherwise a tool call starting or ending
-            // means the agent is at work again: a request handed back was answered in Devin.
-            if pending[id] != nil {
-                center.apply(.init(id: id, tool: .devin, at: now, step: .some(event.step), quietly: true))
+            if event.name == "PostToolUse", let call = event.toolCall,
+               var waiting = waitingInDevin[id],
+               let index = waiting.firstIndex(where: { $0.call == call }) {
+                waiting.remove(at: index)
+                waitingInDevin[id] = waiting.isEmpty ? nil : waiting
+            }
+            // A request still waiting here or in Devin's own dialog can't be cleared by another tool call
+            // running alongside it: only its own PostToolUse (or a new prompt / Stop) settles Needs you.
+            if pending[id] != nil || waitingInDevin[id] != nil {
+                let request: String?? = pending[id] == nil ? .some(waitingInDevin[id]?.last?.summary) : nil
+                center.apply(.init(id: id, tool: .devin, at: now, step: .some(event.step), request: request, quietly: true))
                 return
             }
             update.status = .working

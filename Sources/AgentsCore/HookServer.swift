@@ -35,8 +35,17 @@ struct HookEvent: Sendable {
     var status: String?
     /// Codex: the session's model ("codex-auto-review" for its automatic reviewer).
     var model: String?
+    /// Identifies a tool call (`tool_name` + canonical `tool_input`) so Devin's PostToolUse can match
+    /// the PermissionRequest it settles without being fooled by a parallel tool call.
+    struct ToolCallKey: Equatable, Hashable, Sendable {
+        let toolName: String
+        let inputJSON: String
+    }
+
     /// "Running npm test": what a tool call is doing (Devin's PreToolUse and PostToolUse).
     var step: String?
+    /// Tool call identity when the payload names a tool (`tool_name` + `tool_input`).
+    var toolCall: ToolCallKey?
     /// Devin ran a hook from Claude Code's settings (it reads them too): Devin's input (a turn's
     /// `prompt_id`, no transcript) arriving as Claude Code. The helper usually spots this first, by
     /// Devin's environment.
@@ -80,6 +89,8 @@ struct HookEvent: Sendable {
         model = payload["model"] as? String
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
+            let inputData = (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys])) ?? Data()
+            toolCall = ToolCallKey(toolName: toolName, inputJSON: String(decoding: inputData, as: UTF8.self))
             summary = AgentSteps.request(tool: toolName, input: input)
             if name == "PreToolUse" || name == "PostToolUse" { step = AgentSteps.step(tool: toolName, input: input) }
             if name == "PermissionRequest", tool != .devin || Self.devinCommandIsPlain(tool: toolName, input: input) {

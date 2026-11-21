@@ -183,7 +183,7 @@ enum HookFile {
         let url = link.resolvingSymlinksInPath()
         var root: [String: Any] = [:]
         if let data = try? Data(contentsOf: url), !data.isEmpty {
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            guard let object = parseObject(data) else {
                 throw Problem(message: String(localized: "\(url.path(percentEncoded: false)) isn't valid JSON, so PancakeNotch left it alone. Fix it first, then try again."))
             }
             root = object
@@ -218,7 +218,7 @@ enum HookFile {
     /// Whether the file holds one of PancakeNotch's hook entries.
     static func isConnected(_ url: URL) -> Bool {
         guard let data = try? Data(contentsOf: url),
-              let hooks = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["hooks"] as? [String: Any] else { return false }
+              let hooks = parseObject(data)?["hooks"] as? [String: Any] else { return false }
         return hooks.values.contains { value in
             (value as? [Any] ?? []).contains { group in
                 guard let group = group as? [String: Any] else { return false }
@@ -226,6 +226,100 @@ enum HookFile {
                 return (group["hooks"] as? [Any] ?? []).contains { isOurs(($0 as? [String: Any])?["command"] as? String) }
             }
         }
+    }
+
+    /// Parses a JSON or JSONC object (`//` and `/* */` comments, trailing commas — as Devin's
+    /// `~/.config/devin/config.json` allows).
+    static func parseObject(_ data: Data) -> [String: Any]? {
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return object }
+        guard let stripped = stripJSONC(data) else { return nil }
+        return try? JSONSerialization.jsonObject(with: stripped) as? [String: Any]
+    }
+
+    /// Strips `//` and `/* */` comments and trailing commas outside string literals.
+    /// Returns nil for an unterminated block comment.
+    private static func stripJSONC(_ data: Data) -> Data? {
+        var bytes = Array(data)
+        if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
+            bytes.removeFirst(3)
+        }
+        var noComments: [UInt8] = []
+        noComments.reserveCapacity(bytes.count)
+        var i = 0
+        var inString = false
+        var escaped = false
+        while i < bytes.count {
+            let b = bytes[i]
+            if inString {
+                noComments.append(b)
+                if escaped {
+                    escaped = false
+                } else if b == 0x5C { // \
+                    escaped = true
+                } else if b == 0x22 { // "
+                    inString = false
+                }
+                i += 1
+            } else if b == 0x22 { // "
+                inString = true
+                noComments.append(b)
+                i += 1
+            } else if b == 0x2F, i + 1 < bytes.count, bytes[i + 1] == 0x2F { // //
+                i += 2
+                while i < bytes.count, bytes[i] != 0x0A, bytes[i] != 0x0D { i += 1 }
+            } else if b == 0x2F, i + 1 < bytes.count, bytes[i + 1] == 0x2A { // /*
+                i += 2
+                var closed = false
+                while i + 1 < bytes.count {
+                    if bytes[i] == 0x2A, bytes[i + 1] == 0x2F {
+                        i += 2
+                        closed = true
+                        break
+                    }
+                    i += 1
+                }
+                guard closed else { return nil }
+                noComments.append(0x20)
+            } else {
+                noComments.append(b)
+                i += 1
+            }
+        }
+
+        var cleaned: [UInt8] = []
+        cleaned.reserveCapacity(noComments.count)
+        inString = false
+        escaped = false
+        i = 0
+        while i < noComments.count {
+            let b = noComments[i]
+            if inString {
+                cleaned.append(b)
+                if escaped {
+                    escaped = false
+                } else if b == 0x5C {
+                    escaped = true
+                } else if b == 0x22 {
+                    inString = false
+                }
+            } else if b == 0x22 {
+                inString = true
+                cleaned.append(b)
+            } else if b == 0x2C { // ,
+                var j = i + 1
+                while j < noComments.count,
+                      noComments[j] == 0x20 || noComments[j] == 0x09 || noComments[j] == 0x0A || noComments[j] == 0x0D {
+                    j += 1
+                }
+                if j >= noComments.count || (noComments[j] != 0x7D && noComments[j] != 0x5D) {
+                    cleaned.append(b)
+                }
+            } else {
+                cleaned.append(b)
+            }
+            i += 1
+        }
+        return Data(cleaned)
     }
 
     /// Exactly the command `entry` writes: `'<folder>/pancakenotch-hook' <tool> <event>`. A user's own
