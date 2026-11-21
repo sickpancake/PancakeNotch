@@ -32,7 +32,12 @@ final class LiveAgentSources {
     }
     private var pendingDevin: [String: DevinRequest] = [:]
     private var waitingInDevin: [String: [DevinRequest]] = [:]
-    private var devinStarts: [String: [(call: HookEvent.ToolCallKey, sequence: Int)]] = [:]
+    private struct DevinToolStart {
+        let call: HookEvent.ToolCallKey
+        let sequence: Int
+        var requestSequence: Int?
+    }
+    private var devinStarts: [String: [DevinToolStart]] = [:]
     private var devinSequence = 0
     /// The last hook event per thread: the session list only overrides what's newer than it.
     private var lastHookEvent: [String: Date] = [:]
@@ -181,19 +186,29 @@ final class LiveAgentSources {
         if let request = pendingDevin.removeValue(forKey: id) { waitingInDevin[id, default: []].append(request) }
     }
 
-    private func devinToolFinished(_ call: HookEvent.ToolCallKey, threadID id: String) {
-        var start: Int?
-        if var started = devinStarts[id],
-           let index = started.firstIndex(where: { $0.call == call })
-                ?? started.firstIndex(where: { $0.call.sameTool(as: call) }) {
-            start = started.remove(at: index).sequence
-            devinStarts[id] = started.isEmpty ? nil : started
+    private func devinPermissionRequested(_ call: HookEvent.ToolCallKey, summary: String?, threadID id: String) -> DevinRequest {
+        devinSequence += 1
+        // Devin sends PreToolUse before PermissionRequest. Reserve the latest matching start so an
+        // older concurrent invocation with the same input cannot settle this request.
+        if let index = devinStarts[id]?.lastIndex(where: { $0.call == call && $0.requestSequence == nil }) {
+            devinStarts[id]?[index].requestSequence = devinSequence
         }
-        guard var waiting = waitingInDevin[id] else { return }
+        return DevinRequest(call: call, sequence: devinSequence, summary: summary)
+    }
+
+    private func devinToolFinished(_ call: HookEvent.ToolCallKey, threadID id: String) {
+        var starts = devinStarts[id] ?? []
+        let index = starts.firstIndex(where: { $0.call == call }) ?? starts.firstIndex(where: { $0.call.sameTool(as: call) })
+        let completed = index.map { starts.remove(at: $0) }
+        var waiting = waitingInDevin[id] ?? []
         // Devin exposes neither a call ID nor a denial event. A completed call that started after the
-        // permission request is evidence of progress; a completion from a call already running is not.
-        if let start {
-            waiting.removeAll { $0.call.promptID == call.promptID && $0.sequence < start }
+        // permission request is evidence of progress; a parallel call already running is not.
+        if let completed {
+            let superseded = Set(waiting.filter {
+                $0.call.promptID == call.promptID && $0.sequence < completed.sequence
+            }.map(\.sequence))
+            waiting.removeAll { $0.sequence == completed.requestSequence || superseded.contains($0.sequence) }
+            starts.removeAll { $0.requestSequence.map(superseded.contains) ?? false }
         } else {
             // Without a recorded start, fall back to the only waiting call for this tool in this turn.
             let candidates = waiting.indices.filter { waiting[$0].call.sameTool(as: call) }
@@ -202,6 +217,7 @@ final class LiveAgentSources {
                 waiting.remove(at: index)
             }
         }
+        devinStarts[id] = starts.isEmpty ? nil : starts
         waitingInDevin[id] = waiting.isEmpty ? nil : waiting
     }
 
@@ -267,10 +283,7 @@ final class LiveAgentSources {
             update.status = .working
             update.lastMessage = event.prompt
         case (_, "PermissionRequest"):
-            let devinRequest = event.toolCall.map {
-                devinSequence += 1
-                return DevinRequest(call: $0, sequence: devinSequence, summary: event.summary)
-            }
+            let devinRequest = event.toolCall.map { devinPermissionRequested($0, summary: event.summary, threadID: id) }
             // One that doesn't wait for an answer never touches a request that does.
             if event.requestID == nil, pending[id] != nil {
                 if let devinRequest { waitingInDevin[id, default: []].append(devinRequest) }
@@ -331,7 +344,7 @@ final class LiveAgentSources {
             if let call = event.toolCall {
                 if event.name == "PreToolUse" {
                     devinSequence += 1
-                    devinStarts[id, default: []].append((call, devinSequence))
+                    devinStarts[id, default: []].append(DevinToolStart(call: call, sequence: devinSequence))
                 } else {
                     devinToolFinished(call, threadID: id)
                 }

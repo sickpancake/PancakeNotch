@@ -189,6 +189,28 @@ struct DevinTests {
         #expect(HookFile.read(file)?.contains("\"z\":1, \"a\":true /* user setting */") == true)
     }
 
+    @Test func repeatedConnectAndDisconnectPreserveDevinConfigFormatting() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "config.json")
+        let original = """
+        {
+          "hooks": {
+            "PreToolUse": [
+              {"hooks": [{"command": "./check.sh"}]} // user hook
+            ]
+          }
+        }
+        """
+        try Data(original.utf8).write(to: file)
+        try HookFile.update(file, kind: .devin, connect: true)
+        let connected = try Data(contentsOf: file)
+        try HookFile.update(file, kind: .devin, connect: true)
+        #expect(try Data(contentsOf: file) == connected)
+        try HookFile.update(file, kind: .devin, connect: false)
+        #expect(HookFile.read(file) == original)
+    }
+
     // MARK: Answers
 
     @Test func permissionAnswersUseDevinsFormat() throws {
@@ -268,6 +290,7 @@ struct DevinTests {
         let sources = LiveAgentSources(center: center)
         defer { sources.stop() }
         sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Tidy up"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
         sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 3))
         let thread = center.thread("devin:devin-1")
         #expect(thread?.status == .needsYou(.permission))
@@ -311,6 +334,7 @@ struct DevinTests {
         sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Edit and search"]))
         sources.handle(devinEvent("PreToolUse", ["tool_name": "grep", "tool_input": ["pattern": "foo"]]))
         sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/b.swift"]]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
         sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 3))
         #expect(center.thread(id)?.status == .needsYou(.permission))
         #expect(center.thread(id)?.canAnswer == false)
@@ -339,6 +363,7 @@ struct DevinTests {
 
         sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Clean"]))
         sources.handle(devinEvent("PreToolUse", ["tool_name": "read", "tool_input": ["file_path": "/p/a.swift"]]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "exec", "tool_input": ["command": "make clean"]]))
         sources.handle(devinEvent("PermissionRequest", ["tool_name": "exec", "tool_input": ["command": "make clean"]], requestID: 11))
         sources.handBack(threadID: id)
         #expect(center.thread(id)?.status == .needsYou(.permission))
@@ -358,11 +383,12 @@ struct DevinTests {
         defer { sources.stop() }
         let id = "devin:devin-1"
         sources.handle(devinEvent("UserPromptSubmit", ["prompt": "Edit"]))
+        sources.handle(devinEvent("PreToolUse", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]))
         sources.handle(devinEvent("PermissionRequest", ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]], requestID: 12))
 
         let tool = denied ? "read" : "edit"
         let path = denied ? "/p/b.swift" : "/p/a.swift"
-        sources.handle(devinEvent("PreToolUse", ["tool_name": tool, "tool_input": ["file_path": path]]))
+        if denied { sources.handle(devinEvent("PreToolUse", ["tool_name": tool, "tool_input": ["file_path": path]])) }
         #expect(center.thread(id)?.status == .needsYou(.permission))
         sources.handle(devinEvent("PostToolUse", ["tool_name": tool, "prompt_id": "old", "tool_input": ["file_path": path]]))
         #expect(center.thread(id)?.status == .needsYou(.permission))
@@ -388,8 +414,8 @@ struct DevinTests {
         let id = "devin:devin-1"
         let call: [String: Any] = ["tool_name": "edit", "tool_input": ["file_path": "/p/a.swift"]]
         sources.handle(devinEvent("PreToolUse", call))
-        sources.handle(devinEvent("PermissionRequest", call, requestID: 14))
         sources.handle(devinEvent("PreToolUse", call))
+        sources.handle(devinEvent("PermissionRequest", call, requestID: 14))
         sources.handle(devinEvent("PostToolUse", call))
         #expect(center.thread(id)?.status == .needsYou(.permission))
         sources.handle(devinEvent("PostToolUse", call))

@@ -110,8 +110,14 @@ struct DevinHookConfig {
     private mutating func updateGroups(in array: Range<Int>, adding group: String?) -> Bool {
         let groups = items(in: array)
         var removed: Set<Int> = []
+        var add = group
         for (index, item) in groups.enumerated() {
             guard byte(item.value.lowerBound) == 0x7B else { continue }
+            if let expected = add, let value = object(for: item), (try? encode(value)) == expected {
+                // Keep the existing group, including any comments and formatting.
+                add = nil
+                continue
+            }
             if isOurs(item) {
                 removed.insert(index)
                 continue
@@ -127,15 +133,16 @@ struct DevinHookConfig {
             }
         }
         if group == nil, !removed.isEmpty, removed.count == groups.count { return true }
-        edit(groups, in: array, removing: removed, adding: group.map { [$0] } ?? [])
+        edit(groups, in: array, removing: removed, adding: add.map { [$0] } ?? [])
         return false
     }
 
-    private func isOurs(_ item: Item) -> Bool {
+    private func object(for item: Item) -> [String: Any]? {
         let range = tokens[item.value.lowerBound].lowerBound..<tokens[item.value.upperBound - 1].upperBound
-        let value = try? JSONSerialization.jsonObject(with: Data(json[range]), options: .fragmentsAllowed)
-        return HookFile.isOurs((value as? [String: Any])?["command"] as? String)
+        return try? JSONSerialization.jsonObject(with: Data(json[range]), options: .fragmentsAllowed) as? [String: Any]
     }
+
+    private func isOurs(_ item: Item) -> Bool { HookFile.isOurs(object(for: item)?["command"] as? String) }
 
     private func encode(_ group: [String: Any]) throws -> String {
         let data = try JSONSerialization.data(withJSONObject: group, options: [.sortedKeys, .withoutEscapingSlashes])
@@ -175,17 +182,22 @@ struct DevinHookConfig {
         let kept = items.indices.filter { !removing.contains($0) }
         let trailingComma = items.last?.comma != nil
         for (index, item) in items.enumerated() {
+            let comma = item.comma.map { tokens[$0] }
             if removing.contains(index) {
                 let span = tokens[item.tokens.lowerBound].lowerBound..<tokens[item.tokens.upperBound - 1].upperBound
-                if bytes[span].elementsEqual(json[span]) {
+                let withComma = span.lowerBound..<(comma?.upperBound ?? span.upperBound)
+                if bytes[withComma].elementsEqual(json[withComma]), let line = wholeLines(containing: withComma) {
+                    edits.append((line, []))
+                    continue
+                } else if bytes[span].elementsEqual(json[span]) {
                     edits.append((span, []))
                 } else {
                     for token in item.tokens { edits.append((tokens[token], [])) }
                 }
             }
-            if let comma = item.comma,
+            if let comma,
                removing.contains(index) || (index == kept.last && !trailingComma && adding.isEmpty) {
-                edits.append((tokens[comma], []))
+                edits.append((comma, []))
             }
         }
         guard !adding.isEmpty else { return }
@@ -203,5 +215,17 @@ struct DevinHookConfig {
         let separator = kept.last.flatMap { items[$0].comma == nil ? tokens[items[$0].tokens.upperBound - 1].upperBound : nil }
         if let separator, separator != position { edits.append((separator..<separator, [0x2C])) }
         edits.append((position..<position, Array(((separator == position ? "," : "") + addition).utf8)))
+    }
+
+    private func wholeLines(containing span: Range<Int>) -> Range<Int>? {
+        var start = span.lowerBound
+        while start > 0, bytes[start - 1] == 32 || bytes[start - 1] == 9 { start -= 1 }
+        guard start == 0 || bytes[start - 1] == 10 || bytes[start - 1] == 13 else { return nil }
+        var end = span.upperBound
+        while end < bytes.count, bytes[end] == 32 || bytes[end] == 9 { end += 1 }
+        guard end < bytes.count, bytes[end] == 10 || bytes[end] == 13 else { return nil }
+        if bytes[end] == 13 { end += 1 }
+        if end < bytes.count, bytes[end] == 10 { end += 1 }
+        return start..<end
     }
 }
