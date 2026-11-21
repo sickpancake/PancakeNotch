@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import Foundation
 import os
 
@@ -35,11 +36,14 @@ struct HookEvent: Sendable {
     var status: String?
     /// Codex: the session's model ("codex-auto-review" for its automatic reviewer).
     var model: String?
-    /// Identifies a tool call (`tool_name` + canonical `tool_input`) so Devin's PostToolUse can match
-    /// the PermissionRequest it settles without being fooled by a parallel tool call.
-    struct ToolCallKey: Equatable, Hashable, Sendable {
+    struct ToolCallKey: Equatable, Sendable {
+        let promptID: String?
         let toolName: String
-        let inputJSON: String
+        let inputDigest: SHA256.Digest
+
+        func sameTool(as other: Self) -> Bool {
+            promptID == other.promptID && toolName == other.toolName
+        }
     }
 
     /// "Running npm test": what a tool call is doing (Devin's PreToolUse and PostToolUse).
@@ -89,8 +93,10 @@ struct HookEvent: Sendable {
         model = payload["model"] as? String
         let input = payload["tool_input"] as? [String: Any] ?? [:]
         if let toolName = payload["tool_name"] as? String {
-            let inputData = (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys])) ?? Data()
-            toolCall = ToolCallKey(toolName: toolName, inputJSON: String(decoding: inputData, as: UTF8.self))
+            if tool == .devin, let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) {
+                toolCall = ToolCallKey(promptID: payload["prompt_id"] as? String, toolName: toolName,
+                                      inputDigest: SHA256.hash(data: data))
+            }
             summary = AgentSteps.request(tool: toolName, input: input)
             if name == "PreToolUse" || name == "PostToolUse" { step = AgentSteps.step(tool: toolName, input: input) }
             if name == "PermissionRequest", tool != .devin || Self.devinCommandIsPlain(tool: toolName, input: input) {
