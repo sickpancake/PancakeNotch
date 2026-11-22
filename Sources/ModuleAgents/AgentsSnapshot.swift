@@ -47,6 +47,16 @@ public enum AgentsSnapshot {
         row(.expanded, previewing) { _ in
             if let thread = previewing.center.threads.first(where: { $0.status == .working }) { previewing.previewForSnapshot(thread.id) }
         }
+        // A finished agent (issue #65): the strip says what it changed, and its opened row shows the last
+        // commit with Open in editor, Terminal here and Copy summary.
+        let finished = agents()
+        finished.peekAlert = finished.center.threads.first { $0.doneSummary != nil }.map { AgentAlert(kind: .finished, thread: $0) }
+        row(.compact, finished) { $0.peekForSnapshot(finished) }
+        let finishedPreview = agents()
+        row(.expanded, finishedPreview) { model in
+            model.setTall(true)
+            if let thread = finishedPreview.center.threads.first(where: { $0.doneSummary != nil }) { finishedPreview.previewForSnapshot(thread.id) }
+        }
         row(.expanded, agents(AgentsCenter(settings: emptySettings)))
         // Devin cloud sessions (issue #55): asking, working, failed and finished with a pull request.
         row(.expanded, agents(.practiceCloud()))

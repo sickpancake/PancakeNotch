@@ -108,7 +108,7 @@ private struct AgentWidgetRow: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(thread.title)
                     .font(.system(size: 11.5, weight: .semibold))
-                Text(thread.step ?? thread.status.label)
+                Text(line)
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.55))
                     .contentTransition(.opacity)
@@ -118,6 +118,12 @@ private struct AgentWidgetRow: View {
             .truncationMode(.tail)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Its step, or what it changed once it's finished: "readme-refresh · 3 files · +48 −12".
+    private var line: String {
+        if thread.status.isFinished, let summary = thread.doneSummary { return AgentsText.doneLine(summary) }
+        return thread.step ?? thread.status.label
     }
 }
 

@@ -61,6 +61,7 @@ struct AgentsPeek: View {
 
     var body: some View {
         let text = AgentsText.peek(alert)
+        let detail = AgentsText.peekDetail(alert)
         HStack(spacing: 6) {
             Image(systemName: alert.thread.tool.symbol)
                 .font(.system(size: 10, weight: .semibold))
@@ -74,11 +75,20 @@ struct AgentsPeek: View {
                 .foregroundStyle(.white.opacity(0.6))
                 .fixedSize()
                 .layoutPriority(1)
+            // What it changed gives way first, so the project's name stays readable.
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.6))
+                    .truncationMode(.tail)
+                    .layoutPriority(-1)
+            }
         }
         .lineLimit(1)
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(text.subject) \(text.verb)"))
+        .accessibilityLabel(Text([text.subject, text.verb, alert.thread.doneSummary.flatMap { detail == nil ? nil : AgentsText.spoken($0) }]
+            .compactMap { $0 }.joined(separator: " ")))
     }
 }
