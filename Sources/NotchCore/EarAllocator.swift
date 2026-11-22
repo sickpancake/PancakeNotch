@@ -41,13 +41,41 @@ enum EarAllocator {
     }
 
     struct Allocation: Equatable, Sendable {
+        /// Which ear the "+n" overflow chip tucks under.
+        enum Side: String, Sendable { case left, right }
+
         var left: Slot?
         var right: Slot?
+        /// Candidates that didn't fit the two spots, in the input's (rank) order.
+        var displacedModuleIDs: [String] = []
+        /// The ear the chip belongs to: the side most of the displaced candidates wanted
+        /// (#1 for `first`/`byRank`, #2 for `second`/the borrowed spot). A tie goes to the left.
+        var overflowSide: Side?
+
+        init(left: Slot? = nil, right: Slot? = nil, displacedModuleIDs: [String] = [], overflowSide: Side? = nil) {
+            self.left = left
+            self.right = right
+            self.displacedModuleIDs = displacedModuleIDs
+            self.overflowSide = overflowSide
+        }
     }
 
     static func allocate(_ candidates: [Candidate], swapsSides: Bool) -> Allocation {
-        var result = place(choose(candidates))
-        if swapsSides { swap(&result.left, &result.right) }
+        let chosen = choose(candidates)
+        var result = place(chosen)
+        result.displacedModuleIDs = candidates.filter { candidate in
+            !chosen.contains { $0.moduleID == candidate.moduleID }
+        }.map(\.moduleID)
+        let displaced = candidates.filter { result.displacedModuleIDs.contains($0.moduleID) }
+        let onTheRight = displaced.filter(\.takesSecond).count
+        result.overflowSide = result.displacedModuleIDs.isEmpty
+            ? nil
+            : (onTheRight > displaced.count - onTheRight ? .right : .left)
+        if swapsSides {
+            swap(&result.left, &result.right)
+            if result.overflowSide == .left { result.overflowSide = .right }
+            else if result.overflowSide == .right { result.overflowSide = .left }
+        }
         return result
     }
 

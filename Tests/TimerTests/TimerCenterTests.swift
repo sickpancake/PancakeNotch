@@ -498,10 +498,11 @@ struct TimerModuleTests {
 }
 
 /// Waits until `condition` holds. Returns as soon as it does; the long limit only catches a real hang
-/// (a busy CI machine once took over 2 s to run an 80 ms close).
+/// (a busy CI machine once took over 2 s to run an 80 ms close, and these real-time waits are the
+/// last to settle when a long-running suite keeps the cores busy).
 @MainActor
 func settle(_ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(30)
+    let deadline = ContinuousClock.now + .seconds(90)
     while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
 }
 

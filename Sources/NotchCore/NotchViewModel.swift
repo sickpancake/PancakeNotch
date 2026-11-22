@@ -251,6 +251,8 @@ public final class NotchViewModel {
     public func activityChanged() {
         let resting: NotchState = modules.contains { $0.isActive } ? .compact : .closed
         if restingState != resting { restingState = resting }
+        // The "+n" chip may have appeared or left: refit so the window covers its strip.
+        fitWindow?(state)
     }
 
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
@@ -476,13 +478,21 @@ public final class NotchViewModel {
     /// person chose it in Settings, else the first module that wants it (music playing), otherwise the one
     /// used last, or Home if that module is idle and Home is available. Home also opens when there are
     /// no modules (ADR-0010, ADR-0011 amendment 2026-11-03, ADR-0042).
-    private func chooseModuleForOpening(_ moduleID: String?) {
+    private func chooseModuleForOpening(_ moduleID: String?, preferringHome: Bool = false) {
         resetHomeMotion()
         showsHome = false
         chosenHomePage = 0
         let ranked = rankedModules
         if let moduleID, modules.contains(where: { $0.moduleID == moduleID }) {
             selectedID = moduleID
+        } else if preferringHome, homeIsAvailable {
+            // The "+n" chip opens Home, which shows every displaced module's widget.
+            showsHome = true
+        } else if preferringHome,
+                  let displaced = earAllocation().displacedModuleIDs.first(where: { id in
+                      modules.contains { $0.moduleID == id } }) {
+            // With tabs-only navigation the chip opens on the best-ranked displaced module instead.
+            selectedID = displaced
         } else if let waiting = ranked.first(where: { $0.waitsForYou }) {
             selectedID = waiting.moduleID
         } else if homeIsAvailable, home.opening == .home || modules.isEmpty {
@@ -569,6 +579,61 @@ public final class NotchViewModel {
         public let view: AnyView
     }
 
+    /// The "+n" hint under an ear: how many active modules didn't fit the two spots, and the ear
+    /// it tucks under. Pointing at it opens Home, where the displaced modules' widgets show.
+    public struct EarOverflow: Equatable, Sendable {
+        public enum Side: Sendable { case left, right }
+        public let side: Side
+        public let count: Int
+    }
+
+    /// Height of the band at the bottom of an ear that counts as the "+n" chip.
+    static let earOverflowChipHeight: CGFloat = 12
+
+    /// Window frame for a state: the outline plus, in Compact, the strip under the ear the "+n"
+    /// chip hangs from, so the chip stays inside the window (drawn and hittable).
+    func windowFrame(for state: NotchState) -> CGRect {
+        var frame = layout.windowFrame(for: state)
+        if state == .compact, let strip = earOverflowFrame() { frame = frame.union(strip) }
+        return frame
+    }
+
+    /// The "+n" chip's dangling strip in screen coordinates, or `nil` while the chip is hidden.
+    func earOverflowFrame() -> CGRect? {
+        guard state == .compact, let overflow = earOverflow else { return nil }
+        let notch = layout.geometry.notchRect
+        let earBottom = notch.maxY - layout.geometry.compactHeight
+        let earWidth = layout.compactEarWidth
+        return CGRect(x: overflow.side == .left ? notch.minX - earWidth : notch.maxX,
+                      y: earBottom - Self.earOverflowChipHeight,
+                      width: earWidth, height: Self.earOverflowChipHeight)
+    }
+
+    /// The overflow hint for the current allocation, or `nil` when every candidate fits or the
+    /// chip's spot is taken by a peeking module's strip.
+    var earOverflow: EarOverflow? {
+        if layout.isPeeking { return nil }
+        let allocation = earAllocation()
+        guard let side = allocation.overflowSide else { return nil }
+        return EarOverflow(side: side == .left ? .left : .right, count: allocation.displacedModuleIDs.count)
+    }
+
+    /// The pointer is on the "+n" chip: the part dangling below the bottom edge of the ear it
+    /// tucks under. Inside the ear itself the module keeps the click, and while a module is
+    /// peeking the strip below the ears keeps it too (the chip is hidden then).
+    func pointerOverEarOverflow() -> Bool {
+        guard state == .compact, !layout.isPeeking, let overflow = earOverflow else { return false }
+        let point = pointerLocation()
+        let notch = layout.geometry.notchRect
+        let earBottom = notch.maxY - layout.geometry.compactHeight
+        guard point.y >= earBottom - Self.earOverflowChipHeight, point.y < earBottom else { return false }
+        let earWidth = layout.compactEarWidth
+        switch overflow.side {
+        case .left: return point.x >= notch.minX - earWidth && point.x < notch.minX
+        case .right: return point.x >= notch.maxX && point.x < notch.maxX + earWidth
+        }
+    }
+
     /// The same ownership decision drives drawing and opening from an ear. Availability is read
     /// without building views, including when the selected module is the shrink-after-click fallback.
     private func earAllocation() -> EarAllocator.Allocation {
@@ -645,7 +710,11 @@ public final class NotchViewModel {
         if isHovering {
             guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave else { return }
             schedule(after: behavior.openDelay) { model in
-                model.open(focusing: model.moduleUnderPointer(), fromHover: true)
+                if model.pointerOverEarOverflow() {
+                    model.open(fromHover: true, preferringHome: true)
+                } else {
+                    model.open(focusing: model.moduleUnderPointer(), fromHover: true)
+                }
                 if model.state == .expanded, model.behavior.hapticOnOpen {
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 }
@@ -797,7 +866,11 @@ public final class NotchViewModel {
         defer { isHandlingClick = false }
         cancelAttentionClose()
         guard state == .expanded else {
-            open(focusing: moduleUnderPointer())
+            if pointerOverEarOverflow() {
+                open(preferringHome: true)
+            } else {
+                open(focusing: moduleUnderPointer())
+            }
             return
         }
         // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.
@@ -832,7 +905,9 @@ public final class NotchViewModel {
     /// Opens the panel on the most relevant module (or `moduleID`), unless Mission Control is up: the
     /// notch is hidden there but still gets the pointer, and opening it would cover the Spaces bar and
     /// steal its clicks.
-    public func open(focusing moduleID: String? = nil, fromHover: Bool = false) {
+    /// `preferringHome` is the "+n" overflow chip's path: it opens Home when available, else the
+    /// best-ranked displaced module (see `chooseModuleForOpening`).
+    public func open(focusing moduleID: String? = nil, fromHover: Bool = false, preferringHome: Bool = false) {
         hoverTask?.cancel()
         cancelAttentionClose()
         guard !isMissionControlActive() else {
@@ -844,7 +919,7 @@ public final class NotchViewModel {
         isShowingBriefly = false
         briefModuleID = nil
         endPeek(animated: false)
-        if state != .expanded { chooseModuleForOpening(moduleID) }
+        if state != .expanded { chooseModuleForOpening(moduleID, preferringHome: preferringHome) }
         wasOpenedByHover = fromHover
         transition(to: .expanded)
     }

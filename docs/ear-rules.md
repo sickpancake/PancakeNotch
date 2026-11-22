@@ -58,17 +58,23 @@ views; only the chosen owners build their views, and pointer targeting uses the 
 8. **A module alone:** one with an extra view fills both ears (Now Playing: art in #1, sound bars in #2). A #2
    module (the Timer on "Second spot" or while Done) stays in #2 and leaves #1 empty. Any other module takes #1.
 9. **Two showing:** each shows only its main view (Now Playing drops its sound bars).
-10. **Swap sides** flips left and right for everything, including a lone module's two views.
+10. **More than two:** a small **"+n"** chip tucks under the bottom edge of the ear with the displaced
+    content (the side most of the waiting candidates wanted; a tie goes to #1) and counts the modules
+    that didn't fit. Pointing at the chip opens Home — tabs-only navigation opens the best-ranked
+    displaced module instead. The chip only reports the overflow; the ranking rules above still pick
+    the two spots exactly as before.
+11. **Swap sides** flips left and right for everything, including a lone module's two views and the
+    "+n" chip's ear.
 
 ## Opening from the ears
 
-11. Hovering (unless "Open on click only" is on) or clicking **any module's ear**, or anywhere on a peek strip,
+12. Hovering (unless "Open on click only" is on) or clicking **any module's ear**, or anywhere on a peek strip,
     opens the notch on that module (`moduleUnderPointer()`). Over the hardware notch in the middle it opens on the
     best-ranked module that `waitsForYou`, else Home if chosen in settings and available, else the best-ranked
     that `wantsFocus` (music actually playing, unless you moved on), else the module used last. With Last module,
     a remembered Now Playing page falls back to Home when paused or empty and Home is available.
     Home also opens with no modules; Tabs-only navigation keeps Home unavailable.
-12. If you switch away from a song while it plays, Now Playing stops wanting focus (`hasYielded`) until you open it
+13. If you switch away from a song while it plays, Now Playing stops wanting focus (`hasYielded`) until you open it
     again or the music starts after a stop of 10 s or more; the short gap between songs doesn't count. Its ear
     still shows while a song plays.
-13. Peek strips are separate: a strip never changes who holds a spot.
+14. Peek strips are separate: a strip never changes who holds a spot.
