@@ -73,6 +73,8 @@ public final class ShelfSettings {
     public var convertQuality: ConvertQuality { didSet { defaults.set(convertQuality.rawValue, forKey: Keys.convertQuality) } }
     /// Experimental: Word and OpenDocument files to PDF (layout and pictures aren't kept).
     public var convertWordToPDF: Bool { didSet { defaults.set(convertWordToPDF, forKey: Keys.convertWordToPDF) } }
+    /// New screenshots land on the Shelf by themselves (off until switched on).
+    public var catchesScreenshots: Bool { didSet { defaults.set(catchesScreenshots, forKey: Keys.catchesScreenshots) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -94,6 +96,7 @@ public final class ShelfSettings {
         convertFolder = defaults.string(forKey: Keys.convertFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
         convertQuality = defaults.string(forKey: Keys.convertQuality).flatMap(ConvertQuality.init(rawValue:)) ?? .balanced
         convertWordToPDF = defaults.bool(forKey: Keys.convertWordToPDF)
+        catchesScreenshots = defaults.bool(forKey: Keys.catchesScreenshots)
     }
 
     private enum Keys {
@@ -112,5 +115,6 @@ public final class ShelfSettings {
         static let convertFolder = "shelf.convert.folder"
         static let convertQuality = "shelf.convert.quality"
         static let convertWordToPDF = "shelf.convert.wordToPDF"
+        static let catchesScreenshots = "shelf.catchesScreenshots"
     }
 }

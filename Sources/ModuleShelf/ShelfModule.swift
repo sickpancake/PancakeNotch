@@ -92,9 +92,8 @@ public final class ShelfModule: NotchModule {
     public var isConverting: Bool { conversion?.isConverting == true }
     /// Runs conversions: the helper in the app, a fake in tests. Nil hides Convert.
     @ObservationIgnored var convertRunner: (any ShelfConvertRunning)? = ShelfConvertHelper.bundled
-    /// What the strip under the notch says when a conversion finished out of sight.
-    var convertPeekText: String?
-    var convertPeekFailed = false
+    /// What the strip under the notch says: a conversion finished out of sight, or a screenshot was caught.
+    var peekNote: ShelfPeekNote?
     @ObservationIgnored var convertClickMonitor: Any?
     @ObservationIgnored var convertAppObserver: (any NSObjectProtocol)?
     var prompt: Prompt? {
@@ -287,10 +286,11 @@ public final class ShelfModule: NotchModule {
 
     public var keepsDragsBelowMenuBar: Bool { settings.dragToTop == .openShelf }
 
-    /// "✓ Converted Report.pdf" under the notch when a conversion finished while it was closed.
+    /// "✓ Converted Report.pdf" under the notch when a conversion finished while it was closed, or
+    /// "Screenshot added to the Shelf".
     public func peekView(layout: NotchLayout) -> AnyView? {
-        guard let convertPeekText else { return nil }
-        return AnyView(ShelfConvertPeek(text: convertPeekText, failed: convertPeekFailed))
+        guard let peekNote else { return nil }
+        return AnyView(ShelfPeekStrip(note: peekNote))
     }
 
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
@@ -569,6 +569,40 @@ public final class ShelfModule: NotchModule {
         case nil:
             apply(store.add(inputs, duplicates: settings.duplicatePolicy), inputs: inputs)
         }
+    }
+
+    /// A new screenshot caught from the screenshot folder (Shelf settings). It goes to the front with a
+    /// short note under the notch. It never opens a card by itself: one already on the Shelf is left
+    /// alone, and with no room the note says so — the Shelf's full card when the notch is open.
+    /// Returns false when the file couldn't be kept (no access).
+    @discardableResult
+    func catchScreenshot(_ url: URL) -> Bool {
+        let input = ShelfInput.file(url, owned: false)
+        guard !store.contains(input) else { return true }
+        // A card is up (duplicates, full): the screenshot joins what it's asking about.
+        if prompt != nil {
+            offer([input])
+            return true
+        }
+        guard !store.isFull else {
+            // The notch is open: the Shelf's own full card says so (and the screenshot waits for room).
+            if notch?.state == .expanded {
+                offer([input])
+            } else {
+                showPeek(.screenshotNoRoom)
+            }
+            return true
+        }
+        guard case .done(let added) = store.add([input], duplicates: .addAgain), added > 0 else { return false }
+        showPeek(.screenshotAdded)
+        return true
+    }
+
+    /// The strip under the notch for a few seconds (only while the notch is closed: open, the tiles show it).
+    func showPeek(_ note: ShelfPeekNote) {
+        guard let notch, notch.state != .expanded else { return }
+        peekNote = note
+        notch.peek(self, for: .seconds(3))
     }
 
     /// Content dropped while the shelf is full joins the waiting items. Unless duplicates are always
