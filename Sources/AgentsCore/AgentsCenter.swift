@@ -248,7 +248,7 @@ public final class AgentsCenter {
         let id = shown.id
         guard storage[id]?.quickReplies.contains(reply) == true else { return }
         if isPractice {
-            storage[id]?.quickReplies = []
+            practice?.reply(id, reply)
             onPracticeEvent?(.replied)
             return
         }

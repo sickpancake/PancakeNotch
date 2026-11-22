@@ -1,7 +1,8 @@
 import Foundation
 
 /// The practice notch's pretend threads (Modules page, the Agents lesson): one working, one asking to
-/// run a command, one finished, and a finished Devin cloud session. Allow and Deny play out like the real thing, then the pretend threads
+/// run a command, one finished, and cloud agents (Devin waiting for a reply, Codex cloud working, finished Devin and GitHub
+/// coding agent pull requests). Allow and Deny play out like the real thing, then the pretend threads
 /// come back so the practice can be tried again.
 @MainActor
 final class PracticeAgents {
@@ -17,6 +18,9 @@ final class PracticeAgents {
     static let doneID = "cursor:practice-readme"
     static let editingID = "claude:practice-button"
     static let cloudID = "devin-cloud:practice-dates"
+    static let cloudAskingID = "devin-cloud:practice-ask"
+    static let codexCloudID = "codex-cloud:practice-csv"
+    static let copilotID = "github-cloud:practice-flaky"
 
     /// A thread asking to change a file, for the off-screen snapshot's review screen.
     static func editingThread(now: Date) -> AgentThread {
@@ -61,35 +65,61 @@ final class PracticeAgents {
             AgentThread(id: doneID, tool: .cursor, title: String(localized: "Update the README", comment: "Practice agent thread"),
                         project: "docs", status: .done, statusSince: now.addingTimeInterval(-2 * 60), canOpen: true,
                         hostName: "Cursor", isSeen: true),
+            cloudAskingThread(now: now),
+            codexCloudThread(now: now),
             cloudThread(now: now),
+            copilotThread(now: now),
         ]
     }
 
-    /// Devin cloud sessions working, asking and finished (the off-screen snapshot).
+    /// Devin cloud sessions working, asking and finished, plus Codex cloud and GitHub's coding agent
+    /// (the off-screen snapshot).
     static func cloudThreads(now: Date) -> [AgentThread] {
-        let cloud = String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'")
         var working = AgentThread(id: "devin-cloud:practice-dark", tool: .devin, title: "Add a dark mode", project: "Devin cloud",
                                   status: .working, statusSince: now.addingTimeInterval(-12 * 60), canOpen: true, hostName: cloud)
-        var asking = AgentThread(id: "devin-cloud:practice-ask", tool: .devin, title: "Move the API to v3", project: "Devin cloud",
-                                 status: .needsYou(.input), statusSince: now.addingTimeInterval(-3 * 60),
-                                 request: "Waiting for your reply", canOpen: true, hostName: cloud)
         var failed = AgentThread(id: "devin-cloud:practice-fail", tool: .devin, title: "Speed up the test suite",
                                  project: "Devin cloud · Out of usage", status: .stopped, statusSince: now.addingTimeInterval(-20 * 60),
                                  canOpen: true, hostName: cloud, isSeen: true)
-        var codex = AgentThread(id: "codex-cloud:practice-csv", tool: .codex, title: "Add CSV export", project: "Codex cloud · pancakenotch-web",
-                                status: .working, statusSince: now.addingTimeInterval(-4 * 60), canOpen: true, hostName: cloud)
-        var copilot = AgentThread(id: "github-cloud:practice-flaky", tool: .github, title: "Fix the flaky login test",
-                                  project: "sickpancake/PancakeNotch · PR #131 · Open", status: .done,
-                                  statusSince: now.addingTimeInterval(-9 * 60), canOpen: true, hostName: cloud, isSeen: true)
-        asking.quickReplies = [.proceed, .stop]
-        copilot.pullRequest = URL(string: "https://github.com/sickpancake/PancakeNotch/pull/131")
-        copilot.checks = .failed
         working.isCloud = true
-        asking.isCloud = true
         failed.isCloud = true
-        codex.isCloud = true
-        copilot.isCloud = true
-        return [working, asking, codex, cloudThread(now: now), copilot, failed]
+        return [working, cloudAskingThread(now: now), codexCloudThread(now: now), cloudThread(now: now),
+                copilotThread(now: now), failed]
+    }
+
+    private static var cloud: String { String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'") }
+
+    /// A Devin cloud session waiting for a reply, with Stop and Continue.
+    private static func cloudAskingThread(now: Date) -> AgentThread {
+        var thread = AgentThread(id: cloudAskingID, tool: .devin,
+                                 title: String(localized: "Move the API to v3", comment: "Practice agent thread"),
+                                 project: "Devin cloud", status: .needsYou(.input), statusSince: now.addingTimeInterval(-3 * 60),
+                                 request: String(localized: "Waiting for your reply", comment: "Practice Devin cloud session asking"),
+                                 canOpen: true, hostName: cloud)
+        thread.isCloud = true
+        thread.quickReplies = [.proceed, .stop]
+        return thread
+    }
+
+    /// A Codex cloud task at work.
+    private static func codexCloudThread(now: Date) -> AgentThread {
+        var thread = AgentThread(id: codexCloudID, tool: .codex,
+                                 title: String(localized: "Add CSV export", comment: "Practice agent thread"),
+                                 project: "Codex cloud · pancakenotch-web", status: .working,
+                                 statusSince: now.addingTimeInterval(-4 * 60), canOpen: true, hostName: cloud)
+        thread.isCloud = true
+        return thread
+    }
+
+    /// A finished GitHub coding agent task whose pull request's checks failed.
+    private static func copilotThread(now: Date) -> AgentThread {
+        var thread = AgentThread(id: copilotID, tool: .github,
+                                 title: String(localized: "Fix the flaky login test", comment: "Practice agent thread"),
+                                 project: "sickpancake/PancakeNotch · PR #131 · Open", status: .done,
+                                 statusSince: now.addingTimeInterval(-9 * 60), canOpen: true, hostName: cloud, isSeen: true)
+        thread.isCloud = true
+        thread.pullRequest = URL(string: "https://github.com/sickpancake/PancakeNotch/pull/131")
+        thread.checks = .failed
+        return thread
     }
 
     /// A finished Devin cloud session with its pull request (issue #55).
@@ -117,6 +147,21 @@ final class PracticeAgents {
         } else {
             center.apply(.init(id: id, tool: thread.tool, at: now, status: .stopped,
                                request: .some(String(localized: "Denied", comment: "Practice agent: the request was denied")), quietly: true))
+        }
+        schedule(after: 12) { center in center.reset() }
+    }
+
+    /// Continue: back to work for a moment, then done. Stop: stopped. A little later everything resets.
+    func reply(_ id: String, _ reply: AgentQuickReply) {
+        guard let thread = center.thread(id) else { return }
+        switch reply {
+        case .proceed:
+            center.apply(.init(id: id, tool: thread.tool, at: .now, status: .working, quickReplies: [], quietly: true))
+            schedule(after: 2.5) { center in
+                center.apply(.init(id: id, tool: thread.tool, at: .now, status: .done, quietly: true))
+            }
+        case .stop:
+            center.apply(.init(id: id, tool: thread.tool, at: .now, status: .stopped, quickReplies: [], quietly: true))
         }
         schedule(after: 12) { center in center.reset() }
     }

@@ -717,6 +717,9 @@ private struct CloudServiceRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 8) {
                 switch state {
+                case .off where cloud.problems[service] != nil:
+                    Button(String(localized: "Try Again")) { Task { await cloud.turnOn(service) } }
+                        .accessibilityLabel(Text("Try \(service.name) again"))
                 case .off, .checking:
                     Button(String(localized: "Turn On")) { Task { await cloud.turnOn(service) } }
                         .disabled(state == .checking)

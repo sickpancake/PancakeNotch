@@ -195,4 +195,19 @@ struct CloudAgentsTests {
         #expect(threads.contains { !$0.quickReplies.isEmpty })
         #expect(threads.contains { $0.checks == .failed })
     }
+
+    @Test func practiceLessonHasCloudAgentsThatAnswerQuickReplies() async throws {
+        let center = AgentsCenter.practice()
+        let ids = Set(center.threads.map(\.id))
+        #expect(ids.isSuperset(of: [PracticeAgents.cloudAskingID, PracticeAgents.codexCloudID,
+                                    PracticeAgents.copilotID, PracticeAgents.cloudID]))
+        let asking = try #require(center.thread(PracticeAgents.cloudAskingID))
+        center.quickReply(.stop, to: asking)
+        #expect(center.thread(PracticeAgents.cloudAskingID)?.status == .stopped)
+        #expect(center.thread(PracticeAgents.cloudAskingID)?.quickReplies == [])
+        center.reset()
+        let again = try #require(center.thread(PracticeAgents.cloudAskingID))
+        center.quickReply(.proceed, to: again)
+        #expect(center.thread(PracticeAgents.cloudAskingID)?.status == .working)
+    }
 }
