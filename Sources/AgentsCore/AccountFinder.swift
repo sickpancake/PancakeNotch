@@ -67,7 +67,7 @@ enum AccountFinder {
         switch tool {
         case .claude: return has("projects") || has("sessions") || has(".claude.json")
         case .codex: return has("auth.json") || has("sessions")
-        case .cursor, .devin: return false
+        case .cursor, .devin, .github: return false
         }
     }
 

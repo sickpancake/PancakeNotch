@@ -22,6 +22,8 @@ public final class AgentConnector {
     public private(set) var problem: String?
     /// Devin's cloud sessions, connected with a token rather than hooks (issue #55). Nil in previews.
     public var devinCloud: DevinCloud?
+    /// Codex cloud and GitHub's coding agent, turned on in Settings.
+    public var cloudAgents: CloudAgents?
 
     private let home: URL
     private let settings: AgentsSettings
@@ -124,6 +126,8 @@ public final class AgentConnector {
         case .devin:
             guard AccountFinder.hasDevin(home: home) else { return [] }
             return [Target(url: AccountFinder.devinConfigFile(home: home), kind: .devin)]
+        case .github:
+            return []
         }
     }
 

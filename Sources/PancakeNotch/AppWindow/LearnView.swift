@@ -558,7 +558,7 @@ private final class AgentsLessonSignals {
         case .allowed: runner?.receive(.agentAllowed)
         case .opened: runner?.receive(.agentOpened)
         case .cleared: runner?.receive(.agentsCleared)
-        case .denied: break
+        case .denied, .replied: break
         }
     }
 

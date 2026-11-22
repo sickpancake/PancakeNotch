@@ -72,10 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var connector: AgentConnector = {
         let connector = AgentConnector(settings: agentsSettings)
         connector.devinCloud = devinCloud
+        connector.cloudAgents = cloudAgents
         return connector
     }()
     /// Devin's cloud sessions, after the user connects a token. Asks Devin only while Agents or AI Usage is on.
     private let devinCloud = DevinCloud()
+    /// Codex cloud and GitHub's coding agent, once turned on. Asks only while Agents is on.
+    private let cloudAgents = CloudAgents()
     /// Exists only while Agents is switched on.
     private var agentsModule: AgentsModule?
     /// Exists only while AI Usage is switched on.
@@ -435,6 +438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notesModule = nil
         }
         devinCloud.follow(agents: agentsModule == nil ? nil : agents, usage: usageModule == nil ? nil : usage)
+        cloudAgents.follow(agents: agentsModule == nil ? nil : agents)
         notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule,
                                    notesModule]
             .compactMap { $0 }
