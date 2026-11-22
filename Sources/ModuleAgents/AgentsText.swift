@@ -29,9 +29,43 @@ enum AgentsText {
         let detail: String? = switch thread.status {
         case .working: thread.step
         case .needsYou: thread.approval.map { asks($0.review) } ?? thread.request
-        case .done, .stopped, .failed: nil
+        case .done, .stopped, .failed: thread.doneSummary.map(doneLine)
         }
         return [thread.byline ?? thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// What a finished agent changed, on one line: "readme-refresh · 3 files · +48 −12".
+    static func doneLine(_ summary: DoneSummary) -> String {
+        [summary.branch, changes(summary)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// "3 files · +48 −12", "No changes".
+    static func changes(_ summary: DoneSummary) -> String {
+        guard summary.hasChanges else { return String(localized: "No changes", comment: "Finished agent: it changed no files") }
+        let files = summary.filesChanged == 1 ? String(localized: "1 file", comment: "Finished agent: files it changed")
+            : String(localized: "\(summary.filesChanged) files", comment: "Finished agent: files it changed")
+        return "\(files) · +\(summary.insertions) −\(summary.deletions)"
+    }
+
+    /// "On readme-refresh, 3 files changed, 48 lines added, 12 lines removed."
+    static func spoken(_ summary: DoneSummary) -> String {
+        guard summary.hasChanges else { return changes(summary) }
+        let counts = String(localized: "\(summary.filesChanged) files changed, \(summary.insertions) lines added, \(summary.deletions) lines removed",
+                            comment: "VoiceOver: what a finished agent changed")
+        guard let branch = summary.branch else { return counts }
+        return String(localized: "On \(branch), \(counts)", comment: "VoiceOver: the branch a finished agent worked on, then what it changed")
+    }
+
+    /// "Last commit: Rewrite the install steps".
+    static func lastCommit(_ subject: String) -> String {
+        String(localized: "Last commit: \(subject)", comment: "Finished agent: the subject of the last commit it made")
+    }
+
+    /// What Copy summary puts on the clipboard: "Update the README (docs) · readme-refresh · 3 files · +48 −12
+    /// · Last commit: Rewrite the install steps".
+    static func copyText(_ thread: AgentThread, _ summary: DoneSummary) -> String {
+        let name = thread.project.isEmpty ? thread.title : "\(thread.title) (\(thread.project))"
+        return [name, doneLine(summary), summary.lastCommit.map(lastCommit)].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// The row's preview: the tool and the app it runs in, "Claude Code in T3 Code". Just the tool when
@@ -129,6 +163,12 @@ enum AgentsText {
         return (subject, verb)
     }
 
+    /// After "finished" on the peek: what it changed, "3 files · +48 −12".
+    static func peekDetail(_ alert: AgentAlert) -> String? {
+        guard alert.kind == .finished, let summary = alert.thread.doneSummary else { return nil }
+        return changes(summary)
+    }
+
     /// "1 subagent", "2 subagents".
     static func subagents(_ count: Int) -> String {
         count == 1 ? String(localized: "1 subagent", comment: "Agent row: helpers the thread started")
@@ -138,7 +178,10 @@ enum AgentsText {
     /// For VoiceOver, one row: "Fix the login redirect, Claude Code in T3 Code, web-app · Running tests, Working · 4m,
     /// 2 subagents".
     static func spoken(_ thread: AgentThread, now: Date) -> String {
-        [thread.title, harness(thread), subtitle(thread), thread.approval?.review.text ?? "",
+        [thread.title, harness(thread), thread.status.isFinished ? thread.byline ?? thread.project : subtitle(thread),
+         thread.status.isFinished ? thread.doneSummary.map(spoken) ?? "" : "",
+         thread.status.isFinished ? thread.doneSummary?.lastCommit.map(lastCommit) ?? "" : "",
+         thread.approval?.review.text ?? "",
          statusLine(thread.status, since: thread.statusSince, now: now),
          thread.subagents.isEmpty ? "" : subagents(thread.subagents.count)]
             .filter { !$0.isEmpty }.joined(separator: ", ")
