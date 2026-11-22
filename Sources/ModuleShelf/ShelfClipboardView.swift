@@ -107,7 +107,8 @@ struct ShelfClipboardTile: View {
         .help(entry.item.displayName)
         .task(id: imageURL) {
             guard let imageURL else { image = nil; return }
-            image = await Task.detached(priority: .utility) { Self.thumbnail(imageURL) }.value
+            // A 112-pixel thumbnail of a PNG we wrote ourselves: quick enough to make here.
+            image = Self.thumbnail(imageURL)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
