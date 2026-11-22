@@ -1,5 +1,5 @@
 {
-  "sync_commit": "1a3d564791c6982c4c534460fbc6e090af1e209b",
+  "sync_commit": "2f9769197747b60ae76732532c0f2b6b3782d740",
   "toolchain": "Apple Swift 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1), SDK selected by scripts/swift.sh; Python 3.9.6",
   "sha256": {
     "Sources/NotchCore/EarAllocator.swift": "c7f2c54be9a7162282c35befd7ca7b98d8ac1b565fe56499f782f79e1e23831a",
