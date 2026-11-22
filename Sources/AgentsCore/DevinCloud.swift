@@ -158,8 +158,10 @@ public final class DevinCloud {
         if agents !== self.agents {
             forgetShown()
             self.agents?.onListShown = nil
+            self.agents?.quickReplySenders[Self.idPrefix] = nil
             self.agents = agents
             agents?.onListShown = { [weak self] in self?.checkIfOlder(than: Self.lookGap) }
+            agents?.quickReplySenders[Self.idPrefix] = { [weak self] id, reply in self?.send(reply, to: id) }
         }
         if usage !== self.usage {
             self.usage?.setDevinUsage(nil)
@@ -331,6 +333,9 @@ public final class DevinCloud {
                     project: Self.byline(session, reason: status.needsYou ? nil : reason),
                     hostName: String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'"),
                     link: .some(session.link),
+                pullRequest: .some(status.isFinished ? session.pullRequests?.first?.prUrl.flatMap(CloudDates.web) : nil),
+                // Devin's messages can't approve a request, so only a session waiting for its next message gets them.
+                quickReplies: status == .needsYou(.input) ? [.proceed, .stop] : [],
                     // The first look shows what's going on without popping up, except for what needs you.
                     quietly: !hasCheckedOnce && !status.needsYou
                 ))
@@ -347,6 +352,30 @@ public final class DevinCloud {
         hasCheckedOnce = true
         if working { schedule(after: Self.workingGap) }
         else if stillGoing { schedule(after: Self.waitingGap) }
+    }
+
+    /// Continue sends "Continue" as the next message; Stop puts the session to sleep. The row moves on
+    /// right away, and the next check shows where Devin really is.
+    func send(_ reply: AgentQuickReply, to id: String) {
+        guard phase == .connected, let token = token ?? store.read(), let org = identity?.sessionsOrg,
+              id.hasPrefix(Self.idPrefix), let thread = agents?.thread(id) else { return }
+        let session = String(id.dropFirst(Self.idPrefix.count))
+        waitingIDs.remove(session)
+        defaults.set(waitingIDs.sorted(), forKey: Self.waitingKey)
+        agents?.apply(.init(id: id, tool: thread.tool, at: .now, status: reply == .proceed ? .working : .stopped,
+                            request: .some(nil), quickReplies: []))
+        let api = DevinCloudAPI(token: token, send: send)
+        Task { [weak self] in
+            do throws(DevinCloudAPI.Failure) {
+                switch reply {
+                case .proceed: try await api.message(org: org, session: session, text: String(localized: "Continue", comment: "The message a cloud agent's Continue quick reply sends"))
+                case .stop: try await api.sleep(org: org, session: session)
+                }
+            } catch {
+                self?.problem = String(localized: "Couldn't send that to Devin. Open the session to answer there.", comment: "Devin cloud: a quick reply failed")
+            }
+            self?.check()
+        }
     }
 
     /// A check is planned (something runs or waits).

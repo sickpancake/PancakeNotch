@@ -91,6 +91,11 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public var hostName: String?
     /// It runs on a service's servers (a Devin cloud session), not on this Mac: a click opens its page.
     public var isCloud = false
+    /// A finished cloud agent's pull request, and where its CI checks stand (when they're read).
+    public var pullRequest: URL?
+    public var checks: PullRequestChecks?
+    /// What its row answers right away (a cloud session waiting for its next message).
+    public var quickReplies: [AgentQuickReply] = []
     /// The user has seen it finished (the list was on screen).
     public var isSeen: Bool
     /// The helpers it started that are still working, oldest first. Shown under it, never as threads.
@@ -181,5 +186,20 @@ public struct AgentAlert: Equatable, Sendable {
     public init(kind: Kind, thread: AgentThread) {
         self.kind = kind
         self.thread = thread
+    }
+}
+
+/// A reply a cloud agent's row sends straight to the service, where it allows one.
+public enum AgentQuickReply: String, Equatable, Sendable, CaseIterable {
+    /// Sends "Continue" as the next message.
+    case proceed
+    /// Puts the session to sleep.
+    case stop
+
+    public var title: String {
+        switch self {
+        case .proceed: String(localized: "Continue", comment: "Quick reply to a cloud agent: carry on")
+        case .stop: String(localized: "Stop", comment: "Quick reply to a cloud agent: stop for now")
+        }
     }
 }

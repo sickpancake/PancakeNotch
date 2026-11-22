@@ -10,6 +10,9 @@ so write them for people using the app: short, plain, no code talk.
 - **Notes on Home and in Learn.** Small, medium and large Notes widgets for Home, and a short hands-on Notes lesson.
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.
 - **Devin cloud sessions in Agents.** Sessions that run on Devin's servers now show up too, next to your local agents: working, needs you, done or stopped, with their pull request once there is one. Click one to open it in your browser. Connect with a Devin personal access token under Agents settings; it's kept in your Keychain and only sent to Devin. PancakeNotch asks Devin only while a session runs, or when you come back to your Mac.
+- **Codex cloud and GitHub's coding agent in Agents.** Turn on Codex cloud or GitHub coding agent under Agents settings, and their cloud tasks show up next to your other agents: working, needs you, done or stopped, with the pull request once there is one. PancakeNotch uses the Codex CLI and the GitHub CLI you're already signed in to, and asks only while a task runs or when you come back to your Mac.
+- **Pull request checks.** With GitHub coding agent on, a finished cloud agent's pull request shows whether its checks are running, passed or failed.
+- **Quick replies to Devin.** A Devin cloud session waiting for your next message gets Continue and Stop right in the notch.
 - **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
 
 ## 0.4.0 — beta

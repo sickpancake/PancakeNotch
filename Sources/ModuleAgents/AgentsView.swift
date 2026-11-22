@@ -220,7 +220,7 @@ private struct AgentRow: View {
         }
         .modifier(ReportsBottom(isOn: isPreviewed, report: previewedBottom))
         .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
-        .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
+        .accessibilityElement(children: thread.canAnswer || !thread.quickReplies.isEmpty || !thread.subagents.isEmpty ? .contain : .combine)
         .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
     }
 
@@ -297,6 +297,8 @@ private struct AgentRow: View {
             }
             if thread.canAnswer {
                 AnswerButtons(module: module, thread: thread)
+            } else if !thread.quickReplies.isEmpty {
+                QuickReplyButtons(module: module, thread: thread)
             } else {
                 // The time moves on once a minute while this is on screen.
                 TimelineView(.everyMinute) { context in
@@ -477,6 +479,29 @@ struct AnswerButtons: View {
 }
 
 /// A capsule button: outlined, or white with black text for the main answer.
+/// Stop / Continue on a cloud session waiting for its next message: sent straight to the service.
+struct QuickReplyButtons: View {
+    let module: AgentsModule
+    let thread: AgentThread
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if thread.quickReplies.contains(.stop) {
+                AnswerButton(title: AgentQuickReply.stop.title, label: String(localized: "Stop \(thread.tool.name)"),
+                             help: String(localized: "Stop this session for now. You can wake it later.")) {
+                    module.center.quickReply(.stop, to: thread)
+                }
+            }
+            if thread.quickReplies.contains(.proceed) {
+                AnswerButton(title: AgentQuickReply.proceed.title, label: String(localized: "Tell \(thread.tool.name) to continue"),
+                             help: String(localized: "Send “Continue” as your reply"), prominent: true) {
+                    module.center.quickReply(.proceed, to: thread)
+                }
+            }
+        }
+    }
+}
+
 private struct AnswerButton: View {
     let title: String
     let label: String

@@ -59,6 +59,10 @@ public final class AgentsCenter {
 
     /// The list came on screen (Devin cloud takes a fresh look).
     @ObservationIgnored var onListShown: (@MainActor () -> Void)?
+    /// More sources that look again when the list is shown, by name (the CLI cloud services).
+    @ObservationIgnored var listShownWatchers: [String: @MainActor () -> Void] = [:]
+    /// Who sends a cloud row's quick replies, by the start of its ID ("devin-cloud:").
+    @ObservationIgnored var quickReplySenders: [String: @MainActor (_ id: String, _ reply: AgentQuickReply) -> Void] = [:]
     /// Told about needs-you and finishes worth a peek (smart rules applied).
     @ObservationIgnored public var onAlert: (@MainActor (AgentAlert) -> Void)?
     /// A user action in the practice notch, for the lessons.
@@ -205,6 +209,7 @@ public final class AgentsCenter {
         prune(now: now)
         live?.setDetailed(true)
         onListShown?()
+        for watcher in listShownWatchers.values { watcher() }
     }
 
     public func listHidden() {
@@ -235,6 +240,19 @@ public final class AgentsCenter {
             return
         }
         live?.answer(threadID: id, requestID: approval.requestID, allow: allow)
+    }
+
+    /// Sends a cloud session one of its quick replies ("Continue", "Stop"). Nothing happens once it no
+    /// longer offers that reply.
+    public func quickReply(_ reply: AgentQuickReply, to shown: AgentThread) {
+        let id = shown.id
+        guard storage[id]?.quickReplies.contains(reply) == true else { return }
+        if isPractice {
+            storage[id]?.quickReplies = []
+            onPracticeEvent?(.replied)
+            return
+        }
+        quickReplySenders.first { id.hasPrefix($0.key) }?.value(id, reply)
     }
 
     /// Brings the thread's app forward. A pending permission request goes back to the app, so it can
@@ -293,6 +311,10 @@ public final class AgentsCenter {
         var hostName: String?
         /// The web page a click opens: a cloud session. `.some(nil)` takes it away.
         var link: URL??
+        /// A finished cloud agent's pull request, whose checks show on its row. `.some(nil)` takes it away.
+        var pullRequest: URL??
+        /// What can be answered from its row (a cloud session's Continue / Stop). Nil keeps them.
+        var quickReplies: [AgentQuickReply]?
         /// Only adds the thread if it's new (a session seen idle at launch): no alerts.
         var quietly = false
     }
@@ -318,6 +340,11 @@ public final class AgentsCenter {
             thread.isCloud = true
         }
         if let hostName = update.hostName { thread.hostName = hostName }
+        if let pullRequest = update.pullRequest {
+            if pullRequest != thread.pullRequest { thread.checks = nil }
+            thread.pullRequest = pullRequest
+        }
+        if let replies = update.quickReplies { thread.quickReplies = replies }
         if let title = update.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             thread.title = title
             hasOwnTitle.insert(update.id)
@@ -408,6 +435,21 @@ public final class AgentsCenter {
 
     func thread(_ id: String) -> AgentThread? { storage[id] }
 
+    /// The cloud rows showing a pull request.
+    func cloudPullRequests() -> [AgentThread] {
+        storage.values.filter { $0.isCloud && $0.pullRequest != nil }.sorted { $0.id < $1.id }
+    }
+
+    /// A pull request's CI checks, on the row showing it.
+    func setChecks(_ checks: PullRequestChecks?, for id: String) {
+        guard storage[id] != nil, storage[id]?.checks != checks else { return }
+        storage[id]?.checks = checks
+    }
+
+    func clearChecks() {
+        for (id, thread) in storage where thread.checks != nil { storage[id]?.checks = nil }
+    }
+
     /// Every thread, helpers and hidden tools included.
     var allThreads: [AgentThread] { Array(storage.values) }
 
@@ -487,5 +529,5 @@ public final class AgentsCenter {
 
 /// What the user did in a practice notch, for the lessons.
 public enum AgentsPracticeEvent: Equatable, Sendable {
-    case allowed, denied, opened, cleared
+    case allowed, denied, opened, cleared, replied
 }

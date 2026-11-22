@@ -67,6 +67,39 @@ struct DevinCloudAPI: Sendable {
         return (items, false)
     }
 
+    /// Sends `text` to the session as the user's next message (a quick reply).
+    func message(org: String, session: String, text: String) async throws(Failure) {
+        let body = (try? JSONSerialization.data(withJSONObject: ["message": text])) ?? Data()
+        try await post(sessionURL(org: org, session: session).appending(path: "messages"), body: body)
+    }
+
+    /// Asks the session to go to sleep (Stop): it can be woken from Devin with a message.
+    func sleep(org: String, session: String) async throws(Failure) {
+        try await post(sessionURL(org: org, session: session).appending(path: "sleep"), body: Data("{}".utf8))
+    }
+
+    private func sessionURL(org: String, session: String) -> URL {
+        Self.base.appending(path: "organizations").appending(path: org).appending(path: "sessions").appending(path: session)
+    }
+
+    private func post(_ url: URL, body: Data) async throws(Failure) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let response: URLResponse
+        do { (_, response) = try await send(request) } catch { throw .unavailable }
+        switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
+        case 200..<300: return
+        case 401: throw .rejected
+        case 403: throw .forbidden
+        case 429: throw .slowDown
+        default: throw .unavailable
+        }
+    }
+
     private func get<T: Decodable>(_ url: URL, as type: T.Type) async throws(Failure) -> T {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

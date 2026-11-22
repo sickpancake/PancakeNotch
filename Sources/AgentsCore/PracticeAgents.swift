@@ -76,10 +76,20 @@ final class PracticeAgents {
         var failed = AgentThread(id: "devin-cloud:practice-fail", tool: .devin, title: "Speed up the test suite",
                                  project: "Devin cloud · Out of usage", status: .stopped, statusSince: now.addingTimeInterval(-20 * 60),
                                  canOpen: true, hostName: cloud, isSeen: true)
+        var codex = AgentThread(id: "codex-cloud:practice-csv", tool: .codex, title: "Add CSV export", project: "Codex cloud · pancakenotch-web",
+                                status: .working, statusSince: now.addingTimeInterval(-4 * 60), canOpen: true, hostName: cloud)
+        var copilot = AgentThread(id: "github-cloud:practice-flaky", tool: .github, title: "Fix the flaky login test",
+                                  project: "sickpancake/PancakeNotch · PR #131 · Open", status: .done,
+                                  statusSince: now.addingTimeInterval(-9 * 60), canOpen: true, hostName: cloud, isSeen: true)
+        asking.quickReplies = [.proceed, .stop]
+        copilot.pullRequest = URL(string: "https://github.com/sickpancake/PancakeNotch/pull/131")
+        copilot.checks = .failed
         working.isCloud = true
         asking.isCloud = true
         failed.isCloud = true
-        return [working, asking, cloudThread(now: now), failed]
+        codex.isCloud = true
+        copilot.isCloud = true
+        return [working, asking, codex, cloudThread(now: now), copilot, failed]
     }
 
     /// A finished Devin cloud session with its pull request (issue #55).
@@ -89,6 +99,8 @@ final class PracticeAgents {
                                  status: .done, statusSince: now.addingTimeInterval(-6 * 60), canOpen: true,
                                  hostName: String(localized: "the cloud", comment: "Where a cloud agent runs, after 'Devin in'"), isSeen: true)
         thread.isCloud = true
+        thread.pullRequest = URL(string: "https://github.com/sickpancake/PancakeNotch/pull/128")
+        thread.checks = .passed
         return thread
     }
 
