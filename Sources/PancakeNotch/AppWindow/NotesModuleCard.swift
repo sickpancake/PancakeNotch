@@ -75,6 +75,13 @@ struct NotesSettingsRows: View {
                 Toggle(String(localized: "Start a new note when Notes opens"), isOn: $settings.opensNewNote)
                     .labelsHidden()
             }
+            SettingsRow(
+                title: String(localized: "Show text counts"),
+                subtitle: String(localized: "See words, characters and list items while editing. Select text to count just the selection.")
+            ) {
+                Toggle(String(localized: "Show text counts"), isOn: $settings.showsTextCounts)
+                    .labelsHidden()
+            }
         }
     }
 

@@ -27,6 +27,7 @@ public final class NotesSettings {
     public var sort: NotesSort { didSet { defaults.set(sort.rawValue, forKey: Keys.sort) } }
     /// Opening Notes from the notch starts a new, empty note right away.
     public var opensNewNote: Bool { didSet { defaults.set(opensNewNote, forKey: Keys.opensNewNote) } }
+    public var showsTextCounts: Bool { didSet { defaults.set(showsTextCounts, forKey: Keys.showsTextCounts) } }
 
     @ObservationIgnored let defaults: UserDefaults
 
@@ -36,6 +37,7 @@ public final class NotesSettings {
         shelfText = defaults.string(forKey: Keys.shelfText).flatMap(NotesShelfText.init(rawValue:)) ?? .textFiles
         sort = defaults.string(forKey: Keys.sort).flatMap(NotesSort.init(rawValue:)) ?? .recentlyEdited
         opensNewNote = defaults.object(forKey: Keys.opensNewNote) as? Bool ?? false
+        showsTextCounts = defaults.object(forKey: Keys.showsTextCounts) as? Bool ?? true
         if defaults == UserDefaults.standard { Self.user = self }
     }
 
@@ -47,5 +49,6 @@ public final class NotesSettings {
         static let shelfText = "notes.shelfText"
         static let sort = "notes.sort"
         static let opensNewNote = "notes.opensNewNote"
+        static let showsTextCounts = "notes.showsTextCounts"
     }
 }

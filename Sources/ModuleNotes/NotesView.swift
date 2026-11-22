@@ -223,9 +223,17 @@ private struct NotesUndoRow: View {
 
 /// The note you picked: its text, editable, with Pin, Copy and Delete above it.
 private struct NotesEditor: View {
+    private struct CountRevision: Equatable {
+        let edit: UInt
+        let selection: NSRange
+    }
+
     let module: NotesModule
     let note: Note
     @State private var draft: String
+    @State private var editRevision: UInt = 0
+    @State private var selection = NSRange()
+    @State private var measuredCounts: NotesEditorCounts?
 
     init(module: NotesModule, note: Note) {
         self.module = module
@@ -234,12 +242,16 @@ private struct NotesEditor: View {
     }
 
     var body: some View {
+        let isEditing = module.isEditing && module.selectedNote?.id == note.id
+        let showsCounts = isEditing && module.settings.showsTextCounts
+        let revision = showsCounts && !draft.isEmpty ? CountRevision(edit: editRevision, selection: selection) : nil
+        let input = NotesEditorCountInput(text: draft, selection: selection)
+        let summary = countSummary(showsCounts: showsCounts)
+        let editorLabel = summary.map {
+            String(localized: "Note text, \($0)", comment: "Accessibility label with the note editor's text counts")
+        } ?? String(localized: "Note text")
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(NotesText.edited(note, now: module.store.now))
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(1)
                 Spacer(minLength: 0)
                 NotchRoundButton(symbol: note.isPinned ? "pin.slash" : "pin",
                                  label: note.isPinned ? String(localized: "Unpin") : String(localized: "Pin"), size: 22) {
@@ -263,8 +275,19 @@ private struct NotesEditor: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(.horizontal, 5)
                 } else {
-                    NotesTextView(text: $draft, isFocused: module.isEditing) { module.startEditing() }
-                        .onChange(of: draft) { module.edit(note.id, text: draft) }
+                    NotesTextView(
+                        initialText: { draft },
+                        selection: $selection,
+                        accessibilityLabel: editorLabel,
+                        isFocused: isEditing,
+                        shouldFocus: { module.isEditing && module.selectedNote?.id == note.id },
+                        onFocus: { if module.selectedNote?.id == note.id { module.startEditing() } },
+                        onEdit: { text in
+                            draft = text
+                            editRevision &+= 1
+                        }
+                    )
+                        .onChange(of: editRevision) { module.edit(note.id, text: draft) }
                         .overlay(alignment: .topLeading) {
                             if draft.isEmpty {
                                 Text("Write something…")
@@ -282,11 +305,43 @@ private struct NotesEditor: View {
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(.white.opacity(0.06))
-                    .strokeBorder(.white.opacity(module.isEditing ? 0.3 : 0.12), lineWidth: 1)
+                    .strokeBorder(.white.opacity(isEditing ? 0.3 : 0.12), lineWidth: 1)
             )
-            .animation(.easeOut(duration: 0.15), value: module.isEditing)
+            .animation(.easeOut(duration: 0.15), value: isEditing)
+            footer(summary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: revision) {
+            guard revision != nil, let counts = await input.measureAfterPause(), !Task.isCancelled else { return }
+            measuredCounts = counts
+        }
+    }
+
+    private func countSummary(showsCounts: Bool) -> String? {
+        guard showsCounts else { return nil }
+        if draft.isEmpty { return NotesEditorCounts.empty.summary }
+        guard let measuredCounts, measuredCounts.isSelection == (selection.length > 0) else { return nil }
+        return measuredCounts.summary
+    }
+
+    private func footer(_ summary: String?) -> some View {
+        let edited = NotesText.edited(note, now: module.store.now)
+        return HStack(spacing: 6) {
+            if let summary {
+                Text(summary)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.8)
+                    .help(Text(summary))
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: 0)
+            Text(edited)
+                .layoutPriority(1)
+                .help(Text(edited))
+        }
+        .font(.system(size: 10.5, weight: .medium))
+        .foregroundStyle(.white.opacity(0.55))
+        .lineLimit(1)
     }
 }
 
