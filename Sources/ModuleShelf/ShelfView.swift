@@ -107,14 +107,16 @@ private struct ShelfHeader: View {
                         Text("Shelf")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    if count > 0 {
+                    if let status = status(count: count) {
                         ViewThatFits(in: .horizontal) {
-                            Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
+                            Text(status)
                             Color.clear.frame(width: 0)
                         }
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.white.opacity(module.pasteFeedback == nil ? 0.5 : 0.85))
                         .monospacedDigit()
+                        .contentTransition(.opacity)
+                        .animation(.easeOut(duration: 0.2), value: status)
                     }
                 }
             }
@@ -135,7 +137,10 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if count == 0, module.dropZone == nil, module.prompt == nil, module.settings.pasteEnabled {
+                    ShelfPasteButton(module: module, compact: false)
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
+                    if module.settings.pasteEnabled { ShelfPasteButton(module: module, compact: true) }
                     ShelfDragAllHandle(module: module)
                     ShelfPillButton(
                         title: !module.confirmingClear ? String(localized: "Clear all")
@@ -147,6 +152,56 @@ private struct ShelfHeader: View {
             }
             .frame(width: layout.headerSideWidth, alignment: .trailing)
         }
+    }
+
+    /// The item count, or for a moment after ⌘V what the paste did.
+    private func status(count: Int) -> String? {
+        switch module.pasteFeedback {
+        case .pasted(let pasted):
+            pasted == 1 ? String(localized: "1 item pasted", comment: "Shelf: what ⌘V added")
+                : String(localized: "\(pasted) items pasted", comment: "Shelf: what ⌘V added")
+        case .nothing:
+            String(localized: "Nothing to paste", comment: "Shelf: ⌘V with an empty clipboard, or one the Shelf can't take")
+        case nil:
+            count == 0 ? nil
+                : count == 1 ? String(localized: "1 item")
+                : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
+        }
+    }
+}
+
+/// "⌘V to paste" in the empty Shelf's header, a clipboard button beside "drag all" once it has items.
+/// A click pastes too, and takes keyboard focus so the next ⌘V reaches the Shelf.
+private struct ShelfPasteButton: View {
+    let module: ShelfModule
+    let compact: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            module.requestFocus()
+            module.paste()
+        } label: {
+            if compact {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 28, height: 22)
+                    .background(.white.opacity(isHovered ? 0.2 : 0.12), in: Capsule())
+            } else {
+                Text("⌘V to paste", comment: "Shelf header: the keyboard shortcut that pastes, also a button")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.5))
+                    .lineLimit(1)
+                    .frame(height: 22)
+                    .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .help(String(localized: "Paste what you copied (⌘V)", comment: "Shelf: tooltip on the paste button"))
+        .accessibilityLabel(Text("Paste", comment: "Shelf: VoiceOver name of the paste button"))
+        .accessibilityHint(Text("Adds the files, pictures, links or text you copied to the Shelf."))
     }
 }
 

@@ -58,6 +58,8 @@ public final class ShelfSettings {
     public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
     public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
+    /// ⌘V in the open Shelf, and its "⌘V to paste" button, add what's on the clipboard like a drop.
+    public var pasteEnabled: Bool { didSet { defaults.set(pasteEnabled, forKey: Keys.paste) } }
     /// The Convert drop zone and "Convert…" on items.
     public var convertEnabled: Bool { didSet { defaults.set(convertEnabled, forKey: Keys.convertEnabled) } }
     public var convertDestination: ConvertDestination {
@@ -81,6 +83,7 @@ public final class ShelfSettings {
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
         showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
         dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
+        pasteEnabled = defaults.object(forKey: Keys.paste) as? Bool ?? true
         convertEnabled = defaults.object(forKey: Keys.convertEnabled) as? Bool ?? true
         convertDestination = defaults.string(forKey: Keys.convertDestination).flatMap(ConvertDestination.init(rawValue:)) ?? .nextToOriginal
         convertFolder = defaults.string(forKey: Keys.convertFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -97,6 +100,7 @@ public final class ShelfSettings {
         static let airDropZone = "shelf.airDropZone"
         static let showsInEars = "shelf.showsInEars"
         static let dragToTop = "shelf.dragToTop"
+        static let paste = "shelf.paste"
         static let convertEnabled = "shelf.convert.enabled"
         static let convertDestination = "shelf.convert.destination"
         static let convertFolder = "shelf.convert.folder"
