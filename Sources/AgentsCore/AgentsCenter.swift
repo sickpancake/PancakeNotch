@@ -72,6 +72,8 @@ public final class AgentsCenter {
         let pending = pendingFinishAlerts
         pendingFinishAlerts = [:]
         for (id, previous) in pending {
+            // Still reading what it changed: the peek waits for that.
+            if summarizing.contains(id) { summaryPending[id] = previous; continue }
             if let thread = storage[id] { alertIfWorthIt(thread, previous: previous) }
         }
     }
@@ -98,6 +100,8 @@ public final class AgentsCenter {
     @ObservationIgnored private(set) var startCommits: [String: String] = [:]
     /// The finish waiting for its done summary before it peeks: the thread as it was before.
     @ObservationIgnored private var summaryPending: [String: AgentThread] = [:]
+    /// Threads whose done summary is being read.
+    @ObservationIgnored private var summarizing: Set<String> = []
     /// Threads whose title came from the tool (not just their project folder).
     @ObservationIgnored private var hasOwnTitle: Set<String> = []
     @ObservationIgnored private var listViewers = 0
@@ -372,8 +376,7 @@ public final class AgentsCenter {
         let summarizes = !update.quietly && thread.status == .done && previous?.status != .done && summarize(update.id)
         if summarizes, let previous {
             // The peek waits (a moment) for what changed, so it can show it.
-            summaryPending[update.id] = deferFinishAlert ? nil : previous
-            if deferFinishAlert { pendingFinishAlerts[thread.id] = previous }
+            if deferFinishAlert { pendingFinishAlerts[thread.id] = previous } else { summaryPending[update.id] = previous }
         } else if !update.quietly {
             if deferFinishAlert, thread.status.isFinished, let previous, previous.status != thread.status { pendingFinishAlerts[thread.id] = previous }
             else { alertIfWorthIt(thread, previous: previous) }
@@ -416,6 +419,7 @@ public final class AgentsCenter {
         cwds[id] = nil
         startCommits[id] = nil
         summaryPending[id] = nil
+        summarizing.remove(id)
         hasOwnTitle.remove(id)
     }
 
@@ -438,13 +442,17 @@ public final class AgentsCenter {
         guard !isPractice, let cwd = cwds[id], let thread = storage[id], !thread.isCloud, GitSummary.executable != nil else { return false }
         let start = startCommits[id]
         let finishedAt = thread.statusSince
+        summarizing.insert(id)
         Task { [weak self] in
             let summary = await GitSummary.summary(cwd: cwd, since: start, branch: thread.branch)
             guard let self else { return }
+            self.summarizing.remove(id)
             let previous = self.summaryPending.removeValue(forKey: id)
-            guard var current = self.storage[id], current.status == .done, current.statusSince == finishedAt else { return }
-            current.doneSummary = summary
-            self.storage[id] = current
+            guard var current = self.storage[id], current.status == .done else { return }
+            if current.statusSince == finishedAt {
+                current.doneSummary = summary
+                self.storage[id] = current
+            }
             if let previous { self.alertIfWorthIt(current, previous: previous) }
         }
         return true

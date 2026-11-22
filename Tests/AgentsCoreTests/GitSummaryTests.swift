@@ -104,4 +104,24 @@ struct GitSummaryTests {
         center.apply(.init(id: "claude:a", tool: .claude, at: .now, status: .working))
         #expect(center.threads.first?.doneSummary == nil)
     }
+
+    @Test func aDeferredFinishWaitsForItsSummaryToo() async throws {
+        guard GitSummary.executable != nil else { return }
+        let repo = try repository()
+        let center = AgentsCenter(settings: AgentsSettings(defaults: UserDefaults(suiteName: "GitSummaryTests.\(UUID().uuidString)")!))
+        var alerts: [AgentAlert] = []
+        center.onAlert = { alerts.append($0) }
+        center.apply(.init(id: "claude:a", tool: .claude, at: Date().addingTimeInterval(-120), cwd: repo.path, status: .working))
+        for _ in 0..<200 where center.startCommits["claude:a"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+
+        try write("one\n", to: "README.md", in: repo)
+        center.apply(.init(id: "claude:a", tool: .claude, at: .now, status: .done), deferFinishAlert: true)
+        // The file sources finish looking before git answers: the peek still waits for the summary.
+        center.finishDiscovery()
+        #expect(alerts.isEmpty)
+        for _ in 0..<200 where alerts.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+
+        #expect(alerts.map(\.kind) == [.finished])
+        #expect(alerts.first?.thread.doneSummary == DoneSummary(branch: "main", filesChanged: 1, insertions: 0, deletions: 2))
+    }
 }
