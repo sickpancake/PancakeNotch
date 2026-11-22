@@ -51,6 +51,9 @@ public final class TimerModule: NotchModule {
     @ObservationIgnored private var appSwitchObserver: (any NSObjectProtocol)?
     /// An old observation may already have queued its callback when this copy is reattached.
     @ObservationIgnored private var observationGeneration = 0
+    /// `notch` itself isn't observed: views that checked `earTicks` before `attach` (a timer restored at
+    /// launch) start ticking when this changes.
+    private var isAttached = false
 
     public init(center: TimerCenter, settings: TimerSettings, presents: Bool = true, extraPresets: [TimerPreset] = []) {
         self.center = center
@@ -121,6 +124,7 @@ public final class TimerModule: NotchModule {
         observationGeneration += 1
         if self.notch !== notch { endEditing() }
         self.notch = notch
+        isAttached = notch != nil
         guard notch != nil else {
             if presents { center.onFinish = nil }
             stopWatchingDisplay()
@@ -583,12 +587,12 @@ public final class TimerModule: NotchModule {
 
     /// Whether the ear may tick now: shown (compact, awake, on screen) and something counts.
     var earTicks: Bool {
-        !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true && notch?.state == .compact && notch?.earsAsleep == false
+        isAttached && !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true && notch?.state == .compact && notch?.earsAsleep == false
             && (center.timer.isRunning || (center.timer.isIdle && center.stopwatch.isRunning))
     }
 
     /// Practice and live pages also stop updating when their host window is hidden or covered.
-    var pageTicks: Bool { !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true }
+    var pageTicks: Bool { isAttached && !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true }
 }
 
 /// A wheel in the timer's custom time: hours, minutes or seconds.

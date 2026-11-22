@@ -32,7 +32,7 @@ struct TimerEar: View {
         let now = center.now
         if let end = center.timer.end {
             // Past the end (the alarm hasn't run yet), not a start in the future.
-            return end.addingTimeInterval(-(max(0, end.timeIntervalSince(now)).rounded(.down) + 1))
+            return end.addingTimeInterval(-max(0, end.timeIntervalSince(now)).rounded(.up))
         }
         if center.timer.isIdle, center.stopwatch.isRunning {
             let elapsed = center.stopwatch.elapsed(at: now)

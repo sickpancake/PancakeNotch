@@ -363,7 +363,7 @@ private struct TimerRunning: View {
         Group {
             if let end = timer.end, module.pageTicks {
                 // Ticks on each whole second before the end, only while this page shows (AGENTS.md rule 2).
-                TimelineView(.periodic(from: end.addingTimeInterval(-(max(0, end.timeIntervalSince(module.center.now)).rounded(.down) + 1)), by: 1)) { context in
+                TimelineView(.periodic(from: end.addingTimeInterval(-max(0, end.timeIntervalSince(module.center.now)).rounded(.up)), by: 1)) { context in
                     face(now: context.date)
                 }
             } else {
@@ -507,31 +507,16 @@ extension TimerDone {
 }
 
 /// Several timers at once (issue #70): a row each, ending soonest first, with +1 min, pause and cancel, and
-/// "+ New timer" under them. One tick a second for the lot, only while the page shows.
+/// "+ New timer" under them.
 private struct TimerList: View {
     let module: TimerModule
     let isCompact: Bool
 
     var body: some View {
-        let center = module.center
-        Group {
-            if module.pageTicks, let start = tickStart {
-                TimelineView(.periodic(from: start, by: 1)) { context in
-                    rows(now: context.date)
-                }
-            } else {
-                rows(now: center.now)
-            }
-        }
+        rows
     }
 
-    /// A whole number of seconds before the soonest end, so the ticks land as the shown seconds change.
-    private var tickStart: Date? {
-        guard let end = module.center.sortedTimers.compactMap(\.end).first else { return nil }
-        return end.addingTimeInterval(-(max(0, end.timeIntervalSince(module.center.now)).rounded(.down) + 1))
-    }
-
-    private func rows(now: Date) -> some View {
+    private var rows: some View {
         let center = module.center
         let timers = center.sortedTimers
         let rowHeight: CGFloat = isCompact ? 26 : 30
@@ -544,7 +529,7 @@ private struct TimerList: View {
             let shown = timers.count > fit ? Array(timers.prefix(fit)) : timers
             VStack(alignment: .leading, spacing: spacing) {
                 ForEach(shown, id: \.id) { timer in
-                    TimerRow(module: module, timer: timer, now: now, isCompact: isCompact)
+                    TimerRow(module: module, timer: timer, isCompact: isCompact)
                         .frame(height: rowHeight)
                         .transition(.opacity)
                 }
@@ -573,10 +558,22 @@ private struct TimerList: View {
 private struct TimerRow: View {
     let module: TimerModule
     let timer: CountdownTimer
-    let now: Date
     let isCompact: Bool
 
     var body: some View {
+        if let end = timer.end, module.pageTicks {
+            // Each row ticks on its own whole seconds before its end, only while the page shows (AGENTS.md
+            // rule 2): one shared tick would show other rows a second early or late.
+            TimelineView(.periodic(from: end.addingTimeInterval(-max(0, end.timeIntervalSince(module.center.now)).rounded(.up)), by: 1)) { context in
+                row(now: context.date)
+            }
+        } else {
+            row(now: module.center.now)
+        }
+    }
+
+    @ViewBuilder
+    private func row(now: Date) -> some View {
         let remaining = timer.remaining(at: now)
         let label = TimerText.label(timer)
         let status = timer.end.map { String(localized: "Ends \(TimerText.time($0))", comment: "Timer: when it will end") }
