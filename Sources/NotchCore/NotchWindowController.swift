@@ -199,7 +199,7 @@ public final class NotchWindowController {
             layout.isPeeking = model.layout.isPeeking
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
-            panel.setFrame(layout.windowFrame(for: model.state), display: true)
+            panel.setFrame(model.windowFrame(for: model.state), display: true)
         } else {
             createPanel(layout: layout)
         }
@@ -281,7 +281,7 @@ public final class NotchWindowController {
             self?.presentPeek(of: moduleID, for: duration, revealsInFullScreen: reveals)
         }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
-        let panel = NotchPanel(contentRect: layout.windowFrame(for: model.state))
+        let panel = NotchPanel(contentRect: model.windowFrame(for: model.state))
         panel.onResignKey = { [weak model] in model?.keyFocusLost() }
         let hostingView = NSHostingView(rootView: NotchView(model: model))
         hostingView.sizingOptions = []
@@ -291,11 +291,20 @@ public final class NotchWindowController {
         }
         dropRouter.model = model
         container.dropDelegate = dropRouter
+        // The compact window reaches below the outline for the "+n" chip's strip: everything
+        // else in that added band passes clicks and hovers through to the desktop.
+        container.hittable = { [weak model, weak panel, weak container] point in
+            guard let model, let panel, let container else { return true }
+            guard model.state == .compact, let strip = model.earOverflowFrame() else { return true }
+            let inWindow = container.superview?.convert(point, to: nil) ?? point
+            let screen = CGPoint(x: panel.frame.minX + inWindow.x, y: panel.frame.minY + inWindow.y)
+            return model.layout.outline(for: .compact, contains: screen) || strip.contains(screen)
+        }
         panel.contentView = container
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak self, weak panel, weak model] state in
             guard let panel, let model else { return }
-            let frame = model.layout.windowFrame(for: state)
+            let frame = model.windowFrame(for: state)
             // Called before and after every transition: a frame that didn't change needs no redraw.
             if panel.frame != frame { panel.setFrame(frame, display: true) }
             // A transition's end (the size asked for is the state it settled in) after the shortcut's reveal.

@@ -17,6 +17,12 @@ struct NotchView: View {
             } else {
                 notch(state: state)
             }
+            // The "+n" chip hangs off the ear's bottom edge: it is drawn outside the
+            // clipped outline (so it is not cut) and keeps its own hit region below it.
+            if state == .compact, let overflow = model.earOverflow {
+                EarOverflowChipView(overflow: overflow, isAsleep: model.earsAsleep,
+                                    layout: model.layout)
+            }
         }
         .onHover { model.hoverChanged($0) }
         .onTapGesture { model.tap() }
@@ -32,7 +38,12 @@ struct NotchView: View {
 
     private var accessibilityLabel: String {
         guard model.state != .expanded else { return "PancakeNotch" }
-        let statuses = model.rankedModules.compactMap(\.accessibilityStatus)
+        var statuses = model.rankedModules.compactMap(\.accessibilityStatus)
+        if let overflow = model.earOverflow, model.state == .compact {
+            statuses.append(overflow.count == 1
+                ? String(localized: "1 more active module", comment: "Ear overflow chip")
+                : String(localized: "\(overflow.count) more active modules", comment: "Ear overflow chip"))
+        }
         return (["PancakeNotch"] + statuses).joined(separator: ", ")
     }
 
@@ -45,7 +56,8 @@ struct NotchView: View {
             Color.black
             content(layout: layout, state: state)
             if ears.left != nil || ears.right != nil {
-                CompactEarsView(left: ears.left, right: ears.right, isAsleep: model.earsAsleep,
+                CompactEarsView(left: ears.left, right: ears.right,
+                                isAsleep: model.earsAsleep,
                                 layout: layout, state: state, reduceMotion: reduceMotion)
             }
             if state == .compact, let peek = model.peekView {
@@ -264,6 +276,58 @@ private struct CompactEarsView: View {
     private func fade(isShown: Bool) -> Animation {
         if isShown { return .easeOut(duration: 0.18) }
         return state == .closed && !reduceMotion ? .easeIn(duration: 0.12).delay(0.3) : .easeOut(duration: 0.12)
+    }
+}
+
+/// The "+n" capsule reporting active modules that didn't fit a spot. It lives outside the
+/// clipped outline, level with the bottom edge of the ear it tucks under, so its lower
+/// half hangs onto the desktop — which is also the part the pointer can reach.
+private struct EarOverflowChipView: View {
+    let overflow: NotchViewModel.EarOverflow
+    let isAsleep: Bool
+    let layout: NotchLayout
+
+    var body: some View {
+        HStack(spacing: 0) {
+            chip(overflow.side == .left ? overflow.count : nil)
+            Spacer(minLength: 0)
+            chip(overflow.side == .right ? overflow.count : nil)
+        }
+        // The frame reaches below the ear's bottom edge by the chip's strip: the window is
+        // grown by the same amount, and SwiftUI only hits views whose own bounds cover a point.
+        .frame(width: layout.bodySize(for: .compact).width,
+               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight, alignment: .top)
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
+    }
+
+    private func chip(_ count: Int?) -> some View {
+        ZStack(alignment: .bottom) {
+            if let count, !isAsleep {
+                // The window server sends clicks on alpha-0 pixels to the window below,
+                // before AppKit or SwiftUI see them; a near-invisible fill keeps the
+                // strip's pixels on this window so clicks in it reach tap()/hoverChanged.
+                Rectangle()
+                    .fill(.white.opacity(0.001))
+                    .frame(height: NotchViewModel.earOverflowChipHeight)
+                Text("+\(count)")
+                    .font(.system(size: 9, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    // The capsule hangs onto the desktop, so the fill stays dark
+                    // (like the notch) and reads on any wallpaper; the light edge
+                    // keeps its outline visible over the black body.
+                    .background(Capsule(style: .continuous).fill(.black.opacity(0.85)))
+                    .background(Capsule(style: .continuous).stroke(.white.opacity(0.25)))
+                    // Tucks under the ear: its bottom edge lands 7pt below the ear's.
+                    .offset(y: -(NotchViewModel.earOverflowChipHeight - 7))
+            }
+        }
+        .frame(width: layout.compactEarWidth,
+               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight,
+               alignment: .bottom)
     }
 }
 

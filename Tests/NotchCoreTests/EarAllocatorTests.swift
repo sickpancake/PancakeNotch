@@ -83,6 +83,16 @@ struct EarAllocatorTests {
         }
         let first = slots.first ?? nil
         let second = slots.count > 1 ? slots[1] : nil
-        return swapped ? .init(left: second, right: first) : .init(left: first, right: second)
+        // The "+n" chip reports candidates that didn't fit; its ear is the side most of them wanted.
+        let displaced = modules.filter { !chosen.contains($0.moduleID) }
+        let onTheRight = displaced.filter(takesSecond).count
+        var overflowSide: EarAllocator.Allocation.Side?
+        if !displaced.isEmpty {
+            overflowSide = onTheRight > displaced.count - onTheRight ? .right : .left
+            if swapped { overflowSide = overflowSide == .left ? .right : .left }
+        }
+        return swapped
+            ? .init(left: second, right: first, displacedModuleIDs: displaced.map(\.moduleID), overflowSide: overflowSide)
+            : .init(left: first, right: second, displacedModuleIDs: displaced.map(\.moduleID), overflowSide: overflowSide)
     }
 }

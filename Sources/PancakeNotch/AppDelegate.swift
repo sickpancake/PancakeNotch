@@ -567,6 +567,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allModules,
             model(.compact, shelf: ShelfSnapshot.module(itemCount: 16)),
             model(.compact, swapped: true, shelf: ShelfSnapshot.module(itemCount: 20)),
+            // Three active modules: the third doesn't fit, so a "+1" mark tucks under its ear.
+            model(.compact, shelf: ShelfSnapshot.module(itemCount: 17)) { $0.modules.append(KeepAwakeSnapshot.module { center, _ in center.turnOn(.timed(3600)) }) },
             model(.expanded),
             model(.expanded) { $0.toggleHome() },
             model(.expanded) { $0.select("shelf") },
