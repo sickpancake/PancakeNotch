@@ -232,17 +232,20 @@ enum JSONLines {
 
     /// Calls `line` for each complete line from `offset` on, reading 256 KB at a time. Returns the offset
     /// after the last complete line (a line still being written is read next time). Lines over
-    /// `maxLine` are skipped.
+    /// `maxLine` are skipped. A spanning line can also be skipped if its full prefix fails the filter.
     @discardableResult
     static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
+                     spanningLineFilter: (length: Int, accepts: (Data) -> Bool)? = nil,
                      shouldContinue: () -> Bool = { true }, line: (Data) -> Void) -> UInt64 {
-        read(url, from: offset, maxLine: maxLine, shouldContinue: shouldContinue) { data, _ in line(data) }
+        read(url, from: offset, maxLine: maxLine, spanningLineFilter: spanningLineFilter,
+             shouldContinue: shouldContinue) { data, _ in line(data) }
     }
 
     /// The same, also giving each line's offset in the file. Each 256 KB piece is let go once its lines
     /// are read, so a long history streams in a few hundred KB rather than piling up until the end.
     @discardableResult
     static func read(_ url: URL, from offset: UInt64, maxLine: Int = 16 * 1024 * 1024,
+                     spanningLineFilter: (length: Int, accepts: (Data) -> Bool)? = nil,
                      shouldContinue: () -> Bool = { true }, lineAt: (Data, UInt64) -> Void) -> UInt64 {
         guard let handle = open(url) else { return offset }
         defer { try? handle.close() }
@@ -253,6 +256,13 @@ enum JSONLines {
         var pending = Data()
         var skipping = false
         var stopped = false
+        func rejectsPrefix(with bytes: Data) -> Bool {
+            // Only inspect the prefix once, when this piece first brings it up to length.
+            guard let filter = spanningLineFilter, pending.count < filter.length,
+                  pending.count + bytes.count >= filter.length else { return false }
+            let head = bytes.prefix(filter.length - pending.count)
+            return !filter.accepts(pending.isEmpty ? head : pending + head)
+        }
         while !stopped, shouldContinue() {
             let more: Bool = autoreleasepool {
                 guard let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty else { return false }
@@ -264,7 +274,7 @@ enum JSONLines {
                         autoreleasepool {
                             if pending.isEmpty {
                                 lineAt(Data(chunk[start..<newline]), position)
-                            } else {
+                            } else if !rejectsPrefix(with: chunk[start..<newline]) {
                                 pending.append(chunk[start..<newline])
                                 lineAt(pending, position)
                             }
@@ -277,8 +287,8 @@ enum JSONLines {
                 }
                 let rest = chunk[start...]
                 if skipping {
-                    // Keep the last complete-line offset until the oversized line ends.
-                } else if pending.count + rest.count > maxLine {
+                    // Keep the last complete-line offset until the skipped line ends.
+                } else if pending.count + rest.count > maxLine || rejectsPrefix(with: rest) {
                     skipping = true
                     pending.removeAll()
                 } else {

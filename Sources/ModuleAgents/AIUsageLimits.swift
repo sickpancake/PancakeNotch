@@ -1,4 +1,6 @@
 import AgentsCore
+import AppKit
+import NotchCore
 import SwiftUI
 
 /// The left column: one account's limits (up to three), or one compact row per account when several are shown.
@@ -47,6 +49,22 @@ private struct AccountLimitRows: View {
     let limits: AccountLimits?
 
     var body: some View {
+        if account.tool == .devin {
+            // Devin's API doesn't share plan limits or credits: its own page has them.
+            VStack(alignment: .leading, spacing: 8) {
+                LimitsNote(text: String(localized: "Devin keeps your plan's limits and credits on its website.", comment: "AI Usage: Devin cloud account"))
+                NotchPill(title: String(localized: "Open Devin Usage"), symbol: "arrow.up.right") {
+                    NSWorkspace.shared.open(DevinCloud.usagePage)
+                }
+                .help(Text("Opens Usage & limits on devin.ai in your browser"))
+            }
+        } else {
+            limitRows
+        }
+    }
+
+    @ViewBuilder
+    private var limitRows: some View {
         switch limits?.state {
         case .available?:
             let rows = limits?.limits.prefix(3) ?? []
@@ -156,7 +174,12 @@ private struct AccountSummaryRow: View {
         case .noLimits?:
             note(String(localized: "No plan limits", comment: "AI Usage: an account that pays per token"))
         case .notYet?, nil:
-            note(String(localized: "Not seen yet", comment: "AI Usage: limits not seen yet"))
+            if account.tool == .devin, let devin = module.center.devinUsage {
+                // Devin counts in ACUs, not tokens: its own number for the range, where the bars would be.
+                note(String(localized: "\(AIUsageText.acus(devin.acus(in: module.center.range))) ACUs", comment: "AI Usage: what Devin cloud used in the range"))
+            } else {
+                note(String(localized: "Not seen yet", comment: "AI Usage: limits not seen yet"))
+            }
         }
     }
 

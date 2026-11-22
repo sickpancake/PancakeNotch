@@ -47,6 +47,11 @@ enum AIUsageText {
         count.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)).locale(locale))
     }
 
+    /// ACUs, Devin's unit: "12.4", "0.5", "120".
+    static func acus(_ value: Double, locale: Locale = .current) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+    }
+
     /// "≈ $41.20 API value" for plans, "$41.20 Cost" for accounts that pay per token.
     static func money(_ cost: Double, label: String, paysPerToken: Bool) -> String {
         let amount = cost.formatted(.currency(code: "USD"))

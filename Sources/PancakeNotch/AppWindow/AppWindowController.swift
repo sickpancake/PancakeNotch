@@ -120,6 +120,7 @@ extension AppWindowController {
         let agents = AgentsCenter.practice()
         let usage = UsageCenter.practice()
         let connector = AgentConnector.preview([.claude: .connected, .codex: .notConnected, .cursor: .notFound], settings: agentsSettings)
+        connector.devinCloud = .preview()
         let timerSettings = TimerSettings(defaults: defaults)
         let timers = TimerCenter()
         let keepAwakeSettings = KeepAwakeSettings(defaults: defaults)

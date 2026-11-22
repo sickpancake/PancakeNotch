@@ -4,11 +4,13 @@ import SwiftUI
 struct NotchHomeEditingGrid: View {
     let model: NotchViewModel
     let area: CGSize
-    @State private var history = HomeHistory()
     @State private var dragged: HomeWidgetKind?
     @State private var pointer = CGPoint.zero
     @State private var anchor = CGPoint.zero
     @State private var landing: HomeSlot?
+    /// Home with the dragged widget landed and neighbours moved aside; recomputed only when the landing
+    /// spot changes, not per pointer event.
+    @State private var preview: HomeLayout?
     @State private var note: String?
     @State private var noteTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,10 +19,7 @@ struct NotchHomeEditingGrid: View {
     private var resolver: HomeWidgetResolver {
         HomeWidgetResolver(modules: model.modules, arrangement: model.arrangement, extras: model.homeExtras)
     }
-    private var shown: HomeLayout {
-        guard let dragged, let landing else { return model.homeLayout }
-        return model.homeLayout.previewMoving(dragged, to: landing) ?? model.homeLayout
-    }
+    private var shown: HomeLayout { preview ?? model.homeLayout }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -42,8 +41,8 @@ struct NotchHomeEditingGrid: View {
                     .transition(.opacity)
             }
         }
-        .onDisappear { noteTask?.cancel(); dragged = nil }
-        .onChange(of: area) { _, _ in dragged = nil; landing = nil }
+        .onDisappear { noteTask?.cancel(); dragged = nil; landing = nil; preview = nil }
+        .onChange(of: area) { _, _ in dragged = nil; landing = nil; preview = nil }
     }
 
     private var canvas: some View {
@@ -169,19 +168,23 @@ struct NotchHomeEditingGrid: View {
                     if index >= 0, index < count { model.showHomePage(index) }
                 }
                 let cell = HomeWidgetMetrics.cellSize(in: area)
-                landing = HomeSlot(page: page,
+                let slot = HomeSlot(page: page,
                     column: min(max(0, Int((pointer.x - anchor.x + cell.width / 2) / (cell.width + HomeWidgetMetrics.gap))), HomeLayout.columns - placement.size.columns),
                     row: min(max(0, Int((pointer.y - anchor.y + cell.height / 2) / (cell.height + HomeWidgetMetrics.gap))), HomeLayout.rows - placement.size.rows))
+                if slot != landing {
+                    landing = slot
+                    preview = dragged.flatMap { model.homeLayout.previewMoving($0, to: slot) }
+                }
             }
             .onEnded { _ in
                 if let landing { edit { $0.moving(placement.kind, to: landing) } }
-                dragged = nil; landing = nil
+                dragged = nil; landing = nil; preview = nil
                 turnToWidget(placement.kind)
             }
     }
 
     private func edit(_ change: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) {
-        if let refusal = model.home.edit(&history, change) {
+        if let refusal = model.home.edit(change) {
             noteTask?.cancel()
             withAnimation(.easeInOut(duration: 0.15)) { note = refusal.message }
             noteTask = Task { @MainActor in

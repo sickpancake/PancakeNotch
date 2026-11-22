@@ -69,7 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// AI accounts, limits and token history. Follows them only while AI Usage is switched on.
     private lazy var usage = UsageCenter(settings: agentsSettings, stats: statistics)
     /// Reads the tools' hook files when first asked (Agents switched on, or its settings shown).
-    private lazy var connector = AgentConnector(settings: agentsSettings)
+    private lazy var connector: AgentConnector = {
+        let connector = AgentConnector(settings: agentsSettings)
+        connector.devinCloud = devinCloud
+        return connector
+    }()
+    /// Devin's cloud sessions, after the user connects a token. Asks Devin only while Agents or AI Usage is on.
+    private let devinCloud = DevinCloud()
     /// Exists only while Agents is switched on.
     private var agentsModule: AgentsModule?
     /// Exists only while AI Usage is switched on.
@@ -414,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keepAwakeModule = nil
             keepAwake.stop()
         }
+        devinCloud.follow(agents: agentsModule == nil ? nil : agents, usage: usageModule == nil ? nil : usage)
         notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule]
             .compactMap { $0 }
         observeWork(startsTail: !(hadWorkModules.0 && agentsModule == nil) && !(hadWorkModules.1 && shelf == nil))

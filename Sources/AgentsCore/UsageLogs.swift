@@ -66,21 +66,39 @@ struct CodexUsageLog: Codable, Equatable {
         (try? JSONEncoder().encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? ""
     }
 
+    private enum LineKind {
+        case session, context, tokens
+    }
+
+    private static let prefixLength = 200
+
+    static var spanningLineFilter: (length: Int, accepts: (Data) -> Bool) {
+        (prefixLength, { lineKind($0) != nil })
+    }
+
+    private static func lineKind(_ prefix: Data) -> LineKind? {
+        let head = String(decoding: prefix, as: UTF8.self)
+        if head.contains(#""type":"session_meta""#) { return .session }
+        if head.contains(#""type":"turn_context""#) { return .context }
+        if head.contains(#""type":"event_msg""#), head.contains(#""token_count""#) { return .tokens }
+        return nil
+    }
+
     /// - Parameter fallbackThread: the thread ID in the file's name, for a file whose first line went missing.
     mutating func record(_ line: Data, account: String, fallbackThread: String) -> AIUsageRecord? {
-        let head = String(decoding: line.prefix(200), as: UTF8.self)
-        if head.contains(#""type":"session_meta""#) {
+        switch Self.lineKind(line.prefix(Self.prefixLength)) {
+        case .session:
             if thread == nil, let payload = Self.payload(line)?.payload {
                 thread = payload["id"] as? String ?? payload["session_id"] as? String
             }
             return nil
-        }
-        if head.contains(#""type":"turn_context""#) {
+        case .context:
             if let name = Self.payload(line)?.payload["model"] as? String { model = name }
             return nil
+        case .tokens: break
+        case nil: return nil
         }
-        guard head.contains(#""type":"event_msg""#), head.contains(#""token_count""#),
-              let decoded = Self.payload(line),
+        guard let decoded = Self.payload(line),
               let info = decoded.payload["info"] as? [String: Any],
               let totals = info["total_token_usage"] as? [String: Any] else { return nil }
         let new = (input: count(totals["input_tokens"]), cached: count(totals["cached_input_tokens"]),
@@ -178,14 +196,12 @@ final class UsageLedger: @unchecked Sendable {
     }
 
     private let stats: StatsStore
-    private var progress: [String: AIFileProgress]
     /// Set from the main actor to stop a long first read early (AI Usage was switched off).
     let cancelled = OSAllocatedUnfairLock(initialState: false)
     private let discardedBefore = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
-    init(stats: StatsStore, progress: [String: AIFileProgress]) {
+    init(stats: StatsStore) {
         self.stats = stats
-        self.progress = progress
     }
 
     /// The user cleared Statistics during an import. Finish advancing file offsets, but keep only
@@ -199,6 +215,19 @@ final class UsageLedger: @unchecked Sendable {
         let oldest = now.addingTimeInterval(-Double(StatsStore.retentionDays) * 86_400)
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
         var files: [LogFile] = []
+        var batch: [(url: URL, path: String, account: Account, size: UInt64)] = []
+        func appendUnread() {
+            guard !batch.isEmpty else { return }
+            let progress = stats.aiFileProgress(for: batch.map(\.path))
+            for file in batch {
+                // If a file was shortened past its offset, start from the beginning again.
+                let saved = progress[file.path].flatMap { $0.offset <= file.size ? $0 : nil }
+                let start = saved?.offset ?? 0
+                guard start < file.size else { continue }
+                files.append(LogFile(url: file.url, account: file.account, size: file.size, start: start, state: saved?.state ?? ""))
+            }
+            batch.removeAll(keepingCapacity: true)
+        }
         for account in accounts {
             let roots = account.tool == .claude ? ["projects"] : ["sessions", "archived_sessions"]
             for root in roots {
@@ -206,20 +235,17 @@ final class UsageLedger: @unchecked Sendable {
                                                                   includingPropertiesForKeys: keys,
                                                                   options: [.skipsHiddenFiles]) else { continue }
                 for case let url as URL in walker where url.pathExtension == "jsonl" {
+                    guard !cancelled.withLock({ $0 }) else { return [] }
                     guard account.tool == .claude || url.lastPathComponent.hasPrefix("rollout-"),
                           let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
-                          let size = values.fileSize.map(UInt64.init), (values.contentModificationDate ?? now) >= oldest
+                          let size = values.fileSize.map(UInt64.init), size > 0, (values.contentModificationDate ?? now) >= oldest
                     else { continue }
-                    let saved = progress[url.path]
-                    if saved?.size == size, saved?.offset == size { continue }
-                    // A file that got shorter was replaced: read it again (records already saved stay single).
-                    let resumes = saved.map { $0.offset <= size } ?? false
-                    let start = resumes ? saved?.offset ?? 0 : 0
-                    guard start < size else { continue }
-                    files.append(LogFile(url: url, account: account, size: size, start: start, state: resumes ? saved?.state ?? "" : ""))
+                    batch.append((url, url.path, account, size))
+                    if batch.count == StatsStore.aiFileProgressBatchSize { appendUnread() }
                 }
             }
         }
+        appendUnread()
         return files
     }
 
@@ -229,18 +255,25 @@ final class UsageLedger: @unchecked Sendable {
         var records: [String: AIUsageRecord] = [:]
         var codex = file.account.tool == .codex ? CodexUsageLog(state: file.state) : nil
         let fallback = CodexUsageLog.thread(inFileName: file.url.lastPathComponent)
-        func flush(_ next: AIFileProgress) {
+        let committed = OSAllocatedUnfairLock(initialState: false)
+        func flush(_ next: AIFileProgress) -> Bool {
             let batch = Array(records.values)
             discardedBefore.withLock { cutoff in
                 let kept = batch.filter { record in cutoff.map { record.date >= $0 } ?? true }
-                stats.recordAIUsage(kept, file: file.url.path, progress: next)
+                stats.recordAIUsage(kept, file: file.url.path, progress: next) { success in
+                    committed.withLock { $0 = success }
+                }
             }
             // Bound both this batch and the database's pending writes during a large first import.
             stats.waitForWrites()
             records.removeAll(keepingCapacity: true)
+            return committed.withLock { $0 }
         }
         let initial = AIFileProgress(size: file.size, offset: file.start, state: file.state)
-        let offset = JSONLines.read(file.url, from: file.start, shouldContinue: { !self.cancelled.withLock { $0 } }) { line in
+        var failed = false
+        let offset = JSONLines.read(file.url, from: file.start,
+                                    spanningLineFilter: codex == nil ? nil : CodexUsageLog.spanningLineFilter,
+                                    shouldContinue: { !failed && !self.cancelled.withLock { $0 } }) { line in
             // Each line's decoded objects go right away, so a big log never piles up in memory.
             autoreleasepool {
                 let record = codex != nil
@@ -249,11 +282,11 @@ final class UsageLedger: @unchecked Sendable {
                 guard let record, record.date >= oldest else { return }
                 if record.output >= records[record.id]?.output ?? -1 { records[record.id] = record }
             }
-            if records.count >= 256 { flush(initial) }
+            if records.count >= 256 { failed = !flush(initial) }
         }
+        guard !failed else { return }
         let next = AIFileProgress(size: file.size, offset: offset, state: codex?.state ?? "")
-        progress[file.url.path] = next
-        flush(next)
+        _ = flush(next)
     }
 }
 

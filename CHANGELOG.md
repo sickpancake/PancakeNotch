@@ -7,6 +7,8 @@ so write them for people using the app: short, plain, no code talk.
 
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.
 - **Screenshots on the Shelf.** Turn on Catch new screenshots in Shelf settings and every new screenshot lands on the Shelf, with a short note under the notch, ready to drag into a chat, AirDrop or convert. It uses the folder your Mac saves screenshots to.
+- **Devin cloud sessions in Agents.** Sessions that run on Devin's servers now show up too, next to your local agents: working, needs you, done or stopped, with their pull request once there is one. Click one to open it in your browser. Connect with a Devin personal access token under Agents settings; it's kept in your Keychain and only sent to Devin. PancakeNotch asks Devin only while a session runs, or when you come back to your Mac.
+- **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
 
 ## 0.4.0 — beta
 

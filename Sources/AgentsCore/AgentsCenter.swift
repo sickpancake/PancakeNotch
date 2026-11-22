@@ -40,8 +40,9 @@ public final class AgentsCenter {
 
     public var hasFinished: Bool { shown.contains { $0.status.isFinished } }
 
-    /// An agent works or waits for you (Keep Awake holds the Mac awake meanwhile, ADR-0041).
-    public var isBusy: Bool { shown.contains { !$0.status.isFinished } }
+    /// An agent works or waits for you (Keep Awake holds the Mac awake meanwhile, ADR-0041). Cloud
+    /// sessions don't count: they carry on with the Mac asleep.
+    public var isBusy: Bool { shown.contains { !$0.status.isFinished && !$0.isCloud } }
 
     /// The threads of the tools not hidden in Settings, without the helpers that show under another.
     private var shown: [AgentThread] {
@@ -56,6 +57,8 @@ public final class AgentsCenter {
         return ancestors(of: thread.id).contains { storage[$0].map { !hidden.contains($0.tool) } ?? false }
     }
 
+    /// The list came on screen (Devin cloud takes a fresh look).
+    @ObservationIgnored var onListShown: (@MainActor () -> Void)?
     /// Told about needs-you and finishes worth a peek (smart rules applied).
     @ObservationIgnored public var onAlert: (@MainActor (AgentAlert) -> Void)?
     /// A user action in the practice notch, for the lessons.
@@ -85,6 +88,8 @@ public final class AgentsCenter {
     @ObservationIgnored private var seenAt: [String: Date] = [:]
     /// The process each thread runs in, for "bring its app forward" and "is the user looking at it".
     @ObservationIgnored private var processIDs: [String: pid_t] = [:]
+    /// The web page a cloud session opens (its session, or its pull request once finished).
+    @ObservationIgnored private var links: [String: URL] = [:]
     /// Apps named by the tool when there's no process ID (a Codex rollout's originator).
     @ObservationIgnored private var hostBundleIDs: [String: String] = [:]
     /// Each thread's project folder path, for its branch.
@@ -135,6 +140,16 @@ public final class AgentsCenter {
         return center
     }
 
+    /// Devin cloud sessions only, one of each kind (the off-screen snapshot).
+    public static func practiceCloud(now: Date = .now) -> AgentsCenter {
+        let center = practiceEmpty()
+        for thread in PracticeAgents.cloudThreads(now: now) {
+            center.storage[thread.id] = thread
+            center.hasOwnTitle.insert(thread.id)
+        }
+        return center
+    }
+
     /// Puts the practice threads back (after a try, or when a lesson starts again).
     public func reset(now: Date = .now) {
         guard isPractice else { return }
@@ -164,6 +179,7 @@ public final class AgentsCenter {
         seenAt = [:]
         processIDs = [:]
         hostBundleIDs = [:]
+        links = [:]
         cwds = [:]
         hasOwnTitle = []
     }
@@ -188,6 +204,7 @@ public final class AgentsCenter {
         }
         prune(now: now)
         live?.setDetailed(true)
+        onListShown?()
     }
 
     public func listHidden() {
@@ -228,6 +245,10 @@ public final class AgentsCenter {
             onPracticeEvent?(.opened)
             return
         }
+        if let link = links[id] {
+            NSWorkspace.shared.open(link)
+            return
+        }
         live?.handBack(threadID: id)
         hostApp(for: id)?.activate()
     }
@@ -266,6 +287,12 @@ public final class AgentsCenter {
         var approval: PendingApproval??
         var processID: pid_t?
         var hostBundleID: String?
+        /// A project name of its own, for threads with no folder on this Mac (cloud sessions).
+        var project: String?
+        /// Where it runs, when that isn't an app on this Mac ("the cloud").
+        var hostName: String?
+        /// The web page a click opens: a cloud session. `.some(nil)` takes it away.
+        var link: URL??
         /// Only adds the thread if it's new (a session seen idle at launch): no alerts.
         var quietly = false
     }
@@ -285,6 +312,12 @@ public final class AgentsCenter {
                 thread.branch = GitBranch.name(cwd: cwd)
             }
         }
+        if let project = update.project, !project.isEmpty { thread.project = project }
+        if let link = update.link {
+            links[update.id] = link
+            thread.isCloud = true
+        }
+        if let hostName = update.hostName { thread.hostName = hostName }
         if let title = update.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             thread.title = title
             hasOwnTitle.insert(update.id)
@@ -321,9 +354,13 @@ public final class AgentsCenter {
             }
         }
         if !isPractice {
-            let host = hostApp(for: update.id)
-            thread.canOpen = host != nil
-            thread.hostName = host?.localizedName ?? thread.hostName
+            if thread.isCloud {
+                thread.canOpen = links[update.id] != nil
+            } else {
+                let host = hostApp(for: update.id)
+                thread.canOpen = host != nil
+                thread.hostName = host?.localizedName ?? thread.hostName
+            }
         }
         storage[update.id] = thread
         if !update.quietly {
@@ -364,6 +401,7 @@ public final class AgentsCenter {
         seenAt[id] = nil
         processIDs[id] = nil
         hostBundleIDs[id] = nil
+        links[id] = nil
         cwds[id] = nil
         hasOwnTitle.remove(id)
     }

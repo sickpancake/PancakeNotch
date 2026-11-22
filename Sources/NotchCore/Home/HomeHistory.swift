@@ -1,4 +1,6 @@
-/// The editor's bounded undo and redo history.
+/// Home's bounded undo and redo history. One is kept on HomeSettings so the notch and the app-window
+/// editor share a single linear history (ADR-0042): an Undo steps back the latest committed edit on
+/// either surface instead of restoring a stale whole-layout snapshot.
 public struct HomeHistory: Sendable, Equatable {
     private var undoStack: [HomeLayout] = []
     private var redoStack: [HomeLayout] = []
@@ -23,7 +25,7 @@ public struct HomeHistory: Sendable, Equatable {
 
 extension HomeSettings {
     /// Refused edits and unchanged layouts do not use an undo step.
-    @discardableResult public func edit(_ history: inout HomeHistory,
+    @discardableResult public func edit(
         _ change: (HomeLayout) -> Result<HomeLayout, HomeEditRefusal>) -> HomeEditRefusal? {
         let before = layout
         let refusal = apply(change(before))
