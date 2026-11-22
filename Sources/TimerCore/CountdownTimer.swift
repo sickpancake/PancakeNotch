@@ -19,8 +19,26 @@ public struct CountdownTimer: Codable, Equatable, Sendable {
     public private(set) var duration: TimeInterval = 0
     /// What the ring drains from: the length, or one minute after +1 min.
     public private(set) var total: TimeInterval = 0
+    /// Tells timers apart while several run (issue #70); kept across Repeat and +1 min.
+    public private(set) var id = UUID()
+    /// What the user called it ("Pasta"); empty when unnamed.
+    public var name = ""
 
     public init() {}
+
+    public init(name: String) { self.name = name }
+
+    private enum CodingKeys: String, CodingKey { case phase, duration, total, id, name }
+
+    /// Older saves have no id or name.
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        phase = try values.decode(Phase.self, forKey: .phase)
+        duration = try values.decode(TimeInterval.self, forKey: .duration)
+        total = try values.decode(TimeInterval.self, forKey: .total)
+        id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+    }
 
     public var isRunning: Bool { if case .running = phase { true } else { false } }
     public var isPaused: Bool { if case .paused = phase { true } else { false } }
@@ -70,6 +88,19 @@ public struct CountdownTimer: Codable, Equatable, Sendable {
         guard isDone else { return }
         total = 60
         phase = .running(end: now + 60)
+    }
+
+    /// +1 min on a running or paused timer: a minute more, and the ring drains from the new length.
+    public mutating func extend(by seconds: TimeInterval) {
+        switch phase {
+        case .running(let end):
+            phase = .running(end: end + seconds)
+        case .paused(let remaining):
+            phase = .paused(remaining: remaining + seconds)
+        default:
+            return
+        }
+        total += seconds
     }
 
     /// Repeat on the Done card: the same length again.

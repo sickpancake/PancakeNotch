@@ -319,6 +319,7 @@ public final class NotesModule: NotchModule {
         notch?.userInteracted()
         if selectedID != id { store.removeEmpty(except: id) }
         selectedID = id
+        stopEditing()
     }
 
     public func startEditing() {

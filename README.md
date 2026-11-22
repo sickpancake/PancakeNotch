@@ -48,7 +48,7 @@ open build/PancakeNotch.app
 
 ## Privacy
 
-No analytics, no PancakeNotch account, no telemetry. Your history stays on your Mac. PancakeNotch checks for updates once a day (turn this off in **General**). When you open AI Usage, it also asks your installed Codex for current plan limits; Codex contacts OpenAI using its own sign-in. Claude limits come from local files. PancakeNotch reads Codex’s sign-in file to show the account email, plan and sign-in type. It never keeps or sends those tools' tokens. If you connect **Devin cloud**, PancakeNotch asks Devin's API about your cloud sessions with the personal access token you give it; that token is kept in your Keychain and sent only to Devin.
+No analytics, no PancakeNotch account, no telemetry. Your history stays on your Mac. PancakeNotch checks for updates once a day (turn this off in **General**). When you open AI Usage, it also asks your installed Codex for current plan limits; Codex contacts OpenAI using its own sign-in. Claude limits come from local files. PancakeNotch reads Codex’s sign-in file to show the account email, plan and sign-in type. It never keeps or sends those tools' tokens. If you connect **Devin cloud**, PancakeNotch asks Devin's API about your cloud sessions with the personal access token you give it; that token is kept in your Keychain and sent only to Devin. If you turn on **Codex cloud** or **GitHub coding agent**, PancakeNotch runs your installed `codex cloud list`, `gh agent-task list` and `gh pr checks`; those tools contact OpenAI and GitHub with their own sign-ins, and PancakeNotch never sees their tokens.
 
 ## Thanks
 

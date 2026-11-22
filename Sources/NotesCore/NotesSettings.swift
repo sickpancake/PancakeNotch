@@ -47,6 +47,7 @@ public final class NotesSettings {
     public var searchScope: NotesSearchScope { didSet { defaults.set(searchScope.rawValue, forKey: Keys.searchScope) } }
     /// The search stays when the notch closes, so Notes opens on the same results next time.
     public var keepsSearch: Bool { didSet { defaults.set(keepsSearch, forKey: Keys.keepsSearch) } }
+    public var showsTextCounts: Bool { didSet { defaults.set(showsTextCounts, forKey: Keys.showsTextCounts) } }
 
     @ObservationIgnored let defaults: UserDefaults
 
@@ -59,6 +60,7 @@ public final class NotesSettings {
         searchField = defaults.string(forKey: Keys.searchField).flatMap(NotesSearchField.init(rawValue:)) ?? .always
         searchScope = defaults.string(forKey: Keys.searchScope).flatMap(NotesSearchScope.init(rawValue:)) ?? .titleAndText
         keepsSearch = defaults.object(forKey: Keys.keepsSearch) as? Bool ?? false
+        showsTextCounts = defaults.object(forKey: Keys.showsTextCounts) as? Bool ?? true
         if defaults == UserDefaults.standard { Self.user = self }
     }
 
@@ -73,5 +75,6 @@ public final class NotesSettings {
         static let searchField = "notes.searchField"
         static let searchScope = "notes.searchScope"
         static let keepsSearch = "notes.keepsSearch"
+        static let showsTextCounts = "notes.showsTextCounts"
     }
 }

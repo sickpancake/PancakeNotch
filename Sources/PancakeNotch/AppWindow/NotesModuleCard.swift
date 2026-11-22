@@ -111,6 +111,13 @@ struct NotesSettingsRows: View {
                 Toggle(String(localized: "Keep the search when the notch closes"), isOn: $settings.keepsSearch)
                     .labelsHidden()
             }
+            SettingsRow(
+                title: String(localized: "Show text counts"),
+                subtitle: String(localized: "See words, characters and list items while editing. Select text to count just the selection.")
+            ) {
+                Toggle(String(localized: "Show text counts"), isOn: $settings.showsTextCounts)
+                    .labelsHidden()
+            }
         }
     }
 

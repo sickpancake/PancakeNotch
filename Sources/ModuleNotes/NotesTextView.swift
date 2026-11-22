@@ -5,11 +5,16 @@ import SwiftUI
 /// The note's editable text. A plain `TextEditor` takes drags itself, so a file dropped on it would paste its
 /// path into the note instead of reaching the notch and becoming a new note: this text view takes none.
 struct NotesTextView: NSViewRepresentable {
-    @Binding var text: String
+    let initialText: () -> String
+    @Binding var selection: NSRange
+    let accessibilityLabel: String
     /// Whether the text view should hold keyboard focus.
     let isFocused: Bool
+    /// Re-check the current note and focus request after the window has had a chance to become key.
+    let shouldFocus: () -> Bool
     /// Called when the text view takes keyboard focus (a click in it).
     let onFocus: () -> Void
+    let onEdit: (String) -> Void
     /// The search's words, highlighted in the text, with the first one scrolled into view.
     var search: NotesSearch?
 
@@ -23,9 +28,9 @@ struct NotesTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         let textView = NoDropTextView()
-        textView.onFocus = { context.coordinator.parent.onFocus() }
+        textView.onFocus = { [weak coordinator = context.coordinator] in coordinator?.parent.onFocus() }
+        textView.string = initialText()
         textView.delegate = context.coordinator
-        textView.string = text
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -40,7 +45,7 @@ struct NotesTextView: NSViewRepresentable {
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
-        textView.setAccessibilityLabel(String(localized: "Note text"))
+        textView.setAccessibilityLabel(accessibilityLabel)
         textView.updateDragTypeRegistration()
         scrollView.documentView = textView
         return scrollView
@@ -49,11 +54,8 @@ struct NotesTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.accessibilityLabel() != accessibilityLabel { textView.setAccessibilityLabel(accessibilityLabel) }
         let coordinator = context.coordinator
-        if textView.string != text {
-            textView.string = text
-            coordinator.highlighted = [] // replacing the text dropped its highlights
-        }
         let matches = search?.nsRanges(in: textView.string) ?? []
         if matches != coordinator.highlighted {
             Self.highlight(matches, in: textView)
@@ -63,11 +65,12 @@ struct NotesTextView: NSViewRepresentable {
         let hasFocus = window?.firstResponder === textView
         if isFocused, !hasFocus {
             // The notch window takes key focus a moment after the editor appears: focus once it is in.
-            DispatchQueue.main.async { [weak textView, search] in
-                guard let textView, let window = textView.window, window.firstResponder !== textView else { return }
+            DispatchQueue.main.async { [weak textView, weak coordinator = context.coordinator] in
+                guard let textView, coordinator?.parent.shouldFocus() == true,
+                      let window = textView.window, window.firstResponder !== textView else { return }
                 window.makeFirstResponder(textView)
                 // Opened from a search: the caret goes just after the first match, ready to write there.
-                if let first = search?.nsRanges(in: textView.string).first {
+                if let first = coordinator?.parent.search?.nsRanges(in: textView.string).first {
                     textView.setSelectedRange(NSRange(location: NSMaxRange(first), length: 0))
                     textView.scrollRangeToVisible(first)
                 }
@@ -108,6 +111,7 @@ struct NotesTextView: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NotesTextView
         /// What's highlighted now, so unchanged highlights aren't redrawn on every update.
@@ -119,7 +123,19 @@ struct NotesTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            if parent.text != textView.string { parent.text = textView.string }
+            parent.onEdit(textView.string)
+            updateSelection(textView)
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            updateSelection(textView)
+        }
+
+        private func updateSelection(_ textView: NSTextView) {
+            let range = textView.selectedRange()
+            let selection = range.length > 0 ? range : NSRange()
+            if parent.selection != selection { parent.selection = selection }
         }
     }
 }

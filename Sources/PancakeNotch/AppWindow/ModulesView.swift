@@ -1170,6 +1170,25 @@ private struct ShelfSettingsRows: View {
             Toggle(String(localized: "Show the Shelf's count beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
         }
+        SettingsRow(
+            title: String(localized: "Remember what I copy"),
+            subtitle: String(localized: "Keeps your last few copies of text, links and images in the Shelf's Clipboard row. Passwords are skipped, and nothing is kept after PancakeNotch quits.")
+        ) {
+            Toggle(String(localized: "Remember what I copy"), isOn: $settings.remembersCopies)
+                .labelsHidden()
+        }
+        if settings.remembersCopies {
+            SettingsRow(
+                title: String(localized: "Copies to keep"),
+                subtitle: String(localized: "Pinned copies stay and don't count.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Copies to keep"),
+                    options: ShelfSettings.clipboardLengths.map { ($0, "\($0)") },
+                    selection: $settings.clipboardLength
+                )
+            }
+        }
         ShelfConvertSettingsRows(settings: settings)
     }
 }

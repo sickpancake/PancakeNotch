@@ -29,7 +29,8 @@ enum AgentsText {
         let detail: String? = switch thread.status {
         case .working: thread.step
         case .needsYou: thread.approval.map { asks($0.review) } ?? thread.request
-        case .done, .stopped, .failed: thread.doneSummary.map(doneLine)
+        // A finished cloud agent's pull request shows where its CI checks stand; a local one, what it changed.
+        case .done, .stopped, .failed: thread.checks?.label ?? thread.doneSummary.map(doneLine)
         }
         return [thread.byline ?? thread.project, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }

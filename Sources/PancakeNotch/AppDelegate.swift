@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let shelfSettings = ShelfSettings()
     /// Loads only the saved item list; files are checked when the notch opens.
     private lazy var shelfStore = ShelfStore()
+    private lazy var shelfClipboard: ShelfClipboard = {
+        let clipboard = ShelfClipboard()
+        clipboard.follow(shelfSettings)
+        return clipboard
+    }()
     /// Exists only while the Shelf is switched on.
     private var shelf: ShelfModule?
     private let nowPlayingSettings = NowPlayingSettings()
@@ -72,10 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var connector: AgentConnector = {
         let connector = AgentConnector(settings: agentsSettings)
         connector.devinCloud = devinCloud
+        connector.cloudAgents = cloudAgents
         return connector
     }()
     /// Devin's cloud sessions, after the user connects a token. Asks Devin only while Agents or AI Usage is on.
     private let devinCloud = DevinCloud()
+    /// Codex cloud and GitHub's coding agent, once turned on. Asks only while Agents is on.
+    private let cloudAgents = CloudAgents()
     /// Exists only while Agents is switched on.
     private var agentsModule: AgentsModule?
     /// Exists only while AI Usage is switched on.
@@ -335,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeLiveModules() -> [any NotchModule] {
         var modules: [any NotchModule] = []
         if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
-        liveShelf = shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
+        liveShelf = shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings, clipboard: shelfClipboard) : nil
         liveShelf?.takesNotes = { [weak self] inputs in self?.takeNotes(inputs) ?? inputs }
         if let liveShelf { modules.append(liveShelf) }
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
@@ -370,7 +378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if shelfOn {
             if shelf == nil {
-                let module = ShelfModule(store: shelfStore, settings: shelfSettings)
+                let module = ShelfModule(store: shelfStore, settings: shelfSettings, clipboard: shelfClipboard)
                 shelfCount = shelfStore.items.count
                 module.onEvent = { [weak self] event in self?.shelfChanged(event) }
                 module.takesNotes = { [weak self] inputs in self?.takeNotes(inputs) ?? inputs }
@@ -435,6 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notesModule = nil
         }
         devinCloud.follow(agents: agentsModule == nil ? nil : agents, usage: usageModule == nil ? nil : usage)
+        cloudAgents.follow(agents: agentsModule == nil ? nil : agents)
         notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule,
                                    notesModule]
             .compactMap { $0 }

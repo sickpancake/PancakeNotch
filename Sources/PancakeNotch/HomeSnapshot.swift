@@ -96,7 +96,8 @@ enum HomeSnapshot {
         let usage = AIUsageModule(center: .practice())
         usage.isSnapshot = true
         let timer = TimerSnapshot.module { center, clock in
-            center.startTimer(seconds: 25 * 60)
+            center.startTimer(seconds: 25 * 60, name: "Pasta")
+            center.startTimer(seconds: 40 * 60, name: "Laundry")
             clock.advance(4 * 60 + 18)
             center.startStopwatch()
             clock.advance(83)
