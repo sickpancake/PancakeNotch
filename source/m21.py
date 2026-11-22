@@ -1,0 +1,9 @@
+from base import *
+# Weather widget + ear
+ear = '<span style="display:inline-flex;align-items:center;gap:5px"><span style="font-size:13px">☀︎</span><span>12°</span></span>'
+body = cap("Compact · weather on the ear beside the notch") + compact(ear,'<span class="ring" style="--p:60%"></span><span>12:34</span>')
+w_small = '<div class="tile" style="background:#000;width:130px;height:104px"><div class="q" style="font-size:11px">TORONTO</div><div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="font-size:26px">⛅</span><div><div style="font-size:20px;font-weight:600">12°</div><div class="s" style="font-size:11px">Mostly cloudy</div></div></div><div class="s" style="font-size:11px;margin-top:8px">H 14° · L 7°</div></div>'
+w_med = '<div class="tile" style="background:#000;width:270px;height:104px"><div style="display:flex;justify-content:space-between"><div><div class="q" style="font-size:11px">TORONTO</div><div style="font-size:15px;font-weight:600;margin-top:4px">12° · Mostly cloudy</div><div class="s" style="font-size:11px;margin-top:2px">H 14° · L 7° · Feels 10°</div></div><span style="font-size:30px">⛅</span></div><div style="display:flex;gap:10px;margin-top:10px">'+''.join(f'<div style="text-align:center;flex:1"><div class="s" style="font-size:10px">{a}</div><div style="font-size:13px">{b}</div><div style="font-size:11px">{c}</div></div>' for a,b,c in [("Now","⛅","12°"),("13:00","☀︎","13°"),("14:00","☀︎","14°"),("15:00","⛅","14°"),("16:00","☁︎","12°")])+'</div></div>'
+body += cap("Home widgets · Weather (small, medium)") + '<div class="row">' + w_small + w_med + '</div>'
+body += '<div class="note">Location from a saved city (no GPS needed). WeatherKit data, refreshed hourly; taps open the weather page in the app window.</div>'
+open("m21.html","w").write(page("Home: a Weather widget","Glance at conditions and the next hours without opening an app.",body))

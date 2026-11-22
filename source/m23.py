@@ -1,0 +1,6 @@
+from base import *
+inner = '<div style="display:flex;gap:10px;justify-content:center">'+''.join(f'<div class="tile" style="width:110px;height:90px"><div class="q" style="font-size:11px">{a}</div><div style="font-size:14px;font-weight:600;margin-top:4px">{b}</div></div>' for a,b in [("AGENTS","2 working"),("TIMER","12:34"),("NOTES","6 notes")])+'</div><div style="display:flex;justify-content:center;gap:6px;margin-top:14px"><span class="dot" style="background:rgba(255,255,255,.25)"></span><span class="dot" style="background:#fff"></span><span class="dot" style="background:rgba(255,255,255,.25)"></span></div>'
+body = cap("Yesterday · you left on page 2 (Agents)") + opened(inner, h=200, tabs='<span>♫</span><span>▤</span><span>⏱</span><span>▦</span>')
+body += cap("Today · the notch reopens on page 2, not page 1") + opened(inner, h=200, tabs='<span>♫</span><span>▤</span><span>⏱</span><span>▦</span>')
+body += '<div class="note">Today <code>chosenHomePage</code> is reset to 0 on every open; keep the last page across opens (and falls back when the layout shrinks).</div>'
+open("m23.html","w").write(page("Home: reopen on the page you left","Multi-page Home users land back where they were instead of the first page.",body))

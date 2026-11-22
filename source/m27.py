@@ -1,0 +1,5 @@
+from base import *
+tile = lambda w,h,badge: f'<div class="tile" style="width:{w}px;height:{h}px;background:#000;position:relative"><div class="q" style="font-size:11px">TIMER</div><div style="font-size:16px;font-weight:600;margin-top:8px">12:34</div><span style="position:absolute;top:8px;right:8px;font-size:10px" class="pill">{badge}</span></div>'
+body = cap("Home editor · double-click a widget to cycle S → M → L") + '<div class="row" style="align-items:end">' + tile(110,80,'S') + '<span style="font-size:18px;color:rgba(255,255,255,.5)">→</span>' + tile(150,100,'M') + '<span style="font-size:18px;color:rgba(255,255,255,.5)">→</span>' + tile(230,120,'L') + '</div>'
+body += '<div class="note">Sizes come from <code>HomeWidgetKind.sizes</code>; wraps to the first after the largest. Cheaper than opening the size menu on every tile.</div>'
+open("m27.html","w").write(page("Home editor: double-click cycles the widget’s size","People arranging Home try sizes fast instead of opening each tile’s menu.",body))
