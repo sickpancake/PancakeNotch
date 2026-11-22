@@ -94,6 +94,10 @@ public final class AgentsCenter {
     @ObservationIgnored private var hostBundleIDs: [String: String] = [:]
     /// Each thread's project folder path, for its branch.
     @ObservationIgnored private var cwds: [String: String] = [:]
+    /// The commit HEAD was on when each thread's current stretch of work began, for its done summary.
+    @ObservationIgnored private(set) var startCommits: [String: String] = [:]
+    /// The finish waiting for its done summary before it peeks: the thread as it was before.
+    @ObservationIgnored private var summaryPending: [String: AgentThread] = [:]
     /// Threads whose title came from the tool (not just their project folder).
     @ObservationIgnored private var hasOwnTitle: Set<String> = []
     @ObservationIgnored private var listViewers = 0
@@ -336,6 +340,8 @@ public final class AgentsCenter {
         if let status = update.status, previous == nil || previous?.status != status {
             if status == .working, previous?.status != .working, !(previous?.status.needsYou ?? false) {
                 thread.workStarted = update.at
+                thread.doneSummary = nil
+                noteStartCommit(of: update.id)
             }
             thread.status = status
             thread.statusSince = update.at
@@ -363,7 +369,12 @@ public final class AgentsCenter {
             }
         }
         storage[update.id] = thread
-        if !update.quietly {
+        let summarizes = !update.quietly && thread.status == .done && previous?.status != .done && summarize(update.id)
+        if summarizes, let previous {
+            // The peek waits (a moment) for what changed, so it can show it.
+            summaryPending[update.id] = deferFinishAlert ? nil : previous
+            if deferFinishAlert { pendingFinishAlerts[thread.id] = previous }
+        } else if !update.quietly {
             if deferFinishAlert, thread.status.isFinished, let previous, previous.status != thread.status { pendingFinishAlerts[thread.id] = previous }
             else { alertIfWorthIt(thread, previous: previous) }
         }
@@ -403,7 +414,76 @@ public final class AgentsCenter {
         hostBundleIDs[id] = nil
         links[id] = nil
         cwds[id] = nil
+        startCommits[id] = nil
+        summaryPending[id] = nil
         hasOwnTitle.remove(id)
+    }
+
+    // MARK: Done summary (issue #65)
+
+    /// Where HEAD is as a stretch of work begins, so its summary covers the commits made during it.
+    private func noteStartCommit(of id: String) {
+        startCommits[id] = nil
+        guard !isPractice, let cwd = cwds[id], storage[id]?.isCloud != true else { return }
+        Task { [weak self] in
+            let head = await GitSummary.head(cwd: cwd)
+            guard let self, self.cwds[id] == cwd, self.storage[id]?.status.isFinished == false else { return }
+            self.startCommits[id] = head
+        }
+    }
+
+    /// Reads what the finished thread changed, once. False when there's nothing to read (no folder on
+    /// this Mac, a cloud session, a practice thread).
+    private func summarize(_ id: String) -> Bool {
+        guard !isPractice, let cwd = cwds[id], let thread = storage[id], !thread.isCloud, GitSummary.executable != nil else { return false }
+        let start = startCommits[id]
+        let finishedAt = thread.statusSince
+        Task { [weak self] in
+            let summary = await GitSummary.summary(cwd: cwd, since: start, branch: thread.branch)
+            guard let self else { return }
+            let previous = self.summaryPending.removeValue(forKey: id)
+            guard var current = self.storage[id], current.status == .done, current.statusSince == finishedAt else { return }
+            current.doneSummary = summary
+            self.storage[id] = current
+            if let previous { self.alertIfWorthIt(current, previous: previous) }
+        }
+        return true
+    }
+
+    /// The project folder of a local thread, for Open in editor and Open terminal here.
+    public func folder(of id: String) -> URL? {
+        guard let thread = storage[id], !thread.isCloud else { return nil }
+        if isPractice { return thread.doneSummary == nil ? nil : FileManager.default.homeDirectoryForCurrentUser }
+        return cwds[id].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// The editor Open in editor uses for the thread: the app it runs in when that's an editor, else the
+    /// first editor installed.
+    public func editor(for id: String) -> EditorApp? {
+        if isPractice { return EditorApp(name: storage[id]?.hostName ?? "Cursor", url: nil) }
+        if let host = hostApp(for: id), let bundleID = host.bundleIdentifier, EditorApp.editors.contains(bundleID),
+           let url = host.bundleURL {
+            return EditorApp(name: host.localizedName ?? url.deletingPathExtension().lastPathComponent, url: url)
+        }
+        return EditorApp.installed()
+    }
+
+    /// Opens the thread's project folder in its editor.
+    public func openInEditor(_ id: String) {
+        if isPractice { onPracticeEvent?(.opened); return }
+        guard let folder = folder(of: id), let editor = editor(for: id)?.url else { return }
+        NSWorkspace.shared.open([folder], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// Opens a terminal window in the thread's project folder: in the terminal it runs in, else Terminal.
+    public func openTerminal(_ id: String) {
+        if isPractice { onPracticeEvent?(.opened); return }
+        guard let folder = folder(of: id) else { return }
+        let host = hostApp(for: id)
+        let terminal = host.flatMap { app in app.bundleIdentifier.flatMap { EditorApp.terminals.contains($0) ? app.bundleURL : nil } }
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+        guard let terminal else { return }
+        NSWorkspace.shared.open([folder], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
     }
 
     func thread(_ id: String) -> AgentThread? { storage[id] }

@@ -226,4 +226,21 @@ public final class AgentsModule: NotchModule {
         center.open(thread.id)
         if !center.isPractice { notch?.close() }
     }
+
+    func openInEditor(_ thread: AgentThread) {
+        center.openInEditor(thread.id)
+        if !center.isPractice { notch?.close() }
+    }
+
+    func openTerminal(_ thread: AgentThread) {
+        center.openTerminal(thread.id)
+        if !center.isPractice { notch?.close() }
+    }
+
+    func copySummary(_ thread: AgentThread) {
+        guard let summary = thread.doneSummary else { return }
+        if center.isPractice { center.onPracticeEvent?(.opened); return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(AgentsText.copyText(thread, summary), forType: .string)
+    }
 }

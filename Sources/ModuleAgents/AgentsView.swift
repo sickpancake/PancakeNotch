@@ -222,6 +222,11 @@ private struct AgentRow: View {
         .modifier(OpensOnClick(canOpen: thread.canOpen, hasOpenButton: thread.canAnswer) { module.open(thread) })
         .accessibilityElement(children: thread.canAnswer || !thread.subagents.isEmpty ? .contain : .combine)
         .accessibilityLabel(Text(AgentsText.spoken(thread, now: .now)))
+        .accessibilityActions {
+            if finishedSummary != nil {
+                DoneActions.Actions(module: module, thread: thread)
+            }
+        }
     }
 
     private var isPreviewed: Bool { module.previewed == thread.id }
@@ -249,19 +254,36 @@ private struct AgentRow: View {
             if isPreviewed {
                 VStack(alignment: .leading, spacing: 1) {
                     lines(lineLimit: Self.previewLineLimit)
+                    if let commit = finishedSummary?.lastCommit {
+                        Text(AgentsText.lastCommit(commit))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(AgentsText.harness(thread))
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.top, 2)
+                    if finishedSummary != nil {
+                        DoneActions(module: module, thread: thread)
+                            .padding(.top, 7)
+                    }
                 }
                 .padding(.bottom, 9)
                 .transition(.opacity)
-                // VoiceOver reads all of this in the row's label already.
+                // VoiceOver reads all of this in the row's label already, and offers the actions on it.
                 .accessibilityHidden(true)
             }
         }
+    }
+
+    /// What it changed, while it's finished.
+    private var finishedSummary: DoneSummary? {
+        thread.status.isFinished ? thread.doneSummary : nil
     }
 
     /// The most lines an opened title or step takes, so a very long one can't fill the list.
@@ -427,6 +449,59 @@ private struct OpensOnClick: ViewModifier {
                 .accessibilityAction(.default, open)
         } else {
             content
+        }
+    }
+}
+
+/// Open in editor, Open terminal here and Copy summary, under a finished agent that changed its folder here
+/// (issue #65).
+struct DoneActions: View {
+    let module: AgentsModule
+    let thread: AgentThread
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let editor = module.center.editor(for: thread.id) {
+                NotchPill(title: Self.openTitle(editor), symbol: "chevron.left.forwardslash.chevron.right") {
+                    module.openInEditor(thread)
+                }
+                .accessibilityHint(Text("Opens the project folder in \(editor.name)."))
+            }
+            NotchPill(title: String(localized: "Terminal here", comment: "Finished agent: opens a terminal in its project folder"),
+                      symbol: "terminal") {
+                module.openTerminal(thread)
+            }
+            .accessibilityHint(Text("Opens a terminal window in the project folder."))
+            NotchPill(title: copied ? String(localized: "Copied", comment: "Finished agent: the summary is on the clipboard")
+                          : String(localized: "Copy summary", comment: "Finished agent: copies what it changed"),
+                      symbol: copied ? "checkmark" : "doc.on.doc") {
+                module.copySummary(thread)
+                copied = true
+            }
+            .accessibilityHint(Text("Copies the branch, what changed and the last commit."))
+            .animation(.easeInOut(duration: 0.2), value: copied)
+        }
+        .fixedSize()
+    }
+
+    static func openTitle(_ editor: EditorApp) -> String {
+        String(localized: "Open in \(editor.name)", comment: "Finished agent: opens its project folder in this editor")
+    }
+
+    /// The same three as VoiceOver actions on the row.
+    struct Actions: View {
+        let module: AgentsModule
+        let thread: AgentThread
+
+        var body: some View {
+            if let editor = module.center.editor(for: thread.id) {
+                Button(DoneActions.openTitle(editor)) { module.openInEditor(thread) }
+            }
+            Button(String(localized: "Open terminal here", comment: "VoiceOver action: opens a terminal in a finished agent's folder")) {
+                module.openTerminal(thread)
+            }
+            Button(String(localized: "Copy summary", comment: "Finished agent: copies what it changed")) { module.copySummary(thread) }
         }
     }
 }
