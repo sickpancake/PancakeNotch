@@ -10,7 +10,9 @@ struct AIUsageTotals: View {
         VStack(alignment: .leading, spacing: 4) {
             RangeSwitch(center: center)
                 .padding(.bottom, 2)
-            if let progress = center.firstReadProgress {
+            if center.selectedAccount?.tool == .devin {
+                DevinNumbers(usage: center.devinUsage, range: center.range)
+            } else if let progress = center.firstReadProgress {
                 Text("Reading your history… \(Int(progress * 100))%")
                     .font(.system(size: 12))
                     .monospacedDigit()
@@ -47,6 +49,52 @@ struct AIUsageTotals: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.white.opacity(0.45))
                 .lineLimit(1)
+        }
+    }
+}
+
+/// Devin cloud's range: the ACUs its sessions used, how many sessions, and the ones that used most.
+/// Sessions count on the day they began.
+private struct DevinNumbers: View {
+    let usage: DevinCloudUsage?
+    let range: UsageRange
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if let usage {
+            let acus = usage.acus(in: range)
+            let count = usage.sessions(in: range).count
+            Text("\(AIUsageText.acus(acus)) ACUs")
+                .font(.system(size: 22, weight: .semibold))
+                .lineLimit(1)
+                .contentTransition(.numericText(value: acus))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: acus)
+            Text(count == 1 ? String(localized: "In 1 cloud session") : String(localized: "In \(count) cloud sessions"))
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(1)
+            if !usage.isComplete {
+                // More sessions than one check reads: say the numbers are low rather than hide it.
+                Text("Some older sessions aren't counted")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(usage.top(3, in: range)) { session in
+                    Text("\(session.title) · \(AIUsageText.acus(session.acus))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .padding(.top, 2)
+        } else {
+            Text("Asking Devin…")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.top, 6)
         }
     }
 }

@@ -76,6 +76,9 @@ public struct AgentAccount: Identifiable, Hashable, Sendable {
         return String(letters.prefix(2)).uppercased()
     }
 
+    /// Devin's cloud sessions (issue #55): no folder on this Mac, and ACUs instead of tokens.
+    public static let devinCloud = AgentAccount(tool: .devin, folder: URL(fileURLWithPath: "/devin-cloud", isDirectory: true))
+
     /// "API value" for plan accounts, "Cost" for pay-per-token ones.
     public var moneyLabel: String {
         billing == .apiKey ? String(localized: "Cost", comment: "AI Usage money label")
