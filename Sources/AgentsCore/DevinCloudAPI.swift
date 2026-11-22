@@ -73,9 +73,9 @@ struct DevinCloudAPI: Sendable {
         try await post(sessionURL(org: org, session: session).appending(path: "messages"), body: body)
     }
 
-    /// Asks the session to go to sleep (Stop): it can be woken from Devin with a message.
-    func sleep(org: String, session: String) async throws(Failure) {
-        try await post(sessionURL(org: org, session: session).appending(path: "sleep"), body: Data("{}".utf8))
+    /// Archives the session (Stop), which puts it to sleep; a message from Devin still wakes it.
+    func archive(org: String, session: String) async throws(Failure) {
+        try await post(sessionURL(org: org, session: session).appending(path: "archive"), body: Data("{}".utf8))
     }
 
     private func sessionURL(org: String, session: String) -> URL {

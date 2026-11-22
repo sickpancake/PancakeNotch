@@ -354,8 +354,9 @@ public final class DevinCloud {
         else if stillGoing { schedule(after: Self.waitingGap) }
     }
 
-    /// Continue sends "Continue" as the next message; Stop puts the session to sleep. The row moves on
-    /// right away, and the next check shows where Devin really is.
+    /// Continue sends "Continue" as the next message; Stop archives the session, which puts it to
+    /// sleep (a message from Devin wakes it). The row moves on right away, and the next check shows
+    /// where Devin really is.
     func send(_ reply: AgentQuickReply, to id: String) {
         guard phase == .connected, let token = token ?? store.read(), let org = identity?.sessionsOrg,
               id.hasPrefix(Self.idPrefix), let thread = agents?.thread(id) else { return }
@@ -369,7 +370,7 @@ public final class DevinCloud {
             do throws(DevinCloudAPI.Failure) {
                 switch reply {
                 case .proceed: try await api.message(org: org, session: session, text: String(localized: "Continue", comment: "The message a cloud agent's Continue quick reply sends"))
-                case .stop: try await api.sleep(org: org, session: session)
+                case .stop: try await api.archive(org: org, session: session)
                 }
             } catch {
                 self?.problem = String(localized: "Couldn't send that to Devin. Open the session to answer there.", comment: "Devin cloud: a quick reply failed")

@@ -40,6 +40,8 @@ public final class CloudAgents {
     nonisolated static let waitingGap: TimeInterval = 120
     nonisolated static let activityGap: TimeInterval = 120
     nonisolated static let lookGap: TimeInterval = 15
+    /// A tool that went missing or signed out is tried again this often (and when the list is shown).
+    nonisolated static let unavailableGap: TimeInterval = 300
     /// Passed or failed checks don't change by themselves: looked at again after this.
     nonisolated static let settledChecksGap: TimeInterval = 600
     private static let enabledKey = "cloudAgents.services"
@@ -195,23 +197,28 @@ public final class CloudAgents {
         lastCheck = .now
         var gap: TimeInterval?
         for service in enabled {
-            guard let output = await run(service.program, service.listArguments) else {
-                states[service] = .unavailable
-                problem(service, Self.missing(service))
-                continue
-            }
+            let output = await run(service.program, service.listArguments)
             guard !Task.isCancelled, isOn(service) else { return }
-            guard output.status == 0, let tasks = service.tasks(from: output.data) else {
-                states[service] = .unavailable
-                problem(service, Self.signedOut(service))
+            guard let output, output.status == 0, let tasks = service.tasks(from: output.data) else {
+                lost(service, because: output == nil ? Self.missing(service) : Self.signedOut(service))
+                gap = min(gap ?? Self.unavailableGap, Self.unavailableGap)
                 continue
             }
             states[service] = .on
             problems[service] = nil
             if let wanted = show(tasks, from: service, now: .now) { gap = min(gap ?? wanted, wanted) }
         }
-        if isOn(.github), let wanted = await lookAtChecks(now: .now) { gap = min(gap ?? wanted, wanted) }
+        if state(.github) == .on, let wanted = await lookAtChecks(now: .now) { gap = min(gap ?? wanted, wanted) }
         if let gap { schedule(after: gap) }
+    }
+
+    /// The tool went missing or signed out: its rows can't be trusted any more, so they go (they come
+    /// back with the next good read), and it's tried again now and then until it works.
+    private func lost(_ service: CloudService, because text: String) {
+        states[service] = .unavailable
+        problem(service, text)
+        forget(service)
+        if service == .github { forgetChecks() }
     }
 
     /// Puts `tasks` in the list; returns how soon to look again, nil when nothing works or waits.

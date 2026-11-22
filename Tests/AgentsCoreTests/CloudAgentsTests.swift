@@ -139,6 +139,45 @@ struct CloudAgentsTests {
         #expect(!cloud.hasScheduledCheck)
     }
 
+    @Test func signingOutDropsTheRowsAndKeepsTrying() async {
+        let tools = FakeTools()
+        tools.answer("gh agent-task list", #"[{"id": "s1", "name": "Add a dark mode", "state": "waiting_for_user", "repository": "me/app"}, {"id": "s2", "name": "Speed up CI", "state": "in_progress"}]"#)
+        let agents = AgentsCenter(settings: settings())
+        let cloud = CloudAgents(defaults: defaults(), run: tools.run)
+        cloud.follow(agents: agents)
+        #expect(await cloud.turnOn(.github) == nil)
+        await cloud.settle()
+        #expect(agents.thread("github-cloud:s1")?.status == .needsYou(.input))
+        #expect(agents.thread("github-cloud:s2")?.status == .working)
+
+        // `gh auth logout`: nothing in the list can be trusted, and it's tried again later.
+        tools.answer("gh agent-task list", "", status: 4)
+        cloud.check()
+        await cloud.settle()
+        #expect(cloud.state(.github) == .unavailable)
+        #expect(cloud.problems[.github] == CloudAgents.signedOut(.github))
+        #expect(agents.thread("github-cloud:s1") == nil)
+        #expect(agents.thread("github-cloud:s2") == nil)
+        #expect(!agents.threads.contains { $0.status.needsYou })
+        #expect(cloud.hasScheduledCheck)
+
+        // The tool goes missing too: same.
+        tools.installed = false
+        cloud.check()
+        await cloud.settle()
+        #expect(cloud.problems[.github] == CloudAgents.missing(.github))
+        #expect(cloud.hasScheduledCheck)
+
+        // Signed in again: back without a click.
+        tools.installed = true
+        tools.answer("gh agent-task list", #"[{"id": "s2", "name": "Speed up CI", "state": "in_progress"}]"#)
+        cloud.check()
+        await cloud.settle()
+        #expect(cloud.state(.github) == .on)
+        #expect(cloud.problems[.github] == nil)
+        #expect(agents.thread("github-cloud:s2")?.status == .working)
+    }
+
     @Test func finishedPullRequestsGetTheirChecks() async {
         let tools = FakeTools()
         tools.answer("gh agent-task list", #"[{"id": "s1", "name": "Fix it", "state": "completed", "updatedAt": "\#(Date().ISO8601Format())", "pullRequestNumber": 7, "pullRequestUrl": "https://github.com/me/app/pull/7"}]"#)
@@ -185,6 +224,24 @@ struct CloudAgentsTests {
         #expect(post.url?.path() == "/v3/organizations/org-1/sessions/devin-q/messages")
         let body = try #require(post.httpBody.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: String] })
         #expect(body == ["message": "Continue"])
+    }
+
+    @Test func devinStopArchivesTheSession() async throws {
+        let fake = DevinCloudTests.FakeDevin()
+        let now = Int(Date().timeIntervalSince1970)
+        fake.sessions = #"{"items": [{"session_id": "devin-s", "status": "running", "status_detail": "waiting_for_user", "url": "https://app.devin.ai/sessions/s", "created_at": \#(now), "updated_at": \#(now), "user_id": "me"}], "has_next_page": false}"#
+        let cloud = DevinCloud(defaults: defaults(), store: DevinCloudTests.MemoryStore(), send: fake.send)
+        let agents = AgentsCenter(settings: settings())
+        cloud.follow(agents: agents, usage: nil)
+        #expect(await cloud.connect(token: "cog_secret123") == nil)
+        await cloud.settle()
+        let thread = try #require(agents.thread("devin-cloud:devin-s"))
+
+        agents.quickReply(.stop, to: thread)
+        #expect(agents.thread("devin-cloud:devin-s")?.status == .stopped)
+        for _ in 0..<50 where !fake.requests.contains(where: { $0.httpMethod == "POST" }) { try await Task.sleep(for: .milliseconds(20)) }
+        let post = try #require(fake.requests.first { $0.httpMethod == "POST" })
+        #expect(post.url?.path() == "/v3/organizations/org-1/sessions/devin-s/archive")
     }
 
     @Test func practiceCloudListShowsEveryService() {
