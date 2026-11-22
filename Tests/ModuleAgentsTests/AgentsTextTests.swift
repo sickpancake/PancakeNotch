@@ -86,3 +86,37 @@ struct AgentsTextTests {
         #expect(AgentsText.harness(running) == "Claude Code")
     }
 }
+
+@MainActor
+struct AgentsDoneSummaryTextTests {
+    private let summary = DoneSummary(branch: "readme-refresh", filesChanged: 3, insertions: 48, deletions: 12, lastCommit: "Rewrite the install steps")
+
+    private func finished(_ summary: DoneSummary?) -> AgentThread {
+        AgentThread(id: "claude:a", tool: .claude, title: "Update the README", project: "docs", status: .done,
+                    statusSince: .now, canOpen: true, isSeen: true, doneSummary: summary)
+    }
+
+    @Test func aFinishedRowSaysWhatChanged() {
+        #expect(AgentsText.subtitle(finished(summary)) == "docs · readme-refresh · 3 files · +48 −12")
+        #expect(AgentsText.subtitle(finished(nil)) == "docs")
+        #expect(AgentsText.changes(DoneSummary(filesChanged: 1, insertions: 2, deletions: 0)) == "1 file · +2 −0")
+        #expect(AgentsText.changes(DoneSummary(filesChanged: 0, insertions: 0, deletions: 0)) == "No changes")
+        #expect(AgentsText.doneLine(DoneSummary(filesChanged: 2, insertions: 1, deletions: 1)) == "2 files · +1 −1")
+    }
+
+    @Test func thePeekAndTheCopyCarryTheSummary() {
+        #expect(AgentsText.peek(AgentAlert(kind: .finished, thread: finished(summary))).verb == "finished")
+        #expect(AgentsText.peekDetail(AgentAlert(kind: .finished, thread: finished(summary))) == "3 files · +48 −12")
+        #expect(AgentsText.peekDetail(AgentAlert(kind: .finished, thread: finished(nil))) == nil)
+        #expect(AgentsText.peekDetail(AgentAlert(kind: .failed, thread: finished(summary))) == nil)
+        #expect(AgentsText.copyText(finished(summary), summary)
+            == "Update the README (docs) · readme-refresh · 3 files · +48 −12 · Last commit: Rewrite the install steps")
+    }
+
+    @Test func voiceOverReadsTheSummary() {
+        let spoken = AgentsText.spoken(finished(summary), now: .now)
+        #expect(spoken.contains("On readme-refresh, 3 files changed, 48 lines added, 12 lines removed"))
+        #expect(spoken.contains("Last commit: Rewrite the install steps"))
+        #expect(!spoken.contains("+48"))
+    }
+}

@@ -102,11 +102,14 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
     public var subagents: [AgentSubagent]
     /// What shows under its name, as picked in Settings (`byline(_:name:)`). Nil: its project folder.
     public var byline: String?
+    /// What it changed in its project folder, once it's done (issue #65). Local threads only.
+    public var doneSummary: DoneSummary?
 
     public init(id: String, tool: AgentTool, accountID: String? = nil, title: String, project: String,
                 status: AgentStatus, statusSince: Date, workStarted: Date? = nil, step: String? = nil,
                 request: String? = nil, approval: PendingApproval? = nil, canOpen: Bool = false, hostName: String? = nil,
-                isSeen: Bool = false, subagents: [AgentSubagent] = [], lastMessage: String? = nil, branch: String? = nil) {
+                isSeen: Bool = false, subagents: [AgentSubagent] = [], lastMessage: String? = nil, branch: String? = nil,
+                doneSummary: DoneSummary? = nil) {
         self.id = id
         self.tool = tool
         self.accountID = accountID
@@ -122,6 +125,7 @@ public struct AgentThread: Identifiable, Equatable, Sendable {
         self.hostName = hostName
         self.isSeen = isSeen
         self.subagents = subagents
+        self.doneSummary = doneSummary
         self.lastMessage = lastMessage
         self.branch = branch
     }
