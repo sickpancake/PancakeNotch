@@ -304,6 +304,12 @@ private struct EarOverflowChipView: View {
     private func chip(_ count: Int?) -> some View {
         ZStack(alignment: .bottom) {
             if let count, !isAsleep {
+                // The window server sends clicks on alpha-0 pixels to the window below,
+                // before AppKit or SwiftUI see them; a near-invisible fill keeps the
+                // strip's pixels on this window so clicks in it reach tap()/hoverChanged.
+                Rectangle()
+                    .fill(.white.opacity(0.001))
+                    .frame(height: NotchViewModel.earOverflowChipHeight)
                 Text("+\(count)")
                     .font(.system(size: 9, weight: .medium))
                     .monospacedDigit()
@@ -320,7 +326,8 @@ private struct EarOverflowChipView: View {
             }
         }
         .frame(width: layout.compactEarWidth,
-               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight)
+               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight,
+               alignment: .bottom)
     }
 }
 
