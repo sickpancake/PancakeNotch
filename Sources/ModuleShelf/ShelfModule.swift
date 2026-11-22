@@ -110,6 +110,8 @@ public final class ShelfModule: NotchModule {
     var copiedID: UUID?
     /// How many dropped things just became notes, for a brief "Saved as a note" flash.
     var notedCount: Int?
+    /// "Pinned" with Undo in the header for a moment after pinning or unpinning (ShelfPinning.swift).
+    var pinNote: ShelfPinNote?
     /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
     var detailID: UUID? {
         didSet {
@@ -262,6 +264,7 @@ public final class ShelfModule: NotchModule {
     public func notchDidClose() {
         menu?.close()
         detailID = nil
+        pinNote = nil
         leaveConversion()
         thumbnails.clear()
         selection = []
@@ -455,6 +458,10 @@ public final class ShelfModule: NotchModule {
         case 0 where command: // ⌘A
             selection = Set(store.items.map(\.id))
             return true
+        case 35 where !command: // P: pin or unpin the selected items
+            guard prompt == nil, !selection.isEmpty, !event.isARepeat else { return false }
+            togglePin(store.items.filter { selection.contains($0.id) })
+            return true
         case 53: // Escape: answer the open card first, then let the notch close.
             if case .choosing(let pending) = prompt {
                 prompt = .full(pending: pending)
@@ -622,7 +629,7 @@ public final class ShelfModule: NotchModule {
         }
         confirmingClear = false
         selection = []
-        store.clear()
+        store.clear(keepingPinned: settings.clearAllKeepsPinned)
         onEvent?(.cleared)
     }
 
@@ -848,7 +855,7 @@ public final class ShelfModule: NotchModule {
     func clearAll() {
         if confirmingClear {
             confirmingClear = false
-            store.clear()
+            store.clear(keepingPinned: settings.clearAllKeepsPinned)
             onEvent?(.cleared)
         } else {
             confirmingClear = true
@@ -912,7 +919,9 @@ public final class ShelfModule: NotchModule {
     func dragOutEnded(_ ids: [UUID], operation: NSDragOperation) {
         if settings.removeAfterDragOut, !operation.isEmpty {
             // The other app may still be copying (or moving) the file: its folder goes at next launch.
-            store.remove(ids, keepingFiles: true)
+            // Pinned items stay: they're kept until the user unpins or removes them.
+            let pinned = Set(store.items.filter(\.isPinned).map(\.id))
+            store.remove(ids.filter { !pinned.contains($0) }, keepingFiles: true)
         }
         setDraggingOut(false)
         notch?.dragOutEnded()

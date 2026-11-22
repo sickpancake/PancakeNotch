@@ -108,8 +108,13 @@ private struct ShelfHeader: View {
                             .font(.system(size: 12, weight: .semibold))
                     }
                     if count > 0 {
+                        let items = count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
+                        let pinned = module.store.pinnedCount
                         ViewThatFits(in: .horizontal) {
-                            Text(count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header"))
+                            if pinned > 0 {
+                                Text("\(items) · \(pinned) pinned", comment: "Shelf header; item count, then how many are pinned")
+                            }
+                            Text(items)
                             Color.clear.frame(width: 0)
                         }
                         .font(.system(size: 11.5))
@@ -135,16 +140,24 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if let note = module.pinNote, module.dropZone == nil, module.prompt == nil {
+                    ShelfPinNoteView(module: module, note: note)
+                        .transition(.opacity)
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
+                    let clearable = module.clearableCount
                     ShelfDragAllHandle(module: module)
-                    ShelfPillButton(
-                        title: !module.confirmingClear ? String(localized: "Clear all")
-                            : count == 1 ? String(localized: "Clear 1 item?")
-                            : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
-                        prominent: module.confirmingClear
-                    ) { module.clearAll() }
+                    if clearable > 0 {
+                        ShelfPillButton(
+                            title: !module.confirmingClear ? String(localized: "Clear all")
+                                : clearable == 1 ? String(localized: "Clear 1 item?")
+                                : String(localized: "Clear \(clearable) items?", comment: "Second click confirms clearing the shelf"),
+                            prominent: module.confirmingClear
+                        ) { module.clearAll() }
+                        .help(clearable < count ? String(localized: "Pinned items stay on the Shelf.") : "")
+                    }
                 }
             }
+            .animation(.easeInOut(duration: 0.2), value: module.pinNote)
             .frame(width: layout.headerSideWidth, alignment: .trailing)
         }
     }
@@ -237,6 +250,8 @@ private struct ShelfTileRow: View {
             }
         }
         .frame(maxHeight: .infinity)
+        // Pinning moves a tile to the front: it slides there (fades with Reduce Motion).
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.3), value: module.store.items.map(\.isPinned))
     }
 
     private func tileViews(limit: Int) -> some View {
@@ -265,12 +280,21 @@ struct ShelfTile: View {
     /// The keyboard's tile: ringed while choosing, when nothing else shows where Space would tick.
     let isCursor: Bool
     let isCopied: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 5) {
             preview
                 .frame(width: 56, height: 56)
                 .animation(.easeOut(duration: 0.2), value: thumbnail != nil)
+                .overlay(alignment: .topLeading) {
+                    if item.isPinned {
+                        ShelfPinBadge()
+                            .offset(x: -5, y: -5)
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.6)))
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: item.isPinned)
                 .overlay(alignment: .topTrailing) {
                     if isChoosing {
                         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -341,6 +365,7 @@ struct ShelfTile: View {
             Button(String(localized: "Open Link")) { module.open([item]) }
         }
         Button(String(localized: "AirDrop")) { module.airDrop([item]) }
+        Button(ShelfModule.pinTitle(for: [item])) { module.togglePin([item]) }
         Button(String(localized: "Remove")) { module.remove([item.id]) }
     }
 
@@ -388,11 +413,12 @@ struct ShelfTile: View {
     }
 
     private var accessibilityLabel: String {
-        switch item.kind {
+        let label = switch item.kind {
         case .file: String(localized: "File, \(item.displayName)")
         case .text: String(localized: "Text, \(item.displayName)")
         case .link: String(localized: "Link, \(item.displayName)")
         }
+        return item.isPinned ? String(localized: "Pinned, \(label)", comment: "VoiceOver; a Shelf tile's label") : label
     }
 }
 
@@ -582,14 +608,17 @@ struct ShelfPromptCard: View {
             .accessibilityAddTraits(.isToggle)
             .accessibilityValue(Text(remember ? "On" : "Off"))
         case .full, .choosing:
-            let count = module.store.items.count
-            ShelfPillButton(
-                title: !module.confirmingClear ? String(localized: "Clear all")
-                    : count == 1 ? String(localized: "Clear 1 item?")
-                    : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
-                prominent: true
-            ) { module.clearForPending() }
-            ShelfPillButton(title: String(localized: "Choose items to remove")) { module.startChoosing() }
+            let count = module.clearableCount
+            // Every item pinned (and Clear all keeps them): only choosing can make room.
+            if count > 0 {
+                ShelfPillButton(
+                    title: !module.confirmingClear ? String(localized: "Clear all")
+                        : count == 1 ? String(localized: "Clear 1 item?")
+                        : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                    prominent: true
+                ) { module.clearForPending() }
+            }
+            ShelfPillButton(title: String(localized: "Choose items to remove"), prominent: count == 0) { module.startChoosing() }
         }
     }
 }

@@ -15,12 +15,39 @@ public struct ShelfItem: Codable, Identifiable, Equatable, Sendable {
     /// Last known path of a file item, refreshed whenever the notch opens.
     public var path: String?
     public let addedAt: Date
+    /// Pinned items sit at the front of the Shelf and are never cleared automatically: not by
+    /// "Clear the Shelf after", nor by removing items after dragging them out, nor (unless the user turns
+    /// that off) by Clear all.
+    public var isPinned: Bool
 
-    public init(id: UUID = UUID(), kind: Kind, path: String? = nil, addedAt: Date) {
+    public init(id: UUID = UUID(), kind: Kind, path: String? = nil, addedAt: Date, isPinned: Bool = false) {
         self.id = id
         self.kind = kind
         self.path = path
         self.addedAt = addedAt
+        self.isPinned = isPinned
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, kind, path, addedAt, isPinned }
+
+    /// Shelves saved before pinning existed have no `isPinned`: those items start unpinned.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+        addedAt = try container.decode(Date.self, forKey: .addedAt)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encodeIfPresent(path, forKey: .path)
+        try container.encode(addedAt, forKey: .addedAt)
+        // Left out while false, so an unpinned Shelf's file reads the same as before.
+        if isPinned { try container.encode(isPinned, forKey: .isPinned) }
     }
 
     /// Identifies the same content when it's dropped again (duplicates).

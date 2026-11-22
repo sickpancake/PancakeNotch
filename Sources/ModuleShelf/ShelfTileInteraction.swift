@@ -173,6 +173,8 @@ enum ShelfMenu {
         add(String(localized: "AirDrop"), "dot.radiowaves.left.and.right") { module.airDrop(items) }
         add(String(localized: "Share…"), "square.and.arrow.up") { module.share(items, from: anchor) }
         group = true
+        let unpins = items.allSatisfy(\.isPinned)
+        add(ShelfModule.pinTitle(for: items), unpins ? "pin.slash" : "pin") { module.togglePin(items) }
         add(items.count > 1
             ? String(localized: "Remove \(items.count) Items", comment: "Context menu; several shelf items")
             : String(localized: "Remove"), "trash", destructive: true) { module.remove(items.map(\.id)) }

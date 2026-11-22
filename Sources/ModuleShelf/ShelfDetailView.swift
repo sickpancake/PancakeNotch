@@ -45,6 +45,7 @@ struct ShelfDetailView: View {
                 .buttonStyle(.plain)
                 .help(String(localized: "Back to the Shelf"))
                 .accessibilityLabel(Text("Back to the Shelf"))
+                ShelfDetailPinButton(module: module, item: item)
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
@@ -145,6 +146,9 @@ private struct ShelfTextEditor: View {
             HStack(spacing: 8) {
                 openIn
                 Spacer(minLength: 0)
+                if let item = module.detailItem {
+                    ShelfKeepText(module: module, item: item)
+                }
                 if let size = module.detailInfo?.size {
                     Text(size)
                         .font(.system(size: 11))
@@ -187,9 +191,17 @@ private struct ShelfLinkEditor: View {
                     Text(url.host(percentEncoded: false) ?? url.absoluteString)
                         .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
-                    Text("Link")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.5))
+                    HStack(spacing: 0) {
+                        Text("Link")
+                        if let item = module.detailItem, let keep = module.keepText(for: item) {
+                            Text(verbatim: " · \(keep)")
+                                .contentTransition(.opacity)
+                                .animation(.easeInOut(duration: 0.2), value: keep)
+                        }
+                    }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
                 }
             }
 
@@ -251,6 +263,7 @@ private struct ShelfFilePreview: View {
                     Text([info.kind, info.size].compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.6))
+                    ShelfKeepText(module: module, item: item)
                     if let path = info.path {
                         Text((path as NSString).abbreviatingWithTildeInPath)
                             .font(.system(size: 11))
@@ -336,5 +349,54 @@ struct ShelfOpenInButton: View {
         .foregroundStyle(.black)
         .background(.white, in: Capsule())
         .fixedSize()
+    }
+}
+
+// MARK: Pinning
+
+/// Pin or unpin the open item, beside the back arrow. Filled and white while pinned.
+private struct ShelfDetailPinButton: View {
+    let module: ShelfModule
+    let item: ShelfItem
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let pinned = item.isPinned
+        Button { module.togglePin([item]) } label: {
+            Image(systemName: pinned ? "pin.fill" : "pin")
+                .font(.system(size: 11, weight: .medium))
+                .rotationEffect(.degrees(45))
+                .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                .foregroundStyle(pinned ? .black : .white)
+                .frame(width: 28, height: 22)
+                .background(.white.opacity(pinned ? (isHovered ? 0.88 : 1) : (isHovered ? 0.2 : 0.14)), in: Capsule())
+                .animation(.easeOut(duration: 0.15), value: isHovered)
+                .animation(.easeInOut(duration: 0.2), value: pinned)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(pinned ? String(localized: "Unpin: it can be cleared again") : String(localized: "Pin: keep it at the front, and never clear it automatically"))
+        .accessibilityLabel(Text(pinned ? "Unpin" : "Pin"))
+        .accessibilityAddTraits(pinned ? .isSelected : [])
+    }
+}
+
+/// "Pinned · kept until you unpin it" or "Cleared in 3 days · pin it to keep it". Nothing when no rule
+/// clears the item.
+private struct ShelfKeepText: View {
+    let module: ShelfModule
+    let item: ShelfItem
+
+    var body: some View {
+        if let text = module.keepText(for: item) {
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.45))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .contentTransition(.opacity)
+                .animation(.easeInOut(duration: 0.2), value: text)
+        }
     }
 }

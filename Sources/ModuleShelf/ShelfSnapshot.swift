@@ -82,6 +82,21 @@ public enum ShelfSnapshot {
             module.copiedID = module.store.items.first(where: { !$0.isFile })?.id
         }
 
+        // Pinning: two pinned items in front, then the note with Undo right after pinning, then a full
+        // Shelf where every item is pinned (only choosing can make room).
+        row(files: files, extra: extras) { module in
+            let ids = module.store.items.filter { ["Song.mp3", "Holiday.jpg"].contains($0.displayName) }.map(\.id)
+            module.store.setPinned(ids, true)
+        }
+        row(files: files, extra: extras) { module in
+            module.store.setPinned(module.store.items.suffix(1).map(\.id), true)
+            module.pinNote = ShelfPinNote(pinned: true, count: 1, previousPins: [:], previousOrder: [])
+        }
+        row(files: full) { module in
+            module.store.setPinned(module.store.items.map(\.id), true)
+            module.prompt = .full(pending: [.text("a")])
+        }
+
         // The tall notch: text editor, link editor, file preview.
         let note = "Pick up the cake at 5, and don't forget the candles.\n\nAlso: call the bakery about the gluten-free one, and check if the shop on the corner still sells the sparkly number candles."
         for input: ShelfInput in [.text(note), .link(URL(string: "https://github.com/sickpancake/PancakeNotch")!)] {
@@ -90,6 +105,12 @@ public enum ShelfSnapshot {
             }
         }
         row(files: ["Quarterly Report.pdf"]) { module in
+            module.detailID = module.store.items.first?.id
+            module.largePreview.preload(NSWorkspace.shared.icon(for: .pdf))
+        }
+        // A pinned file in the tall notch: the filled pin beside the back arrow, and "kept until you unpin it".
+        row(files: ["Contract.pdf"]) { module in
+            module.store.setPinned(module.store.items.map(\.id), true)
             module.detailID = module.store.items.first?.id
             module.largePreview.preload(NSWorkspace.shared.icon(for: .pdf))
         }

@@ -54,6 +54,8 @@ public final class ShelfSettings {
     public var removeAfterDragOut: Bool { didSet { defaults.set(removeAfterDragOut, forKey: Keys.removeAfterDragOut) } }
     public var duplicatePolicy: DuplicatePolicy { didSet { defaults.set(duplicatePolicy.rawValue, forKey: Keys.duplicatePolicy) } }
     public var autoClear: AutoClear { didSet { defaults.set(autoClear.rawValue, forKey: Keys.autoClear) } }
+    /// Clear all (in the notch and the app window) leaves pinned items on the Shelf.
+    public var clearAllKeepsPinned: Bool { didSet { defaults.set(clearAllKeepsPinned, forKey: Keys.clearAllKeepsPinned) } }
     public var showsAirDropZone: Bool { didSet { defaults.set(showsAirDropZone, forKey: Keys.airDropZone) } }
     public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
@@ -78,6 +80,7 @@ public final class ShelfSettings {
         removeAfterDragOut = defaults.bool(forKey: Keys.removeAfterDragOut)
         duplicatePolicy = defaults.string(forKey: Keys.duplicatePolicy).flatMap(DuplicatePolicy.init(rawValue:)) ?? .ask
         autoClear = defaults.string(forKey: Keys.autoClear).flatMap(AutoClear.init(rawValue:)) ?? .never
+        clearAllKeepsPinned = defaults.object(forKey: Keys.clearAllKeepsPinned) as? Bool ?? true
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
         showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
         dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
@@ -94,6 +97,7 @@ public final class ShelfSettings {
         static let removeAfterDragOut = "shelf.removeAfterDragOut"
         static let duplicatePolicy = "shelf.duplicatePolicy"
         static let autoClear = "shelf.autoClear"
+        static let clearAllKeepsPinned = "shelf.clearAllKeepsPinned"
         static let airDropZone = "shelf.airDropZone"
         static let showsInEars = "shelf.showsInEars"
         static let dragToTop = "shelf.dragToTop"
