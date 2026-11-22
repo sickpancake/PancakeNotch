@@ -4,7 +4,7 @@ import SwiftUI
 /// The note's editable text. A plain `TextEditor` takes drags itself, so a file dropped on it would paste its
 /// path into the note instead of reaching the notch and becoming a new note: this text view takes none.
 struct NotesTextView: NSViewRepresentable {
-    @Binding var text: String
+    let initialText: () -> String
     @Binding var selection: NSRange
     let accessibilityLabel: String
     /// Whether the text view should hold keyboard focus.
@@ -13,6 +13,7 @@ struct NotesTextView: NSViewRepresentable {
     let shouldFocus: () -> Bool
     /// Called when the text view takes keyboard focus (a click in it).
     let onFocus: () -> Void
+    let onEdit: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -25,7 +26,7 @@ struct NotesTextView: NSViewRepresentable {
 
         let textView = NoDropTextView()
         textView.onFocus = { [weak coordinator = context.coordinator] in coordinator?.parent.onFocus() }
-        textView.string = text
+        textView.string = initialText()
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.importsGraphics = false
@@ -50,7 +51,6 @@ struct NotesTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
-        if textView.string != text { textView.string = text }
         if textView.accessibilityLabel() != accessibilityLabel { textView.setAccessibilityLabel(accessibilityLabel) }
         let window = textView.window
         let hasFocus = window?.firstResponder === textView
@@ -74,7 +74,7 @@ struct NotesTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            if parent.text != textView.string { parent.text = textView.string }
+            parent.onEdit(textView.string)
             updateSelection(textView)
         }
 

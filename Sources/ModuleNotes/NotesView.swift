@@ -223,9 +223,15 @@ private struct NotesUndoRow: View {
 
 /// The note you picked: its text, editable, with Pin, Copy and Delete above it.
 private struct NotesEditor: View {
+    private struct CountRevision: Equatable {
+        let edit: UInt
+        let selection: NSRange
+    }
+
     let module: NotesModule
     let note: Note
     @State private var draft: String
+    @State private var editRevision: UInt = 0
     @State private var selection = NSRange()
     @State private var measuredCounts: NotesEditorCounts?
 
@@ -238,7 +244,8 @@ private struct NotesEditor: View {
     var body: some View {
         let isEditing = module.isEditing && module.selectedNote?.id == note.id
         let showsCounts = isEditing && module.settings.showsTextCounts
-        let input = showsCounts && !draft.isEmpty ? NotesEditorCountInput(text: draft, selection: selection) : nil
+        let revision = showsCounts && !draft.isEmpty ? CountRevision(edit: editRevision, selection: selection) : nil
+        let input = NotesEditorCountInput(text: draft, selection: selection)
         let summary = countSummary(showsCounts: showsCounts)
         let editorLabel = summary.map {
             String(localized: "Note text, \($0)", comment: "Accessibility label with the note editor's text counts")
@@ -269,14 +276,18 @@ private struct NotesEditor: View {
                         .padding(.horizontal, 5)
                 } else {
                     NotesTextView(
-                        text: $draft,
+                        initialText: { draft },
                         selection: $selection,
                         accessibilityLabel: editorLabel,
                         isFocused: isEditing,
                         shouldFocus: { module.isEditing && module.selectedNote?.id == note.id },
-                        onFocus: { if module.selectedNote?.id == note.id { module.startEditing() } }
+                        onFocus: { if module.selectedNote?.id == note.id { module.startEditing() } },
+                        onEdit: { text in
+                            draft = text
+                            editRevision &+= 1
+                        }
                     )
-                        .onChange(of: draft) { module.edit(note.id, text: draft) }
+                        .onChange(of: editRevision) { module.edit(note.id, text: draft) }
                         .overlay(alignment: .topLeading) {
                             if draft.isEmpty {
                                 Text("Write something…")
@@ -300,15 +311,15 @@ private struct NotesEditor: View {
             footer(summary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: input) {
-            guard let input, let counts = await input.measureAfterPause(), !Task.isCancelled else { return }
+        .task(id: revision) {
+            guard revision != nil, let counts = await input.measureAfterPause(), !Task.isCancelled else { return }
             measuredCounts = counts
         }
     }
 
     private func countSummary(showsCounts: Bool) -> String? {
         guard showsCounts else { return nil }
-        if draft.isEmpty { return NotesEditorCounts(text: "").summary }
+        if draft.isEmpty { return NotesEditorCounts.empty.summary }
         guard let measuredCounts, measuredCounts.isSelection == (selection.length > 0) else { return nil }
         return measuredCounts.summary
     }
@@ -320,12 +331,12 @@ private struct NotesEditor: View {
                 Text(summary)
                     .monospacedDigit()
                     .minimumScaleFactor(0.8)
-                    .layoutPriority(1)
                     .help(Text(summary))
                     .accessibilityHidden(true)
             }
             Spacer(minLength: 0)
             Text(edited)
+                .layoutPriority(1)
                 .help(Text(edited))
         }
         .font(.system(size: 10.5, weight: .medium))

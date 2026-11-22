@@ -1,24 +1,25 @@
 import Foundation
 
-struct NotesEditorCountInput: Equatable, Sendable {
+struct NotesEditorCountInput: Sendable {
     let text: String
     let selection: NSRange
 
-    func measure() -> NotesEditorCounts {
+    func measure() -> NotesEditorCounts? {
+        guard !Task.isCancelled else { return nil }
         if selection.length > 0 {
             let text = text as NSString
             if selection.location >= 0, selection.location <= text.length,
                selection.length <= text.length - selection.location {
-                return NotesEditorCounts(text: text.substring(with: selection), isSelection: true)
+                return NotesEditorCounts.measure(text.substring(with: selection), isSelection: true)
             }
         }
-        return NotesEditorCounts(text: text)
+        return NotesEditorCounts.measure(text)
     }
 
     func measureAfterPause() async -> NotesEditorCounts? {
         do { try await Task.sleep(for: .milliseconds(200)) } catch { return nil }
         // Tokenize off the main actor so a large paste doesn't interrupt typing.
-        let worker = Task.detached(priority: .userInitiated) { measure() }
+        let worker = Task.detached(priority: .utility) { measure() }
         let result = await withTaskCancellationHandler {
             await worker.value
         } onCancel: {
@@ -34,16 +35,19 @@ struct NotesEditorCounts: Equatable, Sendable {
     let items: Int
     let isSelection: Bool
 
-    init(text: String, isSelection: Bool = false) {
-        var wordCount = 0
+    static let empty = NotesEditorCounts(words: 0, characters: 0, items: 0, isSelection: false)
+
+    static func measure(_ text: String, isSelection: Bool = false) -> NotesEditorCounts? {
+        guard !Task.isCancelled else { return nil }
+        var words = 0
         text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: [.byWords, .substringNotRequired]) { _, _, _, stop in
-            wordCount += 1
+            words += 1
             stop = Task.isCancelled
         }
-        words = wordCount
-        characters = text.count
-        items = isSelection ? 0 : text.split(whereSeparator: \.isNewline).count(where: Self.isListItem)
-        self.isSelection = isSelection
+        guard !Task.isCancelled else { return nil }
+        let characters = text.count
+        guard !Task.isCancelled, let items = isSelection ? 0 : countItems(in: text) else { return nil }
+        return NotesEditorCounts(words: words, characters: characters, items: items, isSelection: isSelection)
     }
 
     var summary: String {
@@ -60,6 +64,18 @@ struct NotesEditorCounts: Equatable, Sendable {
             return String(localized: "\(itemCount) · \(wordCount) · \(characterCount)", comment: "Notes editor counts for a note with list items")
         }
         return String(localized: "\(wordCount) · \(characterCount)", comment: "Notes editor counts for a note")
+    }
+
+    private static func countItems(in text: String) -> Int? {
+        var items = 0
+        var remaining = text[...]
+        while let end = remaining.firstIndex(where: \.isNewline) {
+            guard !Task.isCancelled else { return nil }
+            if isListItem(remaining[..<end]) { items += 1 }
+            remaining = remaining[remaining.index(after: end)...]
+        }
+        guard !Task.isCancelled else { return nil }
+        return isListItem(remaining) ? items + 1 : items
     }
 
     private static func isListItem(_ line: Substring) -> Bool {
