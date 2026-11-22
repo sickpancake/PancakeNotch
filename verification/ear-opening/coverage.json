@@ -1,5 +1,5 @@
 {
-  "sync_commit": "f1704e6",
+  "sync_commit": "2cda43efb77e42da4c3afc6c0ca2516c70cc278b",
   "toolchain": "Apple Swift 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1), SDK selected by scripts/swift.sh; Python 3.9.6",
   "sha256": {
     "Sources/NotchCore/EarAllocator.swift": "c7f2c54be9a7162282c35befd7ca7b98d8ac1b565fe56499f782f79e1e23831a",
@@ -10,7 +10,7 @@
     "Sources/ModuleKeepAwake/KeepAwakeModule.swift": "3551fa673eb09697272df4d1a12b767f40916c3ca7c8486cd8cef2c129118a55",
     "Sources/ModuleAgents/AgentsModule.swift": "bd0777542a347063f29cd8487fae57a66b932dd7bc036e905d76d6d5cc70c941",
     "Sources/ModuleAgents/AIUsageModule.swift": "30108cbb6d10eee301cbd13605863d1e57c5cff15a42fca8c0a3e0a2c5bdf5b9",
-    "Sources/ModuleShelf/ShelfModule.swift": "b3c54b188a6e9b76d8fbd5109d8d38bc475be7b3f8fa988e1194c072e6c9ba1c",
+    "Sources/ModuleShelf/ShelfModule.swift": "e431bf2cb4ac208a4e1fd498f472c3bbf33a0876d08354e8146b32248ff038a2",
     "Sources/ModuleShelf/ShelfPreviewModule.swift": "abc4b7fdfabc307b0fb966107b13bcea0ce565624b52faaacfb065a679048285"
   }
 }
