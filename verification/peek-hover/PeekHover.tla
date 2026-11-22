@@ -20,11 +20,21 @@ ShowPeek ==
     /\ \E module \in Owners: owner' = module
     /\ phase' = "timed"
     /\ outcome' = <<"none", "none">>
-    /\ UNCHANGED <<pointer, queuedHover>>
+    \* A pointer resting on an ear queued its open when it entered; the peek doesn't cancel it.
+    /\ queuedHover' = (pointer = "ear")
+    /\ UNCHANGED pointer
 
 MovePointer ==
-    /\ \E location \in Locations \ {pointer}: pointer' = location
-    /\ UNCHANGED <<phase, owner, outcome, queuedHover>>
+    /\ \E location \in Locations \ {pointer}:
+        /\ pointer' = location
+        \* Arriving on an ear queues the hover-open: an outline enter calls hoverChanged(true);
+        \* leaving the strip for an ear makes updatePeekHover schedule the same open, since no
+        \* enter fires inside the outline. Arriving anywhere else cancels a queued open.
+        /\ queuedHover' =
+            IF location = "ear" /\ phase \in Visible THEN TRUE
+            ELSE IF location # "ear" THEN FALSE
+            ELSE queuedHover
+    /\ UNCHANGED <<phase, owner, outcome>>
 
 Expiry ==
     /\ IF pointer = "strip"
@@ -65,20 +75,6 @@ ClickStrip ==
     /\ queuedHover' = FALSE
     /\ UNCHANGED <<pointer, owner>>
 
-EarHoverObserved ==
-    /\ phase \in Visible
-    /\ pointer = "ear"
-    /\ ~queuedHover
-    /\ queuedHover' = TRUE
-    /\ UNCHANGED <<phase, pointer, owner, outcome>>
-
-HoverExitObserved ==
-    /\ phase \in Visible
-    /\ pointer # "ear"
-    /\ queuedHover
-    /\ queuedHover' = FALSE
-    /\ UNCHANGED <<phase, pointer, owner, outcome>>
-
 HoverDelayEnds ==
     /\ phase \in Visible
     /\ queuedHover
@@ -114,8 +110,12 @@ CloseExpanded == phase = "expanded" /\ Clear
 Reset == phase \in Visible \cup {"dismissing"} /\ Clear
 
 Next == ShowPeek \/ MovePointer \/ PeekDeadline \/ LeaveObserved \/ ReturnObserved
-     \/ CloseDeadline \/ ClickStrip \/ EarHoverObserved \/ HoverExitObserved \/ HoverDelayEnds
+     \/ CloseDeadline \/ ClickStrip \/ HoverDelayEnds
      \/ OpenElsewhere \/ EndPeek \/ FinishDismiss \/ CloseExpanded \/ Reset
+
+\* The hover delay must eventually fire while it stays queued, so a resting ear hover can
+\* be proven to resolve rather than pending forever.
+Spec == Init /\ [][Next]_vars /\ WF_vars(HoverDelayEnds)
 
 TypeOK ==
     /\ phase \in {"idle", "timed", "held", "leaving", "dismissing", "expanded"}
@@ -129,5 +129,13 @@ VisiblePeekHasAnOwner == phase \in Visible => owner \in Owners
 TimeoutRespectsPointer == outcome # <<"timeout", "strip">>
 StripHoverKeepsPeekCompact == outcome # <<"hover opened", "strip">>
 StripActivationOpensItsOwner == outcome[1] = "strip opened" => (phase = "expanded" /\ outcome[2] = owner)
+\* Sitting on an ear while a peek shows always has an open queued: entering the outline and
+\* crossing the strip both queue it (updatePeekHover). A regression that only queues on the
+\* outline enter violates this for the strip -> ear path.
+EarRestQueuesOpen == (phase \in Visible /\ pointer = "ear") => queuedHover
+\* Resting on an ear resolves: the hover opens, the pointer moves off, or the peek goes away.
+EarHoverOpens ==
+    (phase \in Visible /\ pointer = "ear") ~>
+        (phase = "expanded" \/ pointer # "ear" \/ phase \notin Visible)
 
 ====

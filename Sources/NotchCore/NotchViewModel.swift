@@ -175,7 +175,11 @@ public final class NotchViewModel {
     private var briefModuleID: String?
     @ObservationIgnored private var briefTask: Task<Void, Never>?
     @ObservationIgnored private var peekTask: Task<Void, Never>?
-    @ObservationIgnored private var isPeekHeld = false
+    /// Whether the last peek deadline found the pointer on the strip (internal for tests).
+    @ObservationIgnored var isPeekHeld = false
+    /// Whether the last observed pointer position was on the strip: moving on or off it is what
+    /// `updatePeekHover` reacts to, since no new outline enter arrives inside the outline.
+    @ObservationIgnored private var pointerWasOnPeekStrip = false
     /// Closes a notch a module's alert opened, if nobody touched it (`openForAttention`). Anything the user
     /// does, and every open, close and reset, cancels it, so it never closes a notch someone is using.
     @ObservationIgnored private var attentionTask: Task<Void, Never>?
@@ -717,17 +721,7 @@ public final class NotchViewModel {
         if isHovering {
             guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave,
                   !peekStripContains(pointerLocation()) else { return }
-            schedule(after: behavior.openDelay) { model in
-                guard !model.peekStripContains(model.pointerLocation()) else { return }
-                if model.pointerOverEarOverflow() {
-                    model.open(fromHover: true, preferringHome: true)
-                } else {
-                    model.open(focusing: model.moduleUnderPointer(), fromHover: true)
-                }
-                if model.state == .expanded, model.behavior.hapticOnOpen {
-                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                }
-            }
+            scheduleHoverOpen()
         } else {
             waitsForPointerToLeave = false
             scheduleCloseIfIdle()
@@ -1058,14 +1052,24 @@ public final class NotchViewModel {
 
     /// The pointer can leave the strip for an ear without leaving the notch outline.
     func updatePeekHover() {
+        let onStrip = layout.isPeeking && peekStripContains(pointerLocation())
+        defer { pointerWasOnPeekStrip = onStrip }
         guard layout.isPeeking else { return }
-        if peekStripContains(pointerLocation()) {
+        if onStrip {
             hoverTask?.cancel()
             guard isPeekHeld else { return }
             peekTask?.cancel()
             peekTask = nil
-        } else if isPeekHeld, peekTask == nil {
-            schedulePeekTimeout(after: behavior.closeDelay)
+        } else {
+            if isPeekHeld, peekTask == nil {
+                schedulePeekTimeout(after: behavior.closeDelay)
+            }
+            // Leaving the strip for an ear or the band counts as arriving there: no outline
+            // enter fires inside the outline, so schedule the hover-open it would have.
+            guard pointerWasOnPeekStrip, hoverTask == nil, !isPinned,
+                  !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave,
+                  layout.outline(for: .compact, contains: pointerLocation()) else { return }
+            scheduleHoverOpen()
         }
     }
 
@@ -1086,6 +1090,22 @@ public final class NotchViewModel {
         peekTask?.cancel()
         peekTask = nil
         isPeekHeld = false
+        pointerWasOnPeekStrip = false
+    }
+
+    /// The hover-open `hoverChanged(true)` schedules. The strip itself doesn't open on hover.
+    private func scheduleHoverOpen() {
+        schedule(after: behavior.openDelay) { model in
+            guard !model.peekStripContains(model.pointerLocation()) else { return }
+            if model.pointerOverEarOverflow() {
+                model.open(fromHover: true, preferringHome: true)
+            } else {
+                model.open(focusing: model.moduleUnderPointer(), fromHover: true)
+            }
+            if model.state == .expanded, model.behavior.hapticOnOpen {
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            }
+        }
     }
 
     /// Cancels only this module's strip (e.g. its notification preference was switched off).

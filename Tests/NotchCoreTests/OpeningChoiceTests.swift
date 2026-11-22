@@ -154,13 +154,38 @@ struct OpeningChoiceTests {
         #expect(model.peek(agents, for: .milliseconds(40)))
         pointer.location = strip
         model.hoverChanged(true)
-        try await Task.sleep(for: .milliseconds(150))
+        try await settle(.milliseconds(0)) { model.isPeekHeld }
         #expect(model.state == .compact)
         #expect(model.layout.isPeeking)
         model.tap()
         #expect(model.state == .expanded)
         #expect(model.peekModuleID == nil)
         #expect(model.selectedModule?.moduleID == "agents")
+    }
+
+    // Reaching an ear by crossing the strip opens it after the hover delay, like a direct
+    // entry: no new enter event fires inside the outline. Click-only still needs a click.
+    @Test(arguments: [false, true])
+    func crossingAStripToAnEarStillOpensIt(clickOnly: Bool) async throws {
+        let pointer = Pointer()
+        let (model, _, agents, _) = makeModel(pointer)
+        defer { model.reset() }
+        model.behavior.openOnClickOnly = clickOnly
+        agents.isActive = true
+        model.activityChanged()
+        #expect(model.peek(agents, for: .milliseconds(500)))
+        pointer.location = strip
+        model.hoverChanged(true)
+        pointer.location = rightEar
+        model.updatePeekHover()
+        if clickOnly {
+            // Nothing is scheduled; wait past openDelay and confirm the ear stayed closed.
+            try await Task.sleep(for: .milliseconds(60))
+            #expect(model.state == .compact)
+        } else {
+            try await settle(.milliseconds(60)) { model.state == .expanded }
+            #expect(model.selectedModule?.moduleID == "agents")
+        }
     }
 
     @Test(arguments: [false, true])
@@ -172,16 +197,16 @@ struct OpeningChoiceTests {
         pointer.location = overStrip ? strip : rightEar
         #expect(model.peek(agents, for: .milliseconds(40)))
         if overStrip {
+            // Click-only isolates the close path: resting on the ear can't open the notch first.
+            model.behavior.openOnClickOnly = true
             // A strip can appear under a stationary pointer without an enter event.
-            try await Task.sleep(for: .milliseconds(150))
-            #expect(model.layout.isPeeking)
+            try await settle(.milliseconds(0)) { model.isPeekHeld }
             pointer.location = rightEar
             model.updatePeekHover()
             #expect(model.layout.isPeeking)
             pointer.location = strip
             model.updatePeekHover()
-            try await Task.sleep(for: .milliseconds(150))
-            #expect(model.layout.isPeeking)
+            #expect(model.isPeekHeld)
             pointer.location = rightEar
             model.updatePeekHover()
             #expect(model.layout.isPeeking)
