@@ -86,40 +86,30 @@ enum GitSummary {
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["GIT_TERMINAL_PROMPT"] = "0"
         process.environment = environment
-        let output = Pipe()
+        // A file, not a pipe: a process started elsewhere at the same moment can inherit a pipe and keep it
+        // open after git exits, so a read to its end could wait forever.
+        let outputURL = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-git-\(UUID().uuidString)")
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
+              let output = try? FileHandle(forWritingTo: outputURL) else { return nil }
+        defer {
+            try? output.close()
+            try? FileManager.default.removeItem(at: outputURL)
+        }
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
         let finished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in finished.signal() }
         do { try process.run() } catch { return nil }
-        // Read while it runs so a full pipe can't stall it; at most 1 MB.
-        let reader = OutputReader(output.fileHandleForReading)
         if finished.wait(timeout: .now() + timeout) == .timedOut {
             process.terminate()
             return nil
         }
-        let data = reader.wait()
-        guard process.terminationStatus == 0 else { return nil }
+        guard process.terminationStatus == 0,
+              let reader = try? FileHandle(forReadingFrom: outputURL),
+              let data = try? reader.read(upToCount: 1 << 20) ?? Data() else { return nil }
+        try? reader.close()
         return String(data: data, encoding: .utf8)
-    }
-}
-
-/// Reads a pipe to its end on another thread.
-private final class OutputReader: @unchecked Sendable {
-    private var data = Data()
-    private let done = DispatchSemaphore(value: 0)
-
-    init(_ handle: FileHandle) {
-        DispatchQueue.global(qos: .utility).async { [self] in
-            data = (try? handle.read(upToCount: 1 << 20)) ?? Data()
-            done.signal()
-        }
-    }
-
-    func wait() -> Data {
-        done.wait()
-        return data
     }
 }
 

@@ -10,18 +10,15 @@ struct GitSummaryTests {
         return url.resolvingSymlinksInPath()
     }
 
-    @discardableResult
-    private func git(_ arguments: String..., in folder: URL) throws -> String {
+    private func git(_ arguments: String..., in folder: URL) throws {
         let process = Process()
-        process.executableURL = try #require(GitSummary.executable)
+        process.executableURL = GitSummary.executable
         process.arguments = ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"] + arguments
         process.currentDirectoryURL = folder
-        let output = Pipe()
-        process.standardOutput = output
+        process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
-        return String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     }
 
     private func write(_ text: String, to name: String, in folder: URL) throws {
