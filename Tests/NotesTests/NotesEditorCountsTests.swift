@@ -43,6 +43,20 @@ struct NotesEditorCountsTests {
         #expect(NotesEditorCounts.measure("- a")?.summary == "1 item · 1 word · 3 characters")
     }
 
+    @Test func onlyLargeCountingInputsWaitForALongerPause() {
+        let shortNote = NotesEditorCountInput(text: "A short note", selection: NSRange())
+        #expect(shortNote.updateDelay == .milliseconds(200))
+
+        let text = String(repeating: "a", count: 256 * 1_024)
+        let longNote = NotesEditorCountInput(text: text, selection: NSRange())
+        #expect(longNote.updateDelay == .seconds(2))
+
+        let shortSelection = NotesEditorCountInput(text: text, selection: NSRange(location: 0, length: 5))
+        #expect(shortSelection.updateDelay == .milliseconds(200))
+        let longSelection = NotesEditorCountInput(text: text, selection: NSRange(location: 0, length: text.utf16.count))
+        #expect(longSelection.updateDelay == .seconds(2))
+    }
+
     @Test @MainActor func replacingPendingCountPublishesOnlyTheNewInput() async {
         let initialInput = NotesEditorCountInput(text: "One", selection: NSRange())
         let pending = Task { await initialInput.measureAfterPause() }

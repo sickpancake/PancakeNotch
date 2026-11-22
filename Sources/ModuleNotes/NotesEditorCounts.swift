@@ -4,6 +4,11 @@ struct NotesEditorCountInput: Sendable {
     let text: String
     let selection: NSRange
 
+    var updateDelay: Duration {
+        let length = selection.length > 0 ? selection.length : text.utf16.count
+        return length >= 256 * 1_024 ? .seconds(2) : .milliseconds(200)
+    }
+
     func measure() -> NotesEditorCounts? {
         guard !Task.isCancelled else { return nil }
         if selection.length > 0 {
@@ -17,7 +22,8 @@ struct NotesEditorCountInput: Sendable {
     }
 
     func measureAfterPause() async -> NotesEditorCounts? {
-        do { try await Task.sleep(for: .milliseconds(200)) } catch { return nil }
+        // An expensive recount waits for a longer break in typing.
+        do { try await Task.sleep(for: updateDelay) } catch { return nil }
         // Tokenize off the main actor so a large paste doesn't interrupt typing.
         let worker = Task.detached(priority: .utility) { measure() }
         let result = await withTaskCancellationHandler {
