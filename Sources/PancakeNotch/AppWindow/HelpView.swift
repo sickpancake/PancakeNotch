@@ -286,7 +286,7 @@ struct HelpView: View {
         switch tool {
         case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks. Disconnect takes the helper out again.")
         case .devin: String(localized: "New Devin sessions show up, except in a workspace opened in Restricted Mode. Disconnect takes the helper out again.")
-        case .claude, .cursor: String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
+        case .claude, .cursor, .github: String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
         }
     }
 

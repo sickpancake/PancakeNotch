@@ -180,6 +180,11 @@ struct AgentsSettingsRows: View {
             if let cloud = connector.devinCloud {
                 DevinCloudRow(cloud: cloud)
             }
+            if let cloud = connector.cloudAgents {
+                ForEach(CloudService.allCases, id: \.self) { service in
+                    CloudServiceRow(service: service, cloud: cloud)
+                }
+            }
             if let problem = connector.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .font(.app(size: 12.5, weight: .medium))
@@ -326,7 +331,7 @@ private struct ConnectRow: View {
             switch tool {
             case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks.")
             case .devin: String(localized: "Start a new Devin session to see it. Devin skips hooks in a workspace opened in Restricted Mode.")
-            case .claude, .cursor: nil
+            case .claude, .cursor, .github: nil
             }
         }
     }
@@ -691,5 +696,65 @@ private struct AccountRow: View {
         guard let draft else { return }
         if draft != account.name { rename(draft) }
         self.draft = nil
+    }
+}
+
+/// Codex cloud or GitHub's coding agent: followed through the service's own command-line tool and its
+/// sign-in, so there's nothing to paste. Turn On tries the tool once (issue #55).
+private struct CloudServiceRow: View {
+    let service: CloudService
+    let cloud: CloudAgents
+
+    var body: some View {
+        let state = cloud.state(service)
+        HStack(spacing: 12) {
+            Image(systemName: service == .codex ? AgentTool.codex.symbol : AgentTool.github.symbol)
+                .font(.app(size: 13, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(AppPalette.selection, in: .rect(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            SettingsRowLabel(title: service.name, subtitle: subtitle(state))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                switch state {
+                case .off where cloud.problems[service] != nil:
+                    Button(String(localized: "Try Again")) { Task { await cloud.turnOn(service) } }
+                        .accessibilityLabel(Text("Try \(service.name) again"))
+                case .off, .checking:
+                    Button(String(localized: "Turn On")) { Task { await cloud.turnOn(service) } }
+                        .disabled(state == .checking)
+                        .accessibilityLabel(Text("Turn on \(service.name)"))
+                case .on:
+                    ConnectedBadge()
+                    Button(String(localized: "Turn Off")) { cloud.turnOff(service) }
+                        .accessibilityLabel(Text("Turn off \(service.name)"))
+                case .unavailable:
+                    Button(String(localized: "Try Again")) { Task { await cloud.turnOn(service) } }
+                        .accessibilityLabel(Text("Try \(service.name) again"))
+                    Button(String(localized: "Turn Off")) { cloud.turnOff(service) }
+                        .accessibilityLabel(Text("Turn off \(service.name)"))
+                }
+            }
+            .fixedSize()
+        }
+        .animation(.easeInOut(duration: 0.2), value: state)
+        .settingsRowPadding()
+    }
+
+    private func subtitle(_ state: CloudAgents.State) -> String {
+        if state == .checking {
+            return service == .codex ? String(localized: "Asking Codex…") : String(localized: "Asking GitHub…")
+        }
+        if let problem = cloud.problems[service] { return problem }
+        switch (service, state == .off) {
+        case (.codex, true):
+            return String(localized: "Tasks you start in Codex on the web, in the Codex app or with codex cloud. Uses the Codex CLI on this Mac and its ChatGPT sign-in.")
+        case (.codex, false):
+            return String(localized: "Your Codex cloud tasks show up in Agents. PancakeNotch asks Codex while one runs, and when you're back at your Mac.")
+        case (.github, true):
+            return String(localized: "Tasks you give Copilot on GitHub, plus CI checks on the pull requests cloud agents finish. Uses the GitHub CLI (gh) and its sign-in.")
+        case (.github, false):
+            return String(localized: "Copilot's tasks show up in Agents, with the checks on finished pull requests. PancakeNotch asks GitHub while one runs, and when you're back at your Mac.")
+        }
     }
 }
