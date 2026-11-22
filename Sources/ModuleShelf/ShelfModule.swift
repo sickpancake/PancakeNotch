@@ -911,7 +911,11 @@ public final class ShelfModule: NotchModule {
         selection = []
         clipboardCursor = nil
         confirmingClear = false
-        if showsClipboard { onEvent?(.clipboardOpened) }
+        if showsClipboard {
+            onEvent?(.clipboardOpened)
+            // Clicked open from the header: the arrow keys and P should work right away.
+            notch?.requestKeyFocus?()
+        }
     }
 
     private func handleClipboardKey(_ event: NSEvent, _ clipboard: ShelfClipboard) -> Bool {
@@ -943,6 +947,13 @@ public final class ShelfModule: NotchModule {
         default:
             return false
         }
+    }
+
+    /// A click on a recent copy: it becomes the keyboard's place in the row, and is copied again.
+    func clipboardTileClicked(_ entry: ShelfClipboardEntry) {
+        clipboardCursor = entry.id
+        notch?.requestKeyFocus?()
+        copyClipboardEntry(entry)
     }
 
     /// Puts a recent copy back on the clipboard, ready to paste.

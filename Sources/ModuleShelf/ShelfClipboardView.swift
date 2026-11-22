@@ -102,7 +102,7 @@ struct ShelfClipboardTile: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture { module.copyClipboardEntry(entry) }
+        .onTapGesture { module.clipboardTileClicked(entry) }
         .onDrag { module.clipboardDragProvider(entry) }
         .help(entry.item.displayName)
         .task(id: imageURL) {
