@@ -50,6 +50,8 @@ struct ShelfView: View {
             ShelfDropZones(zone: zone, convert: module.convertZone, showsAirDrop: module.dragCanAirDrop, layout: layout)
         } else if let prompt = module.prompt, !module.isChoosing {
             ShelfPromptCard(module: module, prompt: prompt)
+        } else if module.showsClipboard, let clipboard = module.clipboard {
+            ShelfClipboardRow(module: module, clipboard: clipboard)
         } else if module.store.items.isEmpty {
             ShelfEmptyView()
         } else {
@@ -102,6 +104,20 @@ private struct ShelfHeader: View {
                         Color.clear.frame(width: 0)
                     }
                     .font(.system(size: 12, weight: .semibold))
+                } else if module.showsClipboard, let clipboard = module.clipboard {
+                    if barWidth == 0 {
+                        Text("Clipboard", comment: "The Shelf's row of recent copies")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        Text(clipboard.showsTooLarge ? String(localized: "Too large to keep", comment: "A copy was too big for clipboard history")
+                             : clipboard.entries.count == 1 ? String(localized: "1 copy")
+                             : String(localized: "\(clipboard.entries.count) copies", comment: "Number of recent copies in the Shelf's Clipboard row"))
+                        Color.clear.frame(width: 0)
+                    }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .monospacedDigit()
                 } else {
                     if barWidth == 0 {
                         Text("Shelf")
@@ -135,6 +151,28 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if module.showsClipboard, module.dropZone == nil, module.prompt == nil {
+                    if module.clipboard?.entries.contains(where: { !$0.isPinned }) == true {
+                        ShelfPillButton(title: String(localized: "Clear", comment: "Removes unpinned recent copies")) {
+                            module.clipboard?.removeAll()
+                        }
+                    }
+                    ShelfPillButton(title: String(localized: "Shelf", comment: "Switches from the Clipboard row back to the Shelf's items")) {
+                        module.showClipboard(false)
+                    }
+                } else if module.hasClipboard, module.dropZone == nil, module.prompt == nil {
+                    ShelfPillButton(title: String(localized: "Clipboard", comment: "Shows the Shelf's row of recent copies")) {
+                        module.showClipboard(true)
+                    }
+                    if count > 0 {
+                        ShelfDragAllHandle(module: module)
+                        ShelfPillButton(
+                            title: !module.confirmingClear ? String(localized: "Clear all")
+                                : count == 1 ? String(localized: "Clear 1 item?")
+                                : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                            prominent: module.confirmingClear
+                        ) { module.clearAll() }
+                    }
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
                     ShelfDragAllHandle(module: module)
                     ShelfPillButton(
