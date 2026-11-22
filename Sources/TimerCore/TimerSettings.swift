@@ -36,7 +36,7 @@ public enum TimerFullScreenAlert: String, CaseIterable, Sendable {
 public enum TimerDoneAlert: String, CaseIterable, Sendable {
     /// The whole notch opens on the Done card, then closes again if nobody touches it.
     case openNotch
-    /// Only a small "Timer done" strip slides out under the notch; hovering or clicking opens the card.
+    /// A small "Timer done" strip slides out under the notch; hovering holds it and clicking opens the card.
     case strip
 }
 

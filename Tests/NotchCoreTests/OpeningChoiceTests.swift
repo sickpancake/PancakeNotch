@@ -145,16 +145,51 @@ struct OpeningChoiceTests {
         #expect(model.selectedModule?.moduleID == "nowPlaying")
     }
 
-    @Test func hoveringAStripOpensWhatItIsAbout() async throws {
+    @Test(arguments: [false, true])
+    func hoveringAStripHoldsItAndClickingOpensItsModule(clickOnly: Bool) async throws {
         let pointer = Pointer()
         let (model, _, agents, _) = makeModel(pointer)
-        agents.isActive = true
-        model.activityChanged()
-        #expect(model.peek(agents, for: .seconds(5)))
+        defer { model.reset() }
+        model.behavior.openOnClickOnly = clickOnly
+        #expect(model.peek(agents, for: .milliseconds(40)))
         pointer.location = strip
         model.hoverChanged(true)
-        try await settle(.milliseconds(40)) { model.state == .expanded }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(model.state == .compact)
+        #expect(model.layout.isPeeking)
+        model.tap()
+        #expect(model.state == .expanded)
+        #expect(model.peekModuleID == nil)
         #expect(model.selectedModule?.moduleID == "agents")
+    }
+
+    @Test(arguments: [false, true])
+    func peekExpiryDistinguishesTheStripFromAnEar(overStrip: Bool) async throws {
+        let pointer = Pointer()
+        let (model, _, agents, _) = makeModel(pointer)
+        defer { model.reset() }
+        model.behavior.closeDelay = .milliseconds(60)
+        pointer.location = overStrip ? strip : rightEar
+        #expect(model.peek(agents, for: .milliseconds(40)))
+        if overStrip {
+            // A strip can appear under a stationary pointer without an enter event.
+            try await Task.sleep(for: .milliseconds(150))
+            #expect(model.layout.isPeeking)
+            pointer.location = rightEar
+            model.updatePeekHover()
+            #expect(model.layout.isPeeking)
+            pointer.location = strip
+            model.updatePeekHover()
+            try await Task.sleep(for: .milliseconds(150))
+            #expect(model.layout.isPeeking)
+            pointer.location = rightEar
+            model.updatePeekHover()
+            #expect(model.layout.isPeeking)
+        }
+        try await settle(.milliseconds(60)) { model.peekModuleID == nil }
+        #expect(!model.layout.isPeeking)
+        #expect(model.peekModuleID == nil)
+        #expect(model.state == .compact)
     }
 
     // MARK: Opening the usual way

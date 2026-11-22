@@ -63,6 +63,8 @@ struct NotchView: View {
             if state == .compact, let peek = model.peekView {
                 peek
                     .frame(width: layout.bodySize(for: .compact).width, height: NotchLayout.peekStripHeight)
+                    .frame(width: size.width)
+                    .onHover { _ in model.updatePeekHover() }
                     .padding(.top, layout.geometry.compactHeight)
                     .transition(.opacity)
             }

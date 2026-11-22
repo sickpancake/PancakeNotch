@@ -68,8 +68,10 @@ views; only the chosen owners build their views, and pointer targeting uses the 
 
 ## Opening from the ears
 
-12. Hovering (unless "Open on click only" is on) or clicking **any module's ear**, or anywhere on a peek strip,
-    opens the notch on that module (`moduleUnderPointer()`). Over the hardware notch in the middle it opens on the
+12. Hovering (unless "Open on click only" is on) or clicking **any module's ear** opens it. Clicking anywhere
+    on a peek strip opens its module (`moduleUnderPointer()`). If its time runs out while the pointer is over
+    the strip, it stays visible until the pointer leaves, then closes after the usual close delay.
+    Over the hardware notch in the middle it opens on the
     best-ranked module that `waitsForYou`, else Home if chosen in settings and available, else the best-ranked
     that `wantsFocus` (music actually playing, unless you moved on), else the module used last. With Last module,
     a remembered Now Playing page falls back to Home when paused or empty and Home is available.

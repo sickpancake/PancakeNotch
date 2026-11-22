@@ -175,6 +175,7 @@ public final class NotchViewModel {
     private var briefModuleID: String?
     @ObservationIgnored private var briefTask: Task<Void, Never>?
     @ObservationIgnored private var peekTask: Task<Void, Never>?
+    @ObservationIgnored private var isPeekHeld = false
     /// Closes a notch a module's alert opened, if nobody touched it (`openForAttention`). Anything the user
     /// does, and every open, close and reset, cancels it, so it never closes a notch someone is using.
     @ObservationIgnored private var attentionTask: Task<Void, Never>?
@@ -672,22 +673,27 @@ public final class NotchViewModel {
     }
 
     /// The module the pointer is on in the compact notch: the strip's module anywhere on the strip, else the
-    /// module whose ear it's over. Hovering or clicking there opens the notch on it. `nil` in the middle,
-    /// over the hardware notch, where opening picks the module itself.
+    /// module whose ear it's over. Clicking opens that module; hovering an ear can open it too.
+    /// `nil` in the middle, over the hardware notch, where opening picks the module itself.
     func moduleUnderPointer() -> String? {
         guard state == .compact else { return nil }
         let point = pointerLocation()
-        let geometry = layout.geometry
-        let notch = geometry.notchRect
-        guard layout.outline(for: .compact, contains: point) else { return nil }
-        // The strip hangs below the ears (y grows upwards on screen).
-        if point.y < notch.maxY - geometry.compactHeight {
-            guard layout.isPeeking, let peekModuleID, modules.contains(where: { $0.moduleID == peekModuleID }) else { return nil }
+        if peekStripContains(point) {
+            guard let peekModuleID, modules.contains(where: { $0.moduleID == peekModuleID }) else { return nil }
             return peekModuleID
         }
+        let notch = layout.geometry.notchRect
+        guard layout.outline(for: .compact, contains: point) else { return nil }
         guard point.x < notch.minX || point.x >= notch.maxX else { return nil }
         let allocation = earAllocation()
         return (point.x < notch.minX ? allocation.left : allocation.right)?.moduleID
+    }
+
+    private func peekStripContains(_ point: CGPoint) -> Bool {
+        let geometry = layout.geometry
+        return state == .compact && layout.isPeeking
+            && point.y < geometry.notchRect.maxY - geometry.compactHeight
+            && layout.outline(for: .compact, contains: point)
     }
 
     /// The peek strip's view while a module is peeking.
@@ -700,6 +706,7 @@ public final class NotchViewModel {
 
     /// Called when the pointer enters or leaves the notch outline.
     public func hoverChanged(_ isHovering: Bool) {
+        updatePeekHover()
         // When the window shrinks (e.g. after a click shrinks the panel), AppKit reports the pointer
         // leaving and coming straight back. A "left" while it's still on the notch isn't real: ignoring it
         // keeps the click's "don't reopen" in place.
@@ -708,8 +715,10 @@ public final class NotchViewModel {
         cancelAttentionClose()
         guard !isPinned else { return }
         if isHovering {
-            guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave else { return }
+            guard !behavior.openOnClickOnly, state != .expanded, !waitsForPointerToLeave,
+                  !peekStripContains(pointerLocation()) else { return }
             schedule(after: behavior.openDelay) { model in
+                guard !model.peekStripContains(model.pointerLocation()) else { return }
                 if model.pointerOverEarOverflow() {
                     model.open(fromHover: true, preferringHome: true)
                 } else {
@@ -810,6 +819,7 @@ public final class NotchViewModel {
     /// Something may have moved the pointer away without a hover exit, e.g. a swipe to another Space
     /// (macOS hides the notch during it). Closes like a hover exit if the pointer isn't on the notch.
     public func pointerMayHaveLeft() {
+        updatePeekHover()
         guard !isPinned, !layout.outline(for: state, contains: pointerLocation()) else { return }
         // A hover-open still waiting for its delay would otherwise open it with the pointer gone.
         hoverTask?.cancel()
@@ -949,7 +959,7 @@ public final class NotchViewModel {
 
     /// A module's alert (a timer that finished) wants to be seen, but only as its strip under the notch for
     /// `duration`, not by opening the notch. Shown where the notch can show, like `requestAttention`; not
-    /// while Mission Control is up (the ear tells instead). Hovering or clicking the strip opens the notch.
+    /// while Mission Control is up (the ear tells instead). Hovering holds the strip; clicking opens it.
     public func requestPeek(from module: any NotchModule, for duration: Duration, revealsInFullScreen: Bool) {
         guard modules.contains(where: { $0 === module }), !isMissionControlActive() else { return }
         if let presentPeek {
@@ -1018,8 +1028,8 @@ public final class NotchViewModel {
         if state != .expanded { transition(to: restingTarget) }
     }
 
-    /// Shows `module`'s peek strip under the compact notch for `duration` (the new song's title), then
-    /// goes back. Ignored while the notch is open.
+    /// Shows `module`'s peek strip for `duration`, holding it if the pointer is over the strip at expiry.
+    /// Ignored while the notch is open.
     @discardableResult
     public func peek(_ module: any NotchModule, for duration: Duration,
                      revealOverFullScreen: Bool = false, waitingForOtherPeeks: Bool = false) -> Bool {
@@ -1028,9 +1038,10 @@ public final class NotchViewModel {
               modules.contains(where: { $0 === module }), module.peekView(layout: layout) != nil,
               automaticPeeksAvailable, prepareAutomaticPeek?(revealOverFullScreen) != false else { return false }
         peekGeneration += 1
-        peekTask?.cancel()
+        cancelPeekTimeout()
         peekModuleID = module.moduleID
-        if !layout.isPeeking {
+        let grows = !layout.isPeeking
+        if grows {
             var target = layout
             target.isPeeking = true
             earsAsleep = false
@@ -1038,15 +1049,43 @@ public final class NotchViewModel {
                 layout = target
                 if state == .closed { state = .compact }
             }
-            // Grow the window right away; the outline animates inside it.
-            fitWindow?(.compact)
         }
-        peekTask = Task { [weak self] in
-            try? await Task.sleep(for: duration)
-            guard !Task.isCancelled else { return }
-            self?.endPeek(animated: true)
-        }
+        schedulePeekTimeout(after: duration)
+        // Grow the window right away; the outline animates inside it.
+        if grows { fitWindow?(.compact) }
         return true
+    }
+
+    /// The pointer can leave the strip for an ear without leaving the notch outline.
+    func updatePeekHover() {
+        guard layout.isPeeking else { return }
+        if peekStripContains(pointerLocation()) {
+            hoverTask?.cancel()
+            guard isPeekHeld else { return }
+            peekTask?.cancel()
+            peekTask = nil
+        } else if isPeekHeld, peekTask == nil {
+            schedulePeekTimeout(after: behavior.closeDelay)
+        }
+    }
+
+    private func schedulePeekTimeout(after delay: Duration) {
+        peekTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.peekTask = nil
+            if self.peekStripContains(self.pointerLocation()) {
+                self.isPeekHeld = true
+            } else {
+                self.endPeek(animated: true)
+            }
+        }
+    }
+
+    private func cancelPeekTimeout() {
+        peekTask?.cancel()
+        peekTask = nil
+        isPeekHeld = false
     }
 
     /// Cancels only this module's strip (e.g. its notification preference was switched off).
@@ -1058,6 +1097,7 @@ public final class NotchViewModel {
     /// Shows `module`'s peek strip without timing it out (off-screen snapshots).
     public func peekForSnapshot(_ module: any NotchModule) {
         peekGeneration += 1
+        cancelPeekTimeout()
         peekModuleID = module.moduleID
         layout.isPeeking = true
     }
@@ -1072,8 +1112,7 @@ public final class NotchViewModel {
     private func endPeek(animated: Bool) {
         peekGeneration += 1
         let generation = peekGeneration
-        peekTask?.cancel()
-        peekTask = nil
+        cancelPeekTimeout()
         guard layout.isPeeking else {
             peekModuleID = nil
             return
@@ -1154,7 +1193,7 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         cancelAttentionClose()
         briefTask?.cancel()
-        peekTask?.cancel()
+        cancelPeekTimeout()
         isShowingBriefly = false
         briefModuleID = nil
         briefCompactOnClose = nil
