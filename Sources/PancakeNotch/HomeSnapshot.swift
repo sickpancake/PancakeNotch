@@ -2,6 +2,7 @@ import AgentsCore
 import Foundation
 import ModuleAgents
 import ModuleKeepAwake
+import ModuleNotes
 import ModuleNowPlaying
 import ModuleShelf
 import ModuleTimer
@@ -28,7 +29,7 @@ enum HomeSnapshot {
     }
 
     static func models(layout: NotchLayout) -> [NotchViewModel] {
-        let smalls: [HomeWidgetKind] = [.nowPlaying, .timer, .stopwatch, .agents, .aiUsage, .shelf, .keepAwake, .clock, .battery, .statistics]
+        let smalls: [HomeWidgetKind] = [.nowPlaying, .timer, .stopwatch, .agents, .aiUsage, .shelf, .keepAwake, .notes, .clock, .battery, .statistics]
         let mediums: [HomeWidgetKind] = smalls
         let larges: [HomeWidgetKind] = HomeWidgetKind.allCases.filter { $0.supports(.large) }
         // Appended step by step: one long `+` chain is too much for the macOS 15 runner's type checker.
@@ -105,7 +106,7 @@ enum HomeSnapshot {
             clock.advance(12)
         }
         return [NowPlayingSnapshot.module(), ShelfSnapshot.module(itemCount: 7), agents, usage, timer,
-                KeepAwakeSnapshot.module { center, _ in center.turnOn(.timed(3600)) }]
+                KeepAwakeSnapshot.module { center, _ in center.turnOn(.timed(3600)) }, NotesSnapshot.module()]
     }
 
     /// Every module with nothing to show yet.
@@ -116,6 +117,7 @@ enum HomeSnapshot {
         agents.isSnapshot = true
         let usage = AIUsageModule(center: .practiceEmpty())
         usage.isSnapshot = true
-        return [nowPlaying, ShelfSnapshot.module(itemCount: 0), agents, usage, TimerSnapshot.module(), KeepAwakeSnapshot.module()]
+        return [nowPlaying, ShelfSnapshot.module(itemCount: 0), agents, usage, TimerSnapshot.module(), KeepAwakeSnapshot.module(),
+                NotesSnapshot.module(notes: false)]
     }
 }

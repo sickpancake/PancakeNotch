@@ -136,6 +136,8 @@ public final class ShelfModule: NotchModule {
     /// Told about what the user does (opening an item, the menu, dragging out…), for the app
     /// window's lessons. Called from the existing state changes only: nothing is polled.
     @ObservationIgnored public var onEvent: (@MainActor (ShelfEvent) -> Void)?
+    /// Takes the dropped text that becomes notes (Notes is on) and returns what stays for the Shelf.
+    @ObservationIgnored public var takesNotes: (@MainActor ([ShelfInput]) -> [ShelfInput])?
 
     /// Whether a drag's source (`NSDraggingInfo.draggingSource`) is a Shelf tile or the
     /// "drag all" handle, so a drop target can refuse the Shelf's own items.
@@ -367,8 +369,14 @@ public final class ShelfModule: NotchModule {
             return true
         }
 
-        let drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
+        var drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
         guard !drop.isEmpty else { return false }
+        if let takesNotes {
+            let kept = takesNotes(drop.inputs)
+            store.discard(drop.inputs.filter { !kept.contains($0) })
+            drop.inputs = kept
+            if drop.isEmpty { return true }
+        }
         // When the notch closes, it shows the new count in the ear for a moment.
         if settings.showsInEars {
             countBeforeDrop = store.items.count

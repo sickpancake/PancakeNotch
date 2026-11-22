@@ -1287,6 +1287,7 @@ enum StatsFormat {
         case "aiUsage": String(localized: "AI Usage")
         case "timer": String(localized: "Timer")
         case "keepAwake": String(localized: "Keep Awake")
+        case "notes": String(localized: "Notes")
         default: id
         }
     }
@@ -1299,6 +1300,7 @@ enum StatsFormat {
         case "aiUsage": "gauge.with.dots.needle.50percent"
         case "timer": "timer"
         case "keepAwake": "cup.and.heat.waves"
+        case "notes": "note.text"
         default: "square.grid.2x2"
         }
     }

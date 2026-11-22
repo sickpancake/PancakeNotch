@@ -348,7 +348,7 @@ struct NotchModulesTests {
 struct ModuleArrangementTests {
     @Test func defaultsPutNowPlayingFirst() {
         let arrangement = ModuleArrangement()
-        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake"])
+        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake", "notes"])
         #expect(arrangement.isFavorite("shelf"))
         #expect(arrangement.navigation == .tabsAndMenu)
         #expect(!arrangement.swapsEarSides)
@@ -363,7 +363,7 @@ struct ModuleArrangementTests {
         arrangement.toggleFavorite("nowPlaying")
         arrangement.navigation = .menu
         let again = ModuleArrangement(defaults: defaults)
-        #expect(again.order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake"])
+        #expect(again.order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake", "notes"])
         #expect(!again.isFavorite("nowPlaying"))
         #expect(again.navigation == .menu)
     }
@@ -373,17 +373,17 @@ struct ModuleArrangementTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(["shelf"], forKey: "modules.order")
-        #expect(ModuleArrangement(defaults: defaults).order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake"])
+        #expect(ModuleArrangement(defaults: defaults).order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake", "notes"])
     }
 
     @Test func moveByOneIsClamped() {
         let arrangement = ModuleArrangement()
         arrangement.move("nowPlaying", by: -1)
-        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake"])
+        #expect(arrangement.order == ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake", "notes"])
         arrangement.move("nowPlaying", by: 1)
-        #expect(arrangement.order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake"])
+        #expect(arrangement.order == ["shelf", "nowPlaying", "agents", "aiUsage", "timer", "keepAwake", "notes"])
         arrangement.move("nowPlaying", by: 5)
-        #expect(arrangement.order == ["shelf", "agents", "aiUsage", "timer", "keepAwake", "nowPlaying"])
+        #expect(arrangement.order == ["shelf", "agents", "aiUsage", "timer", "keepAwake", "notes", "nowPlaying"])
     }
 }
 
