@@ -50,6 +50,20 @@ public final class NotesModule: NotchModule {
         }
     }
 
+    /// The page came up after a click (a Notes tab, or the notch opened on Notes): take the keyboard so
+    /// ⌘N, Return and the arrows work. A hover leaves the keyboard with the app you were typing in.
+    func pageShown() {
+        guard !isSnapshot, let type = NSApp.currentEvent?.type,
+              [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp].contains(type) else { return }
+        notch?.requestKeyFocus?()
+    }
+
+    /// A click on the page itself.
+    func pageClicked() {
+        guard !isSnapshot else { return }
+        notch?.requestKeyFocus?()
+    }
+
     public func expandedView(layout: NotchLayout) -> AnyView {
         AnyView(NotesView(module: self, layout: NotesLayout(layout)))
     }
@@ -130,7 +144,7 @@ public final class NotesModule: NotchModule {
         isDropTargeted = false
         let texts = Self.texts(on: info.draggingPasteboard, includingText: true)
         let before = store.notes.count
-        let added = store.add(texts.map { (text: $0.text, source: Note.Source.dropped) })
+        let added = store.add(texts.map { (text: $0.text, source: $0.fileName.map(Note.Source.file) ?? .dropped) })
         dropRefused = added == 0
         if added > 0 {
             notch?.userInteracted()
@@ -286,8 +300,14 @@ public enum NotesText {
 
     /// "Edited today 9:41", or "Added from Shelf · Plan.txt" for an untouched note from a file.
     public static func edited(_ note: Note, now: Date = Date()) -> String {
-        if case .shelf(let name?) = note.source, note.modified == note.created {
-            return String(localized: "From the Shelf · \(name)", comment: "Notes: a note made from a text file dropped on the Shelf")
+        if note.modified == note.created {
+            switch note.source {
+            case .shelf(let name?):
+                return String(localized: "From the Shelf · \(name)", comment: "Notes: a note made from a text file dropped on the Shelf")
+            case .file(let name):
+                return String(localized: "From \(name)", comment: "Notes: a note made from a text file dropped on Notes")
+            default: break
+            }
         }
         return String(localized: "Edited \(when(note.modified, now: now))", comment: "Notes: when the note was last changed")
     }

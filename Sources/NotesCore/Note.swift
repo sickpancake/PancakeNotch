@@ -8,6 +8,8 @@ public struct Note: Codable, Identifiable, Hashable, Sendable {
         case typed
         /// Text dropped on the Notes page.
         case dropped
+        /// A text file dropped on the Notes page.
+        case file(name: String)
         /// A text file or text dropped on the Shelf, with the file's name when it was a file.
         case shelf(fileName: String?)
     }

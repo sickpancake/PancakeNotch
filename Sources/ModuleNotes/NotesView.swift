@@ -56,6 +56,8 @@ struct NotesView: View {
             .frame(maxHeight: .infinity)
         }
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
+        .background(Color.black.opacity(0.001).onTapGesture { module.pageClicked() })
+        .onAppear { module.pageShown() }
         .overlay { NotesDropTarget(isTargeted: module.isDropTargeted).padding(8) }
         .foregroundStyle(.white)
         .animation(.easeInOut(duration: 0.2), value: module.store.notes.isEmpty)

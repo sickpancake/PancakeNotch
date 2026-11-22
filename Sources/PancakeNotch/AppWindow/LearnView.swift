@@ -369,7 +369,7 @@ struct LessonPlayer: View {
                 switch event {
                 case .edited: if store?.notes.contains(where: { !$0.isEmpty && $0.source == .typed }) == true { runner.receive(.noteWritten) }
                 case .pinned: runner.receive(.notePinned)
-                case .created(.dropped), .created(.shelf): runner.receive(.noteDropped)
+                case .created(.dropped), .created(.file), .created(.shelf): runner.receive(.noteDropped)
                 case .deleted: runner.receive(.noteDeleted)
                 default: break
                 }
