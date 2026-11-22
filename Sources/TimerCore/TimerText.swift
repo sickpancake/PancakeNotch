@@ -71,4 +71,9 @@ public enum TimerText {
     public static func preset(_ preset: TimerPreset) -> String {
         preset.name.isEmpty ? length(preset.seconds) : "\(preset.name) · \(length(preset.seconds))"
     }
+
+    /// What to call a timer: its name, or "Timer" when it has none.
+    public static func label(_ timer: CountdownTimer) -> String {
+        timer.name.isEmpty ? String(localized: "Timer", comment: "An unnamed timer") : timer.name
+    }
 }

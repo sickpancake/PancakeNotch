@@ -15,28 +15,32 @@ public enum TimerMode: String, CaseIterable, Sendable {
 }
 
 /// The timer and the stopwatch, shared by the real notch and Home's live copy (ADR-0040). Saved after
-/// every change, so both carry on after quitting. One timer and one stopwatch can run at once.
+/// every change, so both carry on after quitting. Several named timers (issue #70) and one stopwatch can
+/// run at once.
 ///
-/// No polling (AGENTS.md rule 2): one sleeping Task waits for the timer's end. A timer that ends while
+/// No polling (AGENTS.md rule 2): one sleeping Task waits for the soonest timer's end. A timer that ends while
 /// the Mac sleeps finishes on wake; a clock change (by hand or network time) checks it again. Each of
 /// those asks `CountdownTimer.finishIfDue`, so the sound plays once (TimerAlarm.tla, RingsOnce).
 @MainActor
 @Observable
 public final class TimerCenter {
-    public private(set) var timer: CountdownTimer
+    /// Every timer that runs, waits or shows Done, in the order they were started. Never an idle one.
+    public private(set) var timers: [CountdownTimer]
     public private(set) var stopwatch: Stopwatch
+    /// The most timers at once.
+    public static let mostTimers = 10
     /// The mode used last; the open notch shows it when neither (or both) run.
     public var lastMode: TimerMode { didSet { defaults?.set(lastMode.rawValue, forKey: Keys.lastMode) } }
     /// The wheels' time, as last set or started (5 minutes at first).
     public var customSeconds: TimeInterval { didSet { defaults?.set(customSeconds, forKey: Keys.customSeconds) } }
-    /// The timer ran out while the app wasn't running (found at launch): it shows Done without ringing.
-    public private(set) var finishedWhileAway = false
+    /// Timers that ran out while the app wasn't running (found at launch): Done without ringing.
+    private var awayIDs: Set<UUID> = []
     /// Goes up each time the Mac woke or the clock changed. Things that follow the time on their own
     /// (the ring's animation) start from the new time when it changes.
     public private(set) var clockEpoch = 0
 
-    /// A timer just finished: play the sound, open the notch. Called once per finish.
-    @ObservationIgnored public var onFinish: (() -> Void)?
+    /// A timer just finished: play the sound, open the notch. Called once per finish, per timer.
+    @ObservationIgnored public var onFinish: ((CountdownTimer) -> Void)?
     /// Told about each thing the user does (a lesson's practice notch).
     @ObservationIgnored public var onEvent: ((TimerEvent) -> Void)?
 
@@ -60,17 +64,18 @@ public final class TimerCenter {
         self.clock = now
         self.uptime = uptime
         let saved = defaults?.data(forKey: Keys.state).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
-        timer = saved?.timer ?? CountdownTimer()
+        timers = (saved?.timers ?? saved?.timer.map { [$0] } ?? []).filter { !$0.isIdle }
         stopwatch = saved?.stopwatch ?? Stopwatch()
         lastMode = defaults?.string(forKey: Keys.lastMode).flatMap(TimerMode.init(rawValue:)) ?? .timer
         let custom = defaults?.object(forKey: Keys.customSeconds) as? NSNumber
         let seconds = custom?.doubleValue ?? .nan
         customSeconds = seconds.isFinite && seconds >= 0 ? min(seconds, CountdownTimer.longest) : 5 * 60
         // Ran out while the app was quit: Done, quietly (it isn't ringing for something long past).
-        if timer.finishIfDue(now: now()) {
-            finishedWhileAway = true
-            save()
+        let launched = now()
+        for index in timers.indices where timers[index].finishIfDue(now: launched) {
+            awayIDs.insert(timers[index].id)
         }
+        if !awayIDs.isEmpty { save() }
         anchorStopwatch()
         scheduleAlarm()
     }
@@ -99,33 +104,107 @@ public final class TimerCenter {
     public var now: Date { clock() }
 
     /// Something runs or waits: the module wants its ear.
-    public var hasActivity: Bool { !timer.isIdle || !stopwatch.isIdle }
+    public var hasActivity: Bool { !timers.isEmpty || !stopwatch.isIdle }
 
-    // MARK: Timer
+    // MARK: Timers
 
-    public func startTimer(seconds: TimeInterval) {
-        guard timer.isIdle || timer.isDone else { return }
+    /// The timer the notch is about: the Done one waiting longest (Done alerts queue up, one at a time),
+    /// else the one ending soonest, else the paused one with least left. Idle when there are none. The
+    /// one-timer controls below act on it.
+    public var timer: CountdownTimer { Self.ordered(timers, at: now).first ?? CountdownTimer() }
+
+    /// Done first (oldest first), then running by end, then paused by time left: the open notch's list
+    /// and the ear's pick.
+    public var sortedTimers: [CountdownTimer] { Self.ordered(timers, at: now) }
+
+    /// Timers showing Done, oldest first: the queue of Done alerts.
+    public var doneTimers: [CountdownTimer] { sortedTimers.filter(\.isDone) }
+
+    /// Room for another timer.
+    public var canAddTimer: Bool { timers.count < Self.mostTimers }
+
+    /// The focused timer ran out while the app was quit: it shows Done without ringing.
+    public var finishedWhileAway: Bool { timer.isDone && awayIDs.contains(timer.id) }
+
+    public func timer(id: UUID) -> CountdownTimer? { timers.first { $0.id == id } }
+
+    static func ordered(_ timers: [CountdownTimer], at now: Date) -> [CountdownTimer] {
+        func rank(_ timer: CountdownTimer) -> (Int, TimeInterval) {
+            switch timer.phase {
+            case .done(let endedAt): (0, endedAt.timeIntervalSinceReferenceDate)
+            case .running(let end): (1, end.timeIntervalSinceReferenceDate)
+            case .paused(let remaining): (2, remaining)
+            case .idle: (3, 0)
+            }
+        }
+        // Stable: equal ranks keep the order they were started.
+        return timers.enumerated().sorted {
+            let (a, b) = (rank($0.element), rank($1.element))
+            return a != b ? a < b : $0.offset < $1.offset
+        }.map(\.element)
+    }
+
+    /// Starts another timer beside any that run. A Done timer stays until it's stopped. Ignored once
+    /// `mostTimers` are going. Returns the new timer's id.
+    @discardableResult
+    public func startTimer(seconds: TimeInterval, name: String = "") -> UUID? {
+        guard canAddTimer else { return nil }
+        var timer = CountdownTimer(name: TimerSettings.cleanName(name))
         timer.start(seconds, now: now)
-        finishedWhileAway = false
+        guard !timer.isIdle else { return nil }
+        timers.append(timer)
         lastMode = .timer
         changed()
         onEvent?(.started)
+        return timer.id
     }
 
     /// Starts the wheels' time and remembers it for next time.
-    public func startCustom(seconds: TimeInterval) {
-        guard seconds >= 1 else { return }
+    @discardableResult
+    public func startCustom(seconds: TimeInterval, name: String = "") -> UUID? {
+        guard seconds >= 1 else { return nil }
         customSeconds = min(seconds.rounded(), CountdownTimer.longest)
-        startTimer(seconds: customSeconds)
-        onEvent?(.customStarted)
+        let id = startTimer(seconds: customSeconds, name: name)
+        if id != nil { onEvent?(.customStarted) }
+        return id
     }
 
-    public func pauseTimer() { timer.pause(now: now); changed(.paused) }
-    public func resumeTimer() { timer.resume(now: now); changed(.resumed) }
-    public func cancelTimer() { timer.cancel(); changed(.cancelled) }
-    public func stopTimer() { timer.stop(); finishedWhileAway = false; changed(.stopped) }
-    public func addMinute() { timer.addMinute(now: now); finishedWhileAway = false; changed(.addedMinute) }
-    public func repeatTimer() { timer.restart(now: now); finishedWhileAway = false; changed(.repeated) }
+    public func pauseTimer() { pauseTimer(id: timer.id) }
+    public func resumeTimer() { resumeTimer(id: timer.id) }
+    public func cancelTimer() { cancelTimer(id: timer.id) }
+    public func stopTimer() { stopTimer(id: timer.id) }
+    public func addMinute() { addMinute(id: timer.id) }
+    public func repeatTimer() { repeatTimer(id: timer.id) }
+
+    public func pauseTimer(id: UUID) { update(id, .paused) { $0.pause(now: now) } }
+    public func resumeTimer(id: UUID) { update(id, .resumed) { $0.resume(now: now) } }
+    /// Cancel while running or paused: it leaves the list.
+    public func cancelTimer(id: UUID) { update(id, .cancelled) { $0.cancel() } }
+    /// Stop on a Done card: it leaves the list, and the next Done one (if any) shows.
+    public func stopTimer(id: UUID) { update(id, .stopped) { $0.stop() } }
+    /// +1 min while running or paused adds a minute; on a Done card it's a one-minute timer.
+    public func addMinute(id: UUID) {
+        update(id, .addedMinute) { timer in
+            if timer.isDone { timer.addMinute(now: now) } else { timer.extend(by: 60) }
+        }
+    }
+    public func repeatTimer(id: UUID) { update(id, .repeated) { $0.restart(now: now) } }
+
+    public func renameTimer(id: UUID, to name: String) {
+        guard let index = timers.firstIndex(where: { $0.id == id }) else { return }
+        timers[index].name = TimerSettings.cleanName(name)
+        save()
+    }
+
+    private func update(_ id: UUID, _ event: TimerEvent, _ change: (inout CountdownTimer) -> Void) {
+        guard let index = timers.firstIndex(where: { $0.id == id }) else { return }
+        let before = timers[index]
+        change(&timers[index])
+        guard timers[index] != before else { return }
+        if !timers[index].isDone { awayIDs.remove(id) }
+        if timers[index].isIdle { timers.remove(at: index) }
+        changed(event)
+    }
 
     // MARK: Stopwatch
 
@@ -162,14 +241,22 @@ public final class TimerCenter {
         if !checkFinished() { scheduleAlarm() }
     }
 
-    /// Finishes the timer if its end has come. Returns whether it finished now.
+    /// Finishes every timer whose end has come, each once, in the order they ended. Returns whether
+    /// any finished now.
     @discardableResult
     func checkFinished() -> Bool {
-        guard timer.finishIfDue(now: now) else { return false }
+        let checked = now
+        var finished: [CountdownTimer] = []
+        for index in timers.indices where timers[index].finishIfDue(now: checked) {
+            finished.append(timers[index])
+        }
+        guard !finished.isEmpty else { return false }
         scheduleAlarm()
         save()
-        onFinish?()
-        onEvent?(.finished)
+        for timer in finished.sorted(by: { ($0.endedAt ?? checked) < ($1.endedAt ?? checked) }) {
+            onFinish?(timer)
+            onEvent?(.finished)
+        }
         return true
     }
 
@@ -190,7 +277,7 @@ public final class TimerCenter {
     private func scheduleAlarm() {
         alarmTask?.cancel()
         alarmTask = nil
-        guard timer.isRunning else { return endActivity() }
+        guard timers.contains(where: \.isRunning) else { return endActivity() }
         // Only the real center (started): a practice timer is on screen, and it may be dropped mid-run.
         if activity == nil, !observers.isEmpty {
             activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "A timer is running")
@@ -208,19 +295,26 @@ public final class TimerCenter {
     }
 
     private var secondsLeft: TimeInterval? {
-        timer.end.map { $0.timeIntervalSince(now) }
+        timers.compactMap(\.end).min().map { $0.timeIntervalSince(now) }
     }
 
     private func save() {
         guard let defaults else { return }
-        if let data = try? JSONEncoder().encode(Saved(timer: timer, stopwatch: stopwatch)) {
+        if let data = try? JSONEncoder().encode(Saved(timers: timers, stopwatch: stopwatch)) {
             defaults.set(data, forKey: Keys.state)
         }
     }
 
+    /// `timer` is how saves looked before several timers; read, never written.
     private struct Saved: Codable {
-        var timer: CountdownTimer
+        var timers: [CountdownTimer]?
+        var timer: CountdownTimer?
         var stopwatch: Stopwatch
+
+        init(timers: [CountdownTimer], stopwatch: Stopwatch) {
+            self.timers = timers
+            self.stopwatch = stopwatch
+        }
     }
 
     enum Keys {
