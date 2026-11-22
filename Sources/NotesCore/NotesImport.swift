@@ -27,10 +27,9 @@ public enum NotesImport {
     /// UTF-8, UTF-16 with a byte order mark, or else Windows Latin 1 (what older editors save). Data with
     /// NUL bytes isn't text.
     static func decode(_ data: Data) -> String? {
-        if let text = String(data: data, encoding: .utf8) { return text }
         let bom = Array(data.prefix(2))
         if bom == [0xFE, 0xFF] || bom == [0xFF, 0xFE] { return String(data: data, encoding: .utf16) }
         guard !data.contains(0) else { return nil }
-        return String(data: data, encoding: .windowsCP1252)
+        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .windowsCP1252)
     }
 }

@@ -143,7 +143,7 @@ struct NotesStoreTests {
         let utf16 = directory.appending(path: "Wide.txt")
         try "Wide note".data(using: .utf16)!.write(to: utf16)
         let binary = directory.appending(path: "Binary.txt")
-        try Data([0xC3, 0x28, 0x00, 0x41, 0x00]).write(to: binary)
+        try Data("Binary\0embedded\0NUL".utf8).write(to: binary)
         #expect(NotesImport.text(of: latin1) == "café crème brûlée")
         #expect(NotesImport.text(of: utf16) == "Wide note")
         #expect(NotesImport.text(of: binary) == nil)
