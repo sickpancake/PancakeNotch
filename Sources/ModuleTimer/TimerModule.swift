@@ -32,7 +32,7 @@ public final class TimerModule: NotchModule {
     var addingTimer = false
     /// The list's row order, taken when the notch opens: rows stay put under the pointer while +1 min or
     /// pause would re-sort them (a second click on the same spot hits the same timer).
-    private var listOrder: [UUID] = []
+    private var listOrder: [UUID]?
     /// The next timer's name, typed into the name field ("Pasta").
     var newName = ""
     /// The name field has the keyboard: letters go into the name.
@@ -169,15 +169,15 @@ public final class TimerModule: NotchModule {
 
     public func notchDidClose() {
         endEditing()
-        listOrder = []
+        listOrder = nil
     }
 
-    /// The timers in the open list: in the order they had when the notch opened, then any started since,
-    /// soonest first.
+    /// The timers in the open list: in the order they had when the notch opened, then any started since
+    /// in the order they were started, so no row moves under the pointer until the notch closes.
     var listedTimers: [CountdownTimer] {
-        let sorted = center.sortedTimers
-        let kept = listOrder.compactMap { id in sorted.first { $0.id == id } }
-        return kept + sorted.filter { !listOrder.contains($0.id) }
+        guard let listOrder else { return center.sortedTimers }
+        let kept = listOrder.compactMap(center.timer(id:))
+        return kept + center.timers.filter { !listOrder.contains($0.id) }
     }
 
     public func userSwitchedAway() {

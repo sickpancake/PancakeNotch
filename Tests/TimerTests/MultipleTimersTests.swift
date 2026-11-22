@@ -166,6 +166,28 @@ struct MultipleTimersTests {
         #expect(module.listedTimers.map(\.name) == ["Egg", "Tea", "Pasta"])
     }
 
+    @Test func timersStartedWhileOpenStayPut() throws {
+        let clock = TestClock()
+        let center = TimerCenter(now: { clock.now })
+        let module = TimerModule(center: center,
+                                 settings: TimerSettings(defaults: scratchDefaults()),
+                                 presents: false)
+        module.notchDidOpen()
+        let pasta = try #require(center.startTimer(seconds: 300, name: "Pasta"))
+        center.startTimer(seconds: 360, name: "Tea")
+        center.startTimer(seconds: 30, name: "Egg")
+        #expect(module.listedTimers.map(\.name) == ["Pasta", "Tea", "Egg"])
+
+        // Two +1 min on Pasta: it ends after Tea now, but keeps its row and gets both.
+        module.addMinute(pasta)
+        module.addMinute(pasta)
+        #expect(module.listedTimers.map(\.name) == ["Pasta", "Tea", "Egg"])
+        #expect(center.timer(id: pasta)?.remaining(at: clock.now) == 420)
+
+        module.notchDidClose()
+        #expect(module.listedTimers.map(\.name) == ["Egg", "Tea", "Pasta"])
+    }
+
     @Test func newTimerPageAndNamedStart() {
         let clock = TestClock()
         let center = TimerCenter(now: { clock.now })
