@@ -1,9 +1,11 @@
 import AgentsCore
 import AppKit
 import KeepAwakeCore
+import NotesCore
 import Learn
 import ModuleAgents
 import ModuleKeepAwake
+import ModuleNotes
 import ModuleNowPlaying
 import ModuleShelf
 import NotchCore
@@ -99,6 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     /// Exists only while Keep Awake is switched on.
     private var keepAwakeModule: KeepAwakeModule?
+    private let notesSettings = NotesSettings()
+    /// The notes, saved between launches. Read at launch even while Notes is off: the Shelf asks it nothing then.
+    private lazy var notesStore = NotesStore()
+    /// Exists only while Notes is switched on.
+    private var notesModule: NotesModule?
     /// The Shelf in Home's live notch, which can convert a file too. Kept after Home closes, so a
     /// conversion started there finishes and keeps the Mac awake while it runs.
     private var liveShelf: ShelfModule?
@@ -137,6 +144,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timers: timers,
             keepAwakeSettings: keepAwakeSettings,
             keepAwake: keepAwake,
+            notesSettings: notesSettings,
+            notesStore: notesStore,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] }
         ))
         controller.onShow = { [weak self] in self?.sampleHealth() }
@@ -327,11 +336,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var modules: [any NotchModule] = []
         if nowPlayingSettings.isEnabled { modules.append(NowPlayingModule(center: nowPlaying)) }
         liveShelf = shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings) : nil
+        liveShelf?.takesNotes = { [weak self] inputs in self?.takeNotes(inputs) ?? inputs }
         if let liveShelf { modules.append(liveShelf) }
         if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
         if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
         if timerSettings.isEnabled { modules.append(TimerModule(center: timers, settings: timerSettings, presents: false)) }
         if keepAwakeSettings.isEnabled { modules.append(KeepAwakeModule(center: keepAwake, presents: false)) }
+        if notesSettings.isEnabled { modules.append(NotesModule(store: notesStore, settings: notesSettings)) }
         observeWork()
         return modules
     }
@@ -339,9 +350,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Creates each module while it's switched on and drops it when it's off (Now Playing's helper
     /// stops; the Shelf takes no drops). Runs again whenever a switch changes (no polling).
     private func observeModules() {
-        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders, timerOn, keepAwakeOn) = withObservationTracking {
+        let (nowPlayingOn, shelfOn, agentsOn, usageOn, accountFolders, timerOn, keepAwakeOn, notesOn) = withObservationTracking {
             (nowPlayingSettings.isEnabled, shelfSettings.isEnabled, agentsSettings.agentsEnabled,
-             agentsSettings.usageEnabled, agentsSettings.addedFolders, timerSettings.isEnabled, keepAwakeSettings.isEnabled)
+             agentsSettings.usageEnabled, agentsSettings.addedFolders, timerSettings.isEnabled, keepAwakeSettings.isEnabled,
+             notesSettings.isEnabled)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeModules() }
         }
@@ -361,6 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let module = ShelfModule(store: shelfStore, settings: shelfSettings)
                 shelfCount = shelfStore.items.count
                 module.onEvent = { [weak self] event in self?.shelfChanged(event) }
+                module.takesNotes = { [weak self] inputs in self?.takeNotes(inputs) ?? inputs }
                 shelf = module
             }
         } else {
@@ -416,11 +429,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keepAwakeModule = nil
             keepAwake.stop()
         }
+        if notesOn {
+            if notesModule == nil { notesModule = NotesModule(store: notesStore, settings: notesSettings) }
+        } else {
+            notesModule = nil
+        }
         devinCloud.follow(agents: agentsModule == nil ? nil : agents, usage: usageModule == nil ? nil : usage)
-        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule]
+        notchController.modules = [nowPlayingModule as (any NotchModule)?, shelf, agentsModule, usageModule, timerModule, keepAwakeModule,
+                                   notesModule]
             .compactMap { $0 }
         observeWork(startsTail: !(hadWorkModules.0 && agentsModule == nil) && !(hadWorkModules.1 && shelf == nil))
         menuBar.updateIcon()
+    }
+
+    /// Text dropped on the Shelf that Notes' settings turn into notes.
+    private func takeNotes(_ inputs: [ShelfInput]) -> [ShelfInput] {
+        ShelfNotes.take(inputs, into: notesStore, settings: notesSettings)
     }
 
     /// Tells Keep Awake when an agent works (or waits for you) and when the Shelf converts a file, and puts
@@ -499,6 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             clock.advance(4 * 60 + 18)
                         }]
                     })
+                rows += NotesSnapshot.models(layout: layout) { [NowPlayingSnapshot.module()] }
                 return rows
             })
             // Home on its own sheet beside it ("notch-home.png"), so the main sheet stays sharp.

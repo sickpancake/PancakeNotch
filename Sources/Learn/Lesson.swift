@@ -2,7 +2,7 @@ import Foundation
 
 /// The hands-on lessons on the app window's Learn page.
 public enum LessonID: String, CaseIterable, Identifiable, Sendable {
-    case basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake
+    case basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake, notes
 
     public var id: Self { self }
 }
@@ -17,7 +17,8 @@ public enum LessonSignal: Hashable, Sendable {
          agentAllowed, agentOpened, agentsCleared,
          usageAccountsOpened, usageAccountChosen, usageRangeChosen,
          timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped,
-         keepAwakeTurnedOn, keepAwakeExtended, keepAwakeTurnedOff
+         keepAwakeTurnedOn, keepAwakeExtended, keepAwakeTurnedOff,
+         noteWritten, notePinned, noteDropped, noteDeleted
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -61,7 +62,7 @@ public struct Lesson: Identifiable, Sendable {
     }
 
     /// Every lesson, in the order the Learn page shows them.
-    public static var all: [Lesson] { [basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake] }
+    public static var all: [Lesson] { [basics, home, nowPlaying, shelf, agents, aiUsage, timer, keepAwake, notes] }
 
     public static func lesson(_ id: LessonID) -> Lesson {
         switch id {
@@ -73,6 +74,7 @@ public struct Lesson: Identifiable, Sendable {
         case .aiUsage: aiUsage
         case .timer: timer
         case .keepAwake: keepAwake
+        case .notes: notes
         }
     }
 
@@ -405,6 +407,44 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Click Turn Off: your Mac sleeps as usual again. It also turns on by itself while an AI agent works or a file converts, if you leave that on in its settings.", comment: "Lesson step detail"),
                 symbol: "power",
                 signal: .keepAwakeTurnedOff
+            ),
+        ]
+    )
+
+    /// Write a note, pin it, make one from dropped text, then delete one.
+    public static let notes = Lesson(
+        id: .notes,
+        title: String(localized: "Notes", comment: "Lesson title"),
+        summary: String(localized: "Jot things down for later, right in the notch.", comment: "Lesson summary"),
+        symbol: "note.text",
+        steps: [
+            LessonStep(
+                id: "notes.write",
+                title: String(localized: "Write a note", comment: "Lesson step title"),
+                detail: String(localized: "Open the notch, go to Notes and click New Note (or press ⌘N). Type anything: the first line is its title, and it saves as you type.", comment: "Lesson step detail"),
+                symbol: "square.and.pencil",
+                signal: .noteWritten
+            ),
+            LessonStep(
+                id: "notes.pin",
+                title: String(localized: "Pin it to the top", comment: "Lesson step title"),
+                detail: String(localized: "Click the pin above the note. Pinned notes stay at the top of the list and on the Notes widget.", comment: "Lesson step detail"),
+                symbol: "pin",
+                signal: .notePinned
+            ),
+            LessonStep(
+                id: "notes.drop",
+                title: String(localized: "Drop text to make a note", comment: "Lesson step title"),
+                detail: String(localized: "Drag some selected text or a .txt file onto the notch's Notes page. Text files dropped on the Shelf become notes too, unless you turn that off in Notes' settings.", comment: "Lesson step detail"),
+                symbol: "note.text.badge.plus",
+                signal: .noteDropped
+            ),
+            LessonStep(
+                id: "notes.delete",
+                title: String(localized: "Delete a note", comment: "Lesson step title"),
+                detail: String(localized: "Click the trash can, or press ⌘⌫. Changed your mind? Click Undo under the list before the notch closes.", comment: "Lesson step detail"),
+                symbol: "trash",
+                signal: .noteDeleted
             ),
         ]
     )

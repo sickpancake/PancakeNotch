@@ -108,6 +108,8 @@ public final class ShelfModule: NotchModule {
     var countBeforeDrop: Int?
     /// The text/link item just copied, for a brief "Copied" flash.
     var copiedID: UUID?
+    /// How many dropped things just became notes, for a brief "Saved as a note" flash.
+    var notedCount: Int?
     /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
     var detailID: UUID? {
         didSet {
@@ -136,6 +138,8 @@ public final class ShelfModule: NotchModule {
     /// Told about what the user does (opening an item, the menu, dragging out…), for the app
     /// window's lessons. Called from the existing state changes only: nothing is polled.
     @ObservationIgnored public var onEvent: (@MainActor (ShelfEvent) -> Void)?
+    /// Takes the dropped text that becomes notes (Notes is on) and returns what stays for the Shelf.
+    @ObservationIgnored public var takesNotes: (@MainActor ([ShelfInput]) -> [ShelfInput])?
 
     /// Whether a drag's source (`NSDraggingInfo.draggingSource`) is a Shelf tile or the
     /// "drag all" handle, so a drop target can refuse the Shelf's own items.
@@ -367,8 +371,16 @@ public final class ShelfModule: NotchModule {
             return true
         }
 
-        let drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
+        var drop = ShelfDropReader.read(pasteboard) { try store.newFilesFolder() }
         guard !drop.isEmpty else { return false }
+        if let takesNotes {
+            let kept = takesNotes(drop.inputs)
+            let noted = drop.inputs.filter { !kept.contains($0) }
+            store.discard(noted)
+            drop.inputs = kept
+            if !noted.isEmpty { showNoted(noted.count) }
+            if drop.isEmpty { return true }
+        }
         // When the notch closes, it shows the new count in the ear for a moment.
         if settings.showsInEars {
             countBeforeDrop = store.items.count
@@ -379,6 +391,18 @@ public final class ShelfModule: NotchModule {
         offer(drop.inputs)
         receive(drop.promises)
         return true
+    }
+
+    private func showNoted(_ count: Int) {
+        let message = count == 1 ? String(localized: "Saved as a note", comment: "Shelf: a dropped text file became a note")
+            : String(localized: "Saved as \(count) notes", comment: "Shelf: dropped text files became notes")
+        AccessibilityNotification.Announcement(message).post()
+        notch?.userInteracted()
+        notedCount = count
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            if self?.notedCount == count { self?.notedCount = nil }
+        }
     }
 
     public func dragEnded() {

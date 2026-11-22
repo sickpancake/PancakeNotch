@@ -26,6 +26,13 @@ struct ShelfView: View {
                 .padding(.horizontal, ShelfLayout.sidePadding)
             content
                 .frame(width: layout.content.width, height: layout.content.height)
+                .overlay {
+                    if let count = module.notedCount, module.dropZone == nil {
+                        ShelfNotedBadge(count: count)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: module.notedCount)
                 .padding(.top, layout.content.minY - layout.bandHeight)
             Spacer(minLength: 0)
         }
@@ -51,6 +58,29 @@ struct ShelfView: View {
     }
 }
 
+
+/// Shown for a moment when text files dropped on the Shelf went to Notes instead.
+private struct ShelfNotedBadge: View {
+    let count: Int
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Label(count == 1 ? String(localized: "Saved as a note", comment: "Shelf: a dropped text file became a note")
+                  : String(localized: "Saved as \(count) notes", comment: "Shelf: dropped text files became notes"),
+                  systemImage: "note.text")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Find it in Notes", comment: "Shelf: under \"Saved as a note\"")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
 
 // MARK: Header
 
