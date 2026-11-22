@@ -146,6 +146,8 @@ public enum ShelfSnapshot {
 
         try? FileManager.default.removeItem(at: root)
         // The Clipboard row (#79): recent copies with one pinned, then empty while history is on.
+        // With items on the Shelf the Clipboard pill shares the header with the drag handle and Clear all.
+        row(files: Array(files.prefix(3)), clipboard: PracticeClipboard.make(directory: root.appending(path: "ClipboardPill")))
         row(files: Array(files.prefix(2)), clipboard: PracticeClipboard.make(directory: root.appending(path: "Clipboard"))) { module in
             module.showClipboard(true)
         }

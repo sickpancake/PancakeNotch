@@ -961,7 +961,12 @@ public final class ShelfModule: NotchModule {
         let objects: [any NSPasteboardWriting]
         switch entry.item.kind {
         case .text(let text): objects = [text as NSString]
-        case .link(let url): objects = [url as NSURL]
+        case .link(let url):
+            // Both flavors, so plain-text fields can paste the link too.
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .URL)
+            item.setString(url.absoluteString, forType: .string)
+            objects = [item]
         case .file:
             guard let image = clipboard?.fileURL(for: entry).flatMap(NSImage.init(contentsOf:)) else { return }
             objects = [image]

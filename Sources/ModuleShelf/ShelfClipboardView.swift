@@ -148,7 +148,7 @@ struct ShelfClipboardTile: View {
                 module.clipboard?.togglePin(entry.id)
             }
             button("tray.and.arrow.down", String(localized: "Keep on Shelf")) { module.keepClipboardEntry(entry) }
-            button("airplayaudio", String(localized: "AirDrop")) { module.airDropClipboardEntry(entry) }
+            button("dot.radiowaves.left.and.right", String(localized: "AirDrop")) { module.airDropClipboardEntry(entry) }
         }
         .padding(2)
         .background(.black.opacity(0.75), in: Capsule())
