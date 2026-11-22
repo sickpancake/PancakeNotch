@@ -264,6 +264,18 @@ struct HelpView: View {
                 ) {
                     EmptyView()
                 }
+                SettingsRow(
+                    title: settings.remembersCopies
+                        ? String(localized: "Finding something you copied")
+                        : String(localized: "Clipboard history is off"),
+                    subtitle: settings.remembersCopies
+                        ? String(localized: "Open the Shelf and click Clipboard, or press Tab. Passwords and other private copies are skipped, and the history is forgotten when PancakeNotch quits.")
+                        : String(localized: "Turn on Remember what I copy in Shelf settings to keep your last few copies in the Shelf.")
+                ) {
+                    if !settings.remembersCopies {
+                        Button(String(localized: "Turn On")) { settings.remembersCopies = true }
+                    }
+                }
             }
             MoreOnlineRow(topic: .shelf)
         }
@@ -298,7 +310,7 @@ struct HelpView: View {
         switch tool {
         case .codex: String(localized: "In Codex, type /hooks once and trust PancakeNotch's hooks. Disconnect takes the helper out again.")
         case .devin: String(localized: "New Devin sessions show up, except in a workspace opened in Restricted Mode. Disconnect takes the helper out again.")
-        case .claude, .cursor: String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
+        case .claude, .cursor, .github: String(localized: "Disconnect takes the helper out again and leaves everything else in its hooks alone.")
         }
     }
 

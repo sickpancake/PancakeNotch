@@ -4,6 +4,12 @@ import Foundation
 /// only in Agents, and only after Connect (PancakeNotch reads no usage of theirs).
 public enum AgentTool: String, CaseIterable, Codable, Sendable {
     case claude, codex, cursor, devin
+    /// GitHub's Copilot coding agent: only in the cloud, followed through the GitHub CLI.
+    case github
+
+    /// The tools that run on this Mac (hooks, accounts, the Shown tools setting). GitHub's agent only
+    /// runs in the cloud, so it's left out.
+    public static var allCases: [AgentTool] { [.claude, .codex, .cursor, .devin] }
 
     /// "Claude Code", "Codex", "Cursor", "Devin".
     public var name: String {
@@ -12,6 +18,7 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
         case .codex: String(localized: "Codex", comment: "AI tool name")
         case .cursor: String(localized: "Cursor", comment: "AI tool name")
         case .devin: String(localized: "Devin", comment: "AI tool name")
+        case .github: String(localized: "GitHub Copilot", comment: "AI tool name")
         }
     }
 
@@ -20,6 +27,7 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
         switch self {
         case .claude: String(localized: "Claude", comment: "Short AI tool name")
         case .codex, .cursor, .devin: name
+        case .github: String(localized: "Copilot", comment: "Short AI tool name")
         }
     }
 
@@ -30,6 +38,7 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
         case .codex: "chevron.left.forwardslash.chevron.right"
         case .cursor: "cursorarrow.rays"
         case .devin: "circle.hexagonpath"
+        case .github: "arrow.triangle.pull"
         }
     }
 
@@ -37,7 +46,7 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
     public var hasUsage: Bool { self == .claude || self == .codex }
 
     /// Tools whose permission requests can be answered from the notch after Connect.
-    public var canAnswerInNotch: Bool { self != .cursor }
+    public var canAnswerInNotch: Bool { self != .cursor && self != .github }
 
     /// Tools whose conversations PancakeNotch reads from their own files (titles, subagents, the
     /// helpers host apps start). The others are known only from their hooks.

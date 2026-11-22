@@ -11,7 +11,7 @@ public enum LessonID: String, CaseIterable, Identifiable, Sendable {
 public enum LessonSignal: Hashable, Sendable {
     case notchOpened, notchShrunk, notchClosed, shortcutSet,
          shelfItemAdded, shelfItemOpened, shelfItemClosed, shelfMenuOpened,
-         shelfDraggedOut, shelfSeveralSelected, shelfCleared,
+         shelfDraggedOut, shelfSeveralSelected, shelfCleared, shelfClipboardOpened,
          musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
          moduleSwitched, homeOpened, homeWidgetOpened,
          agentAllowed, agentOpened, agentsCleared,
@@ -269,6 +269,13 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Click Clear all, then click it again to confirm.", comment: "Lesson step detail"),
                 symbol: "trash",
                 signal: .shelfCleared
+            ),
+            LessonStep(
+                id: "shelf.clipboard",
+                title: String(localized: "Find something you copied", comment: "Lesson step title"),
+                detail: String(localized: "Click Clipboard, or press Tab, to see your recent copies. Click one to copy it again.", comment: "Lesson step detail"),
+                symbol: "doc.on.clipboard",
+                signal: .shelfClipboardOpened
             ),
         ]
     )
