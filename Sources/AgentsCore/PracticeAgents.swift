@@ -114,7 +114,7 @@ final class PracticeAgents {
     private static func copilotThread(now: Date) -> AgentThread {
         var thread = AgentThread(id: copilotID, tool: .github,
                                  title: String(localized: "Fix the flaky login test", comment: "Practice agent thread"),
-                                 project: "sickpancake/PancakeNotch · PR #131 · Open", status: .done,
+                                 project: "PancakeNotch · PR #131 · Open", status: .done,
                                  statusSince: now.addingTimeInterval(-9 * 60), canOpen: true, hostName: cloud, isSeen: true)
         thread.isCloud = true
         thread.pullRequest = URL(string: "https://github.com/sickpancake/PancakeNotch/pull/131")

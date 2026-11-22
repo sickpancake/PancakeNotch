@@ -75,7 +75,7 @@ struct CloudAgentsTests {
         #expect(tasks[0].reason == "Waiting for you")
         #expect(tasks[0].link?.absoluteString == "https://github.com/me/app/pull/8/agent-sessions/s2")
         #expect(tasks[1].link?.absoluteString == "https://github.com/me/app/pull/7")
-        #expect(tasks[1].byline == "me/app · PR #7 · Open")
+        #expect(tasks[1].byline == "app · PR #7 · Open")
         #expect(tasks[2].byline == "Timed out")
         #expect(tasks[3].title == "GitHub coding agent")
     }

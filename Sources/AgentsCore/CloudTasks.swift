@@ -146,7 +146,8 @@ struct GitHubAgentTask: Decodable, Sendable {
             guard let state = pullRequestState?.trimmingCharacters(in: .whitespaces).nonEmpty else { return name }
             return "\(name) · \(state.prefix(1).uppercased())\(state.dropFirst().lowercased())"
         }
-        let byline = [repository?.nonEmpty, status.isFinished ? label : nil, status.needsYou ? nil : reason].compactMap { $0 }.joined(separator: " · ")
+        let repo = repository?.split(separator: "/").last.map(String.init)?.nonEmpty
+        let byline = [repo, status.isFinished ? label : nil, status.needsYou ? nil : reason].compactMap { $0 }.joined(separator: " · ")
         // Its log lives on the pull request's agent page.
         let page = pr.flatMap { URL(string: $0.absoluteString + "/agent-sessions/" + id) } ?? pr
         return CloudTask(id: id, title: name?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? CloudService.github.name,
