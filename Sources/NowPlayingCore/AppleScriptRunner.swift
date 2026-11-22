@@ -14,8 +14,6 @@ enum ScriptFailure: Error, Equatable, Sendable {
 /// `@unchecked Sendable`: the compiled scripts are only touched on `queue`.
 final class AppleScriptRunner: @unchecked Sendable {
     static let notPermitted = -1743
-    /// "Would need to ask the user" (AEDeterminePermissionToAutomateTarget).
-    static let wouldAsk = -1744
 
     private let queue = DispatchQueue(label: "io.github.sickpancake.PancakeNotch.nowplaying.applescript", qos: .userInitiated)
     private var compiled: [String: NSAppleScript] = [:]

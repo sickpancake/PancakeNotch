@@ -1,6 +1,7 @@
 import AgentsCore
 import ModuleAgents
 import ModuleKeepAwake
+import ModuleNotes
 import ModuleNowPlaying
 import ModuleShelf
 import ModuleTimer
@@ -9,7 +10,7 @@ import SwiftUI
 
 /// Practice modules a stage can make for itself: the real module code on throwaway data.
 enum PracticeKind: Hashable {
-    case nowPlaying, shelf, agents, aiUsage, timer, keepAwake
+    case nowPlaying, shelf, agents, aiUsage, timer, keepAwake, notes
 }
 
 /// A stage's own practice modules: they exist only while it shows, and start fresh each time.
@@ -25,9 +26,11 @@ final class PracticeSet {
     private(set) var timer: TimerModule?
     /// Its own Keep Awake that holds nothing, with the user's settings.
     private(set) var keepAwake: KeepAwakeModule?
+    /// Made-up notes kept in memory, with the user's settings.
+    private(set) var notes: NotesModule?
 
     var modules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, shelf?.module, agents, usage, timer, keepAwake].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, shelf?.module, agents, usage, timer, keepAwake, notes].compactMap { $0 }
     }
 
     func update(_ kinds: Set<PracticeKind>) {
@@ -62,6 +65,11 @@ final class PracticeSet {
             if keepAwake == nil { keepAwake = KeepAwakeModule.practice() }
         } else {
             keepAwake = nil
+        }
+        if kinds.contains(.notes) {
+            if notes == nil { notes = NotesModule.practice() }
+        } else {
+            notes = nil
         }
     }
 
@@ -305,19 +313,6 @@ struct NotchGlyph: View {
             .fill(.white)
             .frame(width: size, height: size)
             .accessibilityHidden(true)
-    }
-}
-
-/// A black notch panel the way it looks when open: ears flaring out at the top, rounded below.
-struct NotchPanelShape: View {
-    var body: some View {
-        NotchShape(topRadius: 12, bottomRadius: 22)
-            .fill(.black)
-            .overlay {
-                NotchShape(topRadius: 12, bottomRadius: 22)
-                    .stroke(.white.opacity(0.07), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.6), radius: 16, y: 8)
     }
 }
 

@@ -17,6 +17,7 @@ enum HelpTopic: String, CaseIterable {
     case aiUsage = "ai-usage"
     case timer
     case keepAwake = "keep-awake"
+    case notes
     case updates
     case launchAtLogin = "launch-at-login"
     case privacy

@@ -49,6 +49,7 @@ struct ModulesView: View {
                 AIUsageModuleCard(context: context, showsSettings: settingsBinding("aiUsage")) { openLesson(.aiUsage) }
                 TimerModuleCard(context: context, showsSettings: settingsBinding("timer")) { openLesson(.timer) }
                 KeepAwakeModuleCard(context: context, showsSettings: settingsBinding("keepAwake")) { openLesson(.keepAwake) }
+                NotesModuleCard(context: context, showsSettings: settingsBinding("notes")) { openLesson(.notes) }
             }
             .onAppear { foundTools = context.detectTools() }
         }
@@ -355,6 +356,7 @@ private struct EarPlan {
         case "shelf": context.shelfSettings.showsInEars
         case "aiUsage": context.agentsSettings.earMode != .never
         case "timer": context.timerSettings.earPlacement != .off
+        case "notes": false
         default: true
         }
     }

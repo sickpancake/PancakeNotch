@@ -25,7 +25,7 @@ let package = Package(
             name: "PancakeNotch",
             dependencies: [
                 "NotchCore", "HotKey", "ModuleShelf", "ModuleNowPlaying", "NowPlayingCore", "Learn", "Stats",
-                "AgentsCore", "ModuleAgents", "ConvertKit", "TimerCore", "ModuleTimer", "KeepAwakeCore", "ModuleKeepAwake",
+                "AgentsCore", "ModuleAgents", "ConvertKit", "TimerCore", "ModuleTimer", "KeepAwakeCore", "ModuleKeepAwake", "NotesCore", "ModuleNotes",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             swiftSettings: testing
@@ -89,6 +89,12 @@ let package = Package(
             name: "ModuleKeepAwake",
             dependencies: ["NotchCore", "KeepAwakeCore"]
         ),
+        // Notes: plain text kept for later, typed in the notch or made from dropped text. No UI.
+        .target(name: "NotesCore", swiftSettings: testing),
+        .target(
+            name: "ModuleNotes",
+            dependencies: ["NotchCore", "NotesCore"]
+        ),
         .testTarget(
             name: "PancakeNotchTests",
             dependencies: ["PancakeNotch"],
@@ -137,6 +143,10 @@ let package = Package(
         .testTarget(
             name: "KeepAwakeTests",
             dependencies: ["KeepAwakeCore", "ModuleKeepAwake", "NotchCore"]
+        ),
+        .testTarget(
+            name: "NotesTests",
+            dependencies: ["NotesCore", "ModuleNotes", "NotchCore"]
         ),
         .testTarget(
             name: "ModuleAgentsTests",

@@ -4,6 +4,7 @@ import ModuleAgents
 import ModuleNowPlaying
 import ModuleShelf
 import ModuleKeepAwake
+import ModuleNotes
 import ModuleTimer
 import TimerCore
 import NotchCore
@@ -132,6 +133,8 @@ struct LessonPlayer: View {
     @State private var timer: TimerModule?
     /// A practice Keep Awake that holds nothing (the Keep Awake lesson).
     @State private var keepAwake: KeepAwakeModule?
+    /// Practice notes kept in memory (the Notes lesson).
+    @State private var notes: NotesModule?
     @State private var practiceFiles: [URL] = []
     @State private var shortcutHint: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -162,11 +165,12 @@ struct LessonPlayer: View {
     private var usesUsage: Bool { lesson.id == .aiUsage }
     private var usesTimer: Bool { lesson.id == .timer }
     private var usesKeepAwake: Bool { lesson.id == .keepAwake }
+    private var usesNotes: Bool { lesson.id == .notes }
 
     /// What the practice notch holds: the pretend player first (Now Playing lesson), then the Shelf;
     /// the Agents and AI Usage lessons have only their own.
     private var practiceModules: [any NotchModule] {
-        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage, timer, keepAwake].compactMap { $0 }
+        [nowPlaying?.module as (any NotchModule)?, practice?.module, agents, usage, timer, keepAwake, notes].compactMap { $0 }
     }
 
     private var hint: String? {
@@ -176,6 +180,7 @@ struct LessonPlayer: View {
         if usesUsage { return String(localized: "Practice accounts: they're made up, and nothing is read from your Mac.") }
         if usesTimer { return String(localized: "A practice timer: your real timer and stopwatch aren't touched.") }
         if usesKeepAwake { return String(localized: "A practice Keep Awake: it doesn't keep your Mac awake.") }
+        if usesNotes { return String(localized: "Practice notes: they're made up, and your real notes aren't touched.") }
         if usesHome { return String(localized: "A practice Home with the default widgets: your own Home and modules aren't touched.") }
         return nil
     }
@@ -320,6 +325,8 @@ struct LessonPlayer: View {
         timer = nil
         keepAwake?.center.onEvent = nil
         keepAwake = nil
+        notes?.store.onEvent = nil
+        notes = nil
     }
 
     private func restart() {
@@ -353,6 +360,21 @@ struct LessonPlayer: View {
             timer = module
             keepAwake = KeepAwakeModule.practice()
             practice = PracticeShelf(seeded: true)
+            return
+        }
+        if usesNotes {
+            let module = NotesModule.practice()
+            let runner = runner
+            module.store.onEvent = { [weak store = module.store] event in
+                switch event {
+                case .edited: if store?.notes.contains(where: { !$0.isEmpty && $0.source == .typed }) == true { runner.receive(.noteWritten) }
+                case .pinned: runner.receive(.notePinned)
+                case .created(.dropped), .created(.file), .created(.shelf): runner.receive(.noteDropped)
+                case .deleted: runner.receive(.noteDeleted)
+                default: break
+                }
+            }
+            notes = module
             return
         }
         if usesKeepAwake {

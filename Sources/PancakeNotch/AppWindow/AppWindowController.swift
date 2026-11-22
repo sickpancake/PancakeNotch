@@ -1,5 +1,6 @@
 import AgentsCore
 import KeepAwakeCore
+import NotesCore
 import AppKit
 import HotKey
 import Learn
@@ -125,6 +126,8 @@ extension AppWindowController {
         let timers = TimerCenter()
         let keepAwakeSettings = KeepAwakeSettings(defaults: defaults)
         let keepAwake = KeepAwakeCenter(settings: keepAwakeSettings, isPractice: true)
+        let notesSettings = NotesSettings(defaults: defaults)
+        let notesStore = NotesStore.practice(now: Date(timeIntervalSinceReferenceDate: 800_000_000))
         let home = HomeSettings()
         let context = AppContext(
             preferences: preferences,
@@ -145,6 +148,7 @@ extension AppWindowController {
             connector: connector,
             timerSettings: timerSettings,
             timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+            notesSettings: notesSettings, notesStore: notesStore,
             makeLiveModules: {
                 var modules: [any NotchModule] = []
                 if nowPlayingSettings.isEnabled { modules.append(NowPlayingSnapshot.module()) }
@@ -162,6 +166,7 @@ extension AppWindowController {
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
                 usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+            notesSettings: notesSettings, notesStore: notesStore,
                 makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
             pageContext.navigation.section = section
@@ -245,6 +250,7 @@ extension AppWindowController {
         try render("learn-aiusage", section: .learn, lesson: .aiUsage)
         try render("learn-timer", section: .learn, lesson: .timer)
         try render("learn-keepawake", section: .learn, lesson: .keepAwake)
+        try render("learn-notes", section: .learn, lesson: .notes)
         try render("learn-home", section: .learn, lesson: .home)
         try render("statistics-ai-long", section: .statistics, size: CGSize(width: 1000, height: 2400), settle: 1.5)
         try render("help-long", section: .help, size: CGSize(width: 1000, height: 2900))
@@ -272,6 +278,11 @@ extension AppWindowController {
             .background(AppPalette.background)
         try render("modules-keepawake-settings", rootView: keepAwakeSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 5600))
 
+        // Notes' settings open.
+        let notesSettingsOpen = ModulesView(context: context, openLesson: { _ in }, openSettings: ["notes"])
+            .background(AppPalette.background)
+        try render("modules-notes-settings", rootView: notesSettingsOpen.appWindowStyle(), size: CGSize(width: 1000, height: 6000))
+
         // The welcome, one image per step, the way a first launch shows it.
         for step in OnboardingView.Step.allCases {
             try render("onboarding-\(step.rawValue + 1)", rootView: OnboardingView(context: context, step: step).appWindowStyle())
@@ -284,6 +295,7 @@ extension AppWindowController {
                 shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
                 nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
                 usage: usage, connector: connector, timerSettings: timerSettings, timers: timers, keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake,
+            notesSettings: notesSettings, notesStore: notesStore,
                 makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
             )
         }

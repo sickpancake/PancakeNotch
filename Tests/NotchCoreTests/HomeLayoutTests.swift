@@ -24,7 +24,7 @@ struct HomeLayoutTests {
     /// Sizes have the promised footprints and order.
     @Test func sizes() { #expect(HomeWidgetSize.allCases.map(\.cellCount) == [1, 2, 4]); #expect(HomeWidgetSize.small < .medium); #expect(HomeWidgetSize.medium < .large) }
     /// Gallery order is stable.
-    @Test func catalogOrder() { #expect(HomeWidgetKind.allCases.map(\.rawValue) == ["nowPlaying", "timer", "stopwatch", "agents", "aiUsage", "shelf", "keepAwake", "allModules", "clock", "battery", "statistics"]) }
+    @Test func catalogOrder() { #expect(HomeWidgetKind.allCases.map(\.rawValue) == ["nowPlaying", "timer", "stopwatch", "agents", "aiUsage", "shelf", "keepAwake", "notes", "allModules", "clock", "battery", "statistics"]) }
     /// Timer and stopwatch share the same module switch.
     @Test func moduleKinds() { #expect(HomeWidgetKind.kinds(forModule: "timer") == [.timer, .stopwatch]); #expect(HomeWidgetKind.kinds(forModule: "unknown").isEmpty) }
     /// Every default size is supported and every title has text.
@@ -157,9 +157,12 @@ struct HomeLayoutTests {
     @Test func fullRepackRefusal() throws {
         var l = HomeLayout()
         let ordered = HomeWidgetKind.allCases.sorted { $0.sizes.last! > $1.sizes.last! }
-        for kind in ordered { l = try l.adding(kind, size: kind.sizes.last!).get() }
+        // Each at its largest size that still fits, until every page is full.
+        for kind in ordered {
+            if let added = kind.sizes.reversed().lazy.compactMap({ try? l.adding(kind, size: $0).get() }).first { l = added }
+        }
         valid(l)
-        #expect(l.occupiedCells.count == 34)
+        #expect(l.occupiedCells.count == 36)
         let before = l
         #expect(l.moving(.nowPlaying, to: slot(1)) == .failure(.full))
         #expect(l == before)

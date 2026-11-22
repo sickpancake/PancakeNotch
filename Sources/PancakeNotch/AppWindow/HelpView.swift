@@ -28,6 +28,7 @@ struct HelpView: View {
             aiUsageCard
             timerCard
             keepAwakeCard
+            notesCard
             shortcutCard
             updatesCard
             startOverCard
@@ -412,6 +413,41 @@ struct HelpView: View {
                 }
             }
             MoreOnlineRow(topic: .keepAwake)
+        }
+    }
+
+    // MARK: Notes
+
+    @ViewBuilder
+    private var notesCard: some View {
+        let settings = context.notesSettings
+        SettingsCard(header: String(localized: "Notes")) {
+            if !settings.isEnabled {
+                SettingsRow(
+                    title: String(localized: "Notes is switched off"),
+                    subtitle: String(localized: "Turn it on to write notes for later right in the notch.")
+                ) {
+                    Button(String(localized: "Turn It On")) { settings.isEnabled = true }
+                }
+            } else {
+                SettingsRow(
+                    title: String(localized: "A text file stayed on the Shelf"),
+                    subtitle: settings.shelfText == .off
+                        ? String(localized: "Text dropped on the Shelf is set to stay there. Choose Text files in Notes' settings to turn .txt files into notes.")
+                        : String(localized: "Only text files up to 256 KB become notes. Bigger files, other kinds of file and links stay on the Shelf. You can also drop them on Notes itself.")
+                ) {
+                    if settings.shelfText == .off {
+                        Button(String(localized: "Use Text Files")) { settings.shelfText = .textFiles }
+                    }
+                }
+                SettingsRow(
+                    title: String(localized: "I deleted a note by mistake"),
+                    subtitle: String(localized: "Click Undo on the Notes page right after deleting. It goes away when the notch closes.")
+                ) {
+                    EmptyView()
+                }
+            }
+            MoreOnlineRow(topic: .notes)
         }
     }
 

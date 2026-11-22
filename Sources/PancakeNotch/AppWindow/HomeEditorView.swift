@@ -607,7 +607,7 @@ struct HomeEditorView: View {
     /// The practice modules the previews need: those whose module is switched on.
     static func practiceKinds(for context: AppContext) -> Set<PracticeKind> {
         let all: [(String, PracticeKind)] = [("nowPlaying", .nowPlaying), ("shelf", .shelf), ("agents", .agents),
-                                             ("aiUsage", .aiUsage), ("timer", .timer), ("keepAwake", .keepAwake)]
+                                             ("aiUsage", .aiUsage), ("timer", .timer), ("keepAwake", .keepAwake), ("notes", .notes)]
         return Set(all.filter { context.isEnabled($0.0) }.map(\.1))
     }
 }

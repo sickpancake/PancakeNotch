@@ -11,11 +11,11 @@ public enum HomeWidgetSize: String, Codable, CaseIterable, Sendable, Comparable 
 
 /// The gallery order and the options each widget offers.
 public enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
-    case nowPlaying, timer, stopwatch, agents, aiUsage, shelf, keepAwake, allModules, clock, battery, statistics
+    case nowPlaying, timer, stopwatch, agents, aiUsage, shelf, keepAwake, notes, allModules, clock, battery, statistics
     public var id: String { rawValue }
     public var moduleID: String? {
         switch self {
-        case .nowPlaying, .agents, .aiUsage, .shelf, .keepAwake: rawValue
+        case .nowPlaying, .agents, .aiUsage, .shelf, .keepAwake, .notes: rawValue
         case .timer, .stopwatch: "timer"
         default: nil
         }
@@ -43,6 +43,7 @@ public enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiabl
         case .aiUsage: String(localized: "AI Usage", comment: "Home widget name")
         case .shelf: String(localized: "Shelf", comment: "Home widget name")
         case .keepAwake: String(localized: "Keep Awake", comment: "Home widget name")
+        case .notes: String(localized: "Notes", comment: "Home widget name")
         case .allModules: String(localized: "All Modules", comment: "Home widget name")
         case .clock: String(localized: "Clock", comment: "Home widget name")
         case .battery: String(localized: "Battery", comment: "Home widget name")
@@ -58,6 +59,7 @@ public enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiabl
         case .aiUsage: "gauge.with.dots.needle.50percent"
         case .shelf: "tray"
         case .keepAwake: "cup.and.saucer"
+        case .notes: "note.text"
         case .allModules: "square.grid.2x2"
         case .clock: "clock"
         case .battery: "battery.75percent"
@@ -88,6 +90,8 @@ extension HomeWidgetKind {
                             comment: "Words that find the Shelf widget in the Home widget search, separated by commas")
         case .keepAwake: String(localized: "sleep, coffee, caffeine, awake, screen, lock, stay on",
                                 comment: "Words that find the Keep Awake widget in the Home widget search, separated by commas")
+        case .notes: String(localized: "notes, text, write, memo, reminder, later, list, ideas, txt",
+                            comment: "Words that find the Notes widget in the Home widget search, separated by commas")
         case .allModules: String(localized: "modules, menu, shortcuts, launcher",
                                  comment: "Words that find the All Modules widget in the Home widget search, separated by commas")
         case .clock: String(localized: "time, date, hour, day",

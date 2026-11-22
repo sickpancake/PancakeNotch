@@ -1,5 +1,6 @@
 import AgentsCore
 import KeepAwakeCore
+import NotesCore
 import Learn
 import ModuleNowPlaying
 import ModuleShelf
@@ -61,6 +62,8 @@ final class AppContext {
     /// Keep Awake's options, and its state shared with the real notch and the menu bar.
     let keepAwakeSettings: KeepAwakeSettings
     let keepAwake: KeepAwakeCenter
+    let notesSettings: NotesSettings
+    let notesStore: NotesStore
     let navigation = AppNavigation()
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
@@ -88,6 +91,8 @@ final class AppContext {
         timers: TimerCenter,
         keepAwakeSettings: KeepAwakeSettings,
         keepAwake: KeepAwakeCenter,
+        notesSettings: NotesSettings,
+        notesStore: NotesStore,
         makeLiveModules: @escaping () -> [any NotchModule],
         detectTools: @escaping () -> [AgentTool] = { AgentsDetection.foundTools() },
         screenshots: ShelfScreenshots? = nil
@@ -113,6 +118,8 @@ final class AppContext {
         self.timers = timers
         self.keepAwakeSettings = keepAwakeSettings
         self.keepAwake = keepAwake
+        self.notesSettings = notesSettings
+        self.notesStore = notesStore
         self.makeLiveModules = makeLiveModules
         self.detectTools = detectTools
     }
@@ -126,6 +133,7 @@ final class AppContext {
         case "aiUsage": agentsSettings.usageEnabled
         case "timer": timerSettings.isEnabled
         case "keepAwake": keepAwakeSettings.isEnabled
+        case "notes": notesSettings.isEnabled
         default: false
         }
     }
@@ -138,6 +146,7 @@ final class AppContext {
         case "aiUsage": agentsSettings.usageEnabled = enabled
         case "timer": timerSettings.isEnabled = enabled
         case "keepAwake": keepAwakeSettings.isEnabled = enabled
+        case "notes": notesSettings.isEnabled = enabled
         default: break
         }
     }
@@ -151,6 +160,7 @@ final class AppContext {
         case "aiUsage": (String(localized: "AI Usage", comment: "Module name"), "gauge.with.dots.needle.50percent")
         case "timer": (String(localized: "Timer", comment: "Module name"), "timer")
         case "keepAwake": (String(localized: "Keep Awake", comment: "Module name"), "cup.and.heat.waves")
+        case "notes": (String(localized: "Notes", comment: "Module name"), "note.text")
         default: (moduleID, "square")
         }
     }
