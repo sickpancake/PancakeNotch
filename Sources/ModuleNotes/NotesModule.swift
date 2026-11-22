@@ -22,6 +22,17 @@ public final class NotesModule: NotchModule {
     public internal(set) var isDropTargeted = false
     /// The last drop added nothing (empty text, too big a file) or the list is full.
     public internal(set) var dropRefused = false
+    /// What's typed in the search field. Empty shows every note.
+    public private(set) var query = ""
+    /// The search field has the keyboard: typing goes into it and the notch stays open.
+    public internal(set) var isSearching = false
+    /// ⌘F or the magnifying glass brought the field out (it only matters when the field shows only while searching).
+    public internal(set) var searchRevealed = false
+    /// The note opened from a search stays in the list while you change it so it stops matching, until
+    /// the search changes.
+    public internal(set) var keptID: Note.ID?
+    /// Told each time a search finds notes (the Learn lesson).
+    @ObservationIgnored public var onFound: (() -> Void)?
     @ObservationIgnored public var isSnapshot = false
 
     public init(store: NotesStore, settings: NotesSettings) {
@@ -39,7 +50,7 @@ public final class NotesModule: NotchModule {
         store.notes.isEmpty ? nil : NotesText.count(store.notes.count)
     }
 
-    public var holdsOpen: Bool { isEditing }
+    public var holdsOpen: Bool { isEditing || isSearching }
 
     public func attach(to notch: NotchViewModel?) {
         self.notch = notch
@@ -75,6 +86,9 @@ public final class NotesModule: NotchModule {
 
     public func notchDidClose() {
         stopEditing()
+        stopSearching()
+        keptID = nil
+        if !settings.keepsSearch { endSearch() }
         store.removeEmpty()
         store.clearUndo()
         dropRefused = false
@@ -82,18 +96,31 @@ public final class NotesModule: NotchModule {
 
     public func userSwitchedAway() {
         stopEditing()
+        stopSearching()
         store.removeEmpty()
     }
 
     public func clickedOutsidePreview() {
         stopEditing()
+        stopSearching()
     }
 
     public func keyFocusLost() {
         stopEditing()
+        stopSearching()
     }
 
     public func handleKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers == .command, event.keyCode == 3 { // ⌘F: search, from the list or from inside a note
+            if isSearching {
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            } else {
+                startSearching()
+            }
+            return true
+        }
+        if isSearching { return handleSearchKey(event) }
         if isEditing {
             if event.keyCode == 53 { // Esc leaves the editor
                 stopEditing()
@@ -124,6 +151,91 @@ public final class NotesModule: NotchModule {
         }
     }
 
+    /// Keys while the search field has the keyboard. Letters go to the field; the arrows walk the results
+    /// and Return opens the shown one, so you never have to reach for the pointer.
+    private func handleSearchKey(_ event: NSEvent) -> Bool {
+        let command = event.modifierFlags.contains(.command)
+        switch event.keyCode {
+        case 53: // Esc: clear the search, then leave the field
+            if query.isEmpty { stopSearching() } else { clearSearch() }
+            return true
+        case 125, 126 where !command: // Down, Up: the next or previous match
+            moveSelection(by: event.keyCode == 125 ? 1 : -1)
+            return true
+        case 36, 76: // Return: write in the shown match
+            if let id = selectedNote?.id { openFromSearch(id) }
+            return true
+        case 45 where command: // ⌘N
+            newNote()
+            return true
+        default:
+            // The app usually isn't active, so the Edit menu may not see ⌘C/⌘V/…: pass them to the field.
+            if let action = Self.editAction(for: event) { return NSApp.sendAction(action, to: nil, from: nil) }
+            return false
+        }
+    }
+
+    // MARK: Search
+
+    /// The typed words, read the way the settings say (titles only, or titles and text).
+    public var search: NotesSearch { NotesSearch(query, scope: settings.searchScope) }
+
+    /// Whether the list is narrowed by a search right now.
+    public var isFiltering: Bool { !search.isEmpty }
+
+    /// Whether the search field is above the list: always (once there are notes), or while you search.
+    public var showsSearchField: Bool {
+        guard !store.notes.isEmpty else { return false }
+        return settings.searchField == .always || searchRevealed || isSearching || !query.isEmpty
+    }
+
+    public func setQuery(_ text: String) {
+        guard text != query else { return }
+        let before = search
+        query = text
+        if search != before { keptID = nil }
+        notch?.userInteracted()
+        if isFiltering, !shownNotes.isEmpty { onFound?() }
+    }
+
+    /// ⌘F, the magnifying glass or a click in the field: type in the search field.
+    public func startSearching() {
+        guard !isSnapshot, !store.notes.isEmpty else { return }
+        notch?.userInteracted()
+        // Straight from writing to searching: the notch stays held, so no release in between.
+        isEditing = false
+        searchRevealed = true
+        if !isSearching { isSearching = true }
+        notch?.requestKeyFocus?()
+    }
+
+    /// Lets go of the search field (Esc on an empty search, a click elsewhere). The words stay; a field
+    /// that shows only while searching hides again if nothing's typed.
+    public func stopSearching() {
+        guard isSearching else { return }
+        isSearching = false
+        if query.isEmpty { searchRevealed = false }
+        notch?.holdReleased()
+    }
+
+    /// Esc or the clear button: every note shows again, and the field keeps the keyboard.
+    public func clearSearch() {
+        setQuery("")
+    }
+
+    /// Opens a match to write in it. It stays listed even if your changes stop it matching.
+    public func openFromSearch(_ id: Note.ID) {
+        select(id)
+        startEditing()
+    }
+
+    /// Forgets the search and hides a field that shows only while searching.
+    private func endSearch() {
+        if !query.isEmpty { query = "" }
+        keptID = nil
+        searchRevealed = false
+    }
+
     // MARK: Drops
 
     public func canAcceptDrag(_ pasteboard: NSPasteboard) -> Bool {
@@ -148,6 +260,8 @@ public final class NotesModule: NotchModule {
         dropRefused = added == 0
         if added > 0 {
             notch?.userInteracted()
+            // The new notes may not match the search: show everything so they're there to see.
+            if isFiltering { endSearch() }
             selectedID = store.notes.dropFirst(before).last?.id
         }
         return added > 0
@@ -176,16 +290,27 @@ public final class NotesModule: NotchModule {
 
     // MARK: Actions
 
+    /// Every note in the chosen order, pinned first (widgets show these).
     public var notes: [Note] { store.sorted(settings.sort) }
 
-    public var selectedNote: Note? {
-        selectedID.flatMap(store.note) ?? notes.first
+    /// The notes in the list: all of them, or the ones that match the search (still pinned first).
+    public var shownNotes: [Note] { search.filter(notes, keeping: keptID) }
+
+    /// The note in the editor: the one you picked if it's in the list, else the list's first.
+    public var selectedNote: Note? { selectedNote(in: shownNotes) }
+
+    /// `selectedNote` for a list worked out already (saves filtering again for each row).
+    public func selectedNote(in list: [Note]) -> Note? {
+        if let id = selectedID, let note = list.first(where: { $0.id == id }) { return note }
+        return list.first
     }
 
     public func newNote() {
         notch?.userInteracted()
         store.removeEmpty()
         guard let note = store.add() else { return }
+        // A new note matches no search: show every note so it's there to write in.
+        endSearch()
         selectedID = note.id
         startEditing()
     }
@@ -197,8 +322,12 @@ public final class NotesModule: NotchModule {
     }
 
     public func startEditing() {
-        guard !isSnapshot, selectedNote != nil else { return }
-        if selectedID == nil { selectedID = selectedNote?.id }
+        guard !isSnapshot, let note = selectedNote else { return }
+        selectedID = note.id
+        // Writing in a match keeps it listed even once it no longer matches.
+        if isFiltering { keptID = note.id }
+        // Straight from searching to writing: the notch stays held, so no release in between.
+        isSearching = false
         isEditing = true
         notch?.requestKeyFocus?()
     }
@@ -220,11 +349,12 @@ public final class NotesModule: NotchModule {
 
     public func delete(_ id: Note.ID) {
         notch?.userInteracted()
-        let list = notes
+        let list = shownNotes
         let index = list.firstIndex { $0.id == id }
+        let wasShown = selectedNote?.id == id
         store.delete(id)
-        if selectedID == id || selectedID == nil {
-            let remaining = notes
+        if selectedID == id || selectedID == nil || wasShown {
+            let remaining = shownNotes
             selectedID = index.flatMap { remaining.indices.contains($0) ? remaining[$0].id : remaining.last?.id }
         }
         stopEditing()
@@ -234,7 +364,10 @@ public final class NotesModule: NotchModule {
         notch?.userInteracted()
         let id = store.lastDeleted?.id
         store.undoDelete()
-        if let id { selectedID = id }
+        guard let id, let note = store.note(id) else { return }
+        selectedID = id
+        // A note brought back that doesn't match the search still shows, so you see it come back.
+        if !search.matches(note) { keptID = id }
     }
 
     public func copy(_ id: Note.ID) {
@@ -244,7 +377,7 @@ public final class NotesModule: NotchModule {
     }
 
     private func moveSelection(by step: Int) {
-        let list = notes
+        let list = shownNotes
         guard !list.isEmpty else { return }
         let current = list.firstIndex { $0.id == selectedNote?.id } ?? 0
         let next = min(max(current + step, 0), list.count - 1)
@@ -253,6 +386,15 @@ public final class NotesModule: NotchModule {
 
     private func storeChanged() {
         if let id = selectedID, store.note(id) == nil { selectedID = nil }
+        if let id = keptID, store.note(id) == nil { keptID = nil }
+        // The last note went: nothing left to search.
+        if store.notes.isEmpty {
+            if isSearching {
+                isSearching = false
+                notch?.holdReleased()
+            }
+            endSearch()
+        }
     }
 
     static func editAction(for event: NSEvent) -> Selector? {
@@ -283,6 +425,28 @@ public enum NotesText {
     public static func count(_ count: Int) -> String {
         count == 1 ? String(localized: "1 note", comment: "Notes: one note")
             : String(localized: "\(count) notes", comment: "Notes: how many notes there are")
+    }
+
+    /// "2 of 8 notes": how many notes a search found, out of all of them.
+    public static func matches(_ shown: Int, of total: Int) -> String {
+        total == 1 ? String(localized: "\(shown) of 1 note", comment: "Notes: search results out of one note")
+            : String(localized: "\(shown) of \(total) notes", comment: "Notes: how many notes a search found, out of all")
+    }
+
+    /// The text with the search's words marked by a soft white background (and full white, where the
+    /// rest is dimmed), like the highlights in the note itself.
+    public static func highlighted(_ text: String, search: NotesSearch) -> AttributedString {
+        guard !search.isEmpty else { return AttributedString(text) }
+        var result = AttributedString()
+        for run in search.runs(in: text) {
+            var part = AttributedString(String(run.text))
+            if run.isMatch {
+                part.backgroundColor = .white.opacity(0.25)
+                part.foregroundColor = .white
+            }
+            result += part
+        }
+        return result
     }
 
     /// "Today 9:41", "Yesterday", "Mon", or a date.
