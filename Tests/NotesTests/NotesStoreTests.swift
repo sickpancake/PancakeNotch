@@ -130,6 +130,23 @@ struct NotesStoreTests {
         #expect(NotesImport.text(of: image) == nil)
         #expect(NotesImport.isTextFile(directory.appending(path: "readme.md")))
         #expect(!NotesImport.isTextFile(directory.appending(path: "main.swift")))
+        #expect(!NotesImport.isTextFile(directory.appending(path: "report.csv")))
+        #expect(!NotesImport.isTextFile(directory.appending(path: "server.log")))
+    }
+
+    @Test func textFilesInOtherEncodingsReadCorrectlyOrNotAtAll() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let latin1 = directory.appending(path: "Latin.txt")
+        try "café crème brûlée".data(using: .isoLatin1)!.write(to: latin1)
+        let utf16 = directory.appending(path: "Wide.txt")
+        try "Wide note".data(using: .utf16)!.write(to: utf16)
+        let binary = directory.appending(path: "Binary.txt")
+        try Data([0xC3, 0x28, 0x00, 0x41, 0x00]).write(to: binary)
+        #expect(NotesImport.text(of: latin1) == "café crème brûlée")
+        #expect(NotesImport.text(of: utf16) == "Wide note")
+        #expect(NotesImport.text(of: binary) == nil)
     }
 
     @Test func settingsAreRemembered() {

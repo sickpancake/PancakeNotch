@@ -224,7 +224,6 @@ private struct NotesEditor: View {
     let module: NotesModule
     let note: Note
     @State private var draft: String
-    @FocusState private var isFocused: Bool
 
     init(module: NotesModule, note: Note) {
         self.module = module
@@ -262,23 +261,17 @@ private struct NotesEditor: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(.horizontal, 5)
                 } else {
-                    TextEditor(text: $draft)
-                        .scrollContentBackground(.hidden)
-                        .scrollIndicators(.never)
-                        .focused($isFocused)
+                    NotesTextView(text: $draft, isFocused: module.isEditing) { module.startEditing() }
                         .onChange(of: draft) { module.edit(note.id, text: draft) }
-                        .onChange(of: isFocused) { if isFocused { module.startEditing() } }
-                        .onChange(of: module.isEditing) { isFocused = module.isEditing }
-                        .onAppear { if module.isEditing { isFocused = true } }
                         .overlay(alignment: .topLeading) {
                             if draft.isEmpty {
                                 Text("Write something…")
                                     .foregroundStyle(.white.opacity(0.4))
                                     .padding(.leading, 5)
                                     .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
                             }
                         }
-                        .accessibilityLabel(Text("Note text"))
                 }
             }
             .font(.system(size: 13))

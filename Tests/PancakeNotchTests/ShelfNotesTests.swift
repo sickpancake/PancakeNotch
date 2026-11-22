@@ -27,10 +27,14 @@ import Testing
         let store = NotesStore(directory: nil)
         let txt = try file("Groceries.txt", "Groceries\nEggs")
         let image = try file("photo.png", "not text")
+        let csv = try file("report.csv", "a,b\n1,2")
+        let log = try file("server.log", "started")
         let link = URL(string: "https://example.com")!
-        let kept = ShelfNotes.take([.file(txt, owned: false), .file(image, owned: false), .text("hello"), .link(link)],
+        let kept = ShelfNotes.take([.file(txt, owned: false), .file(image, owned: false), .file(csv, owned: false),
+                                    .file(log, owned: false), .text("hello"), .link(link)],
                                    into: store, settings: settings(.textFiles))
-        #expect(kept == [.file(image, owned: false), .text("hello"), .link(link)])
+        #expect(kept == [.file(image, owned: false), .file(csv, owned: false), .file(log, owned: false),
+                         .text("hello"), .link(link)])
         #expect(store.notes.map(\.text) == ["Groceries\nEggs"])
         #expect(store.notes.first?.source == .shelf(fileName: "Groceries.txt"))
     }
