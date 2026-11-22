@@ -29,10 +29,72 @@ struct EarRulesTests {
         var ears = model.ears(layout: layout)
         #expect(ears.left?.id == "a.main")
         #expect(ears.right?.id == "b.main")
+        // The "+n" chip counts what didn't fit.
+        #expect(model.earOverflow == .init(side: .left, count: 1))
         a.isActive = false
         ears = model.ears(layout: layout)
         #expect(ears.left?.id == "b.main")
         #expect(ears.right?.id == "c.main")
+        #expect(model.earOverflow == nil)
+    }
+
+    @Test func theOverflowChipTucksUnderTheSideTheDisplacedWanted() {
+        let (model, a, b, _) = makeModel()
+        let timer = SecondEarModule()
+        model.modules.append(timer)
+        a.isActive = true; b.isActive = true
+        // "timer" claims the second spot, so "b" is displaced from the first: the chip sits under the left ear.
+        #expect(model.earOverflow == .init(side: .left, count: 1))
+        // A displaced second-spot module puts it under the right ear.
+        let timer2 = SecondEarModule("timer2")
+        model.modules.append(timer2)
+        b.isActive = false
+        #expect(model.earOverflow == .init(side: .right, count: 1))
+        // Swap sides flips the chip with the ears.
+        model.arrangement.swapsEarSides = true
+        #expect(model.earOverflow == .init(side: .left, count: 1))
+    }
+
+    @Test func waitingAlertsKeepTheirSpotAndOverflowCountsTheRest() {
+        let (model, a, b, _) = makeModel()
+        let agents = WaitingEarModule()
+        model.modules.append(agents)
+        a.isActive = true; b.isActive = true
+        // The waiting module wins a spot first; the loser counts toward the chip.
+        let ears = model.ears(layout: layout)
+        #expect(ears.left?.id == "a.main")
+        #expect(ears.right?.id == "agents.main")
+        #expect(model.earOverflow == .init(side: .left, count: 1))
+    }
+
+    /// A moving pointer for the model's `pointerLocation` closure.
+    final class Pointer { var point = CGPoint.zero }
+
+    @Test func tappingTheChipOpensHomeOrTheBestDisplacedModule() {
+        let pointer = Pointer()
+        let model = NotchViewModel(layout: layout, state: .compact,
+            pointerLocation: { pointer.point }, isMissionControlActive: { false })
+        let a = RankedModule("a"), b = RankedModule("b"), c = RankedModule("c")
+        a.isActive = true; b.isActive = true; c.isActive = true
+        model.modules = [a, b, c]
+        model.arrangement.order = ["a", "b", "c"]
+        let notch = layout.geometry.notchRect
+        // The chip is the band dangling below the bottom edge of the ear it tucks under.
+        pointer.point = CGPoint(x: notch.minX - 10, y: notch.maxY - layout.geometry.compactHeight - 5)
+        #expect(model.pointerOverEarOverflow())
+        model.tap()
+        #expect(model.showsHome)
+        model.reset()
+        // With tabs-only navigation it opens on the best-ranked displaced module instead.
+        model.arrangement.navigation = .tabs
+        model.tap()
+        #expect(model.selectedModule?.moduleID == "c")
+        // The rest of the ear still opens its own module.
+        pointer.point = CGPoint(x: notch.minX - 10, y: notch.maxY - 5)
+        #expect(!model.pointerOverEarOverflow())
+        model.reset()
+        model.tap()
+        #expect(model.selectedModule?.moduleID == "a")
     }
 
     @Test func anInactiveModuleNeverShowsWhileAnotherIsActive() {

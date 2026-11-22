@@ -32,7 +32,12 @@ struct NotchView: View {
 
     private var accessibilityLabel: String {
         guard model.state != .expanded else { return "PancakeNotch" }
-        let statuses = model.rankedModules.compactMap(\.accessibilityStatus)
+        var statuses = model.rankedModules.compactMap(\.accessibilityStatus)
+        if let overflow = model.earOverflow, model.state == .compact {
+            statuses.append(overflow.count == 1
+                ? String(localized: "1 more active module", comment: "Ear overflow chip")
+                : String(localized: "\(overflow.count) more active modules", comment: "Ear overflow chip"))
+        }
         return (["PancakeNotch"] + statuses).joined(separator: ", ")
     }
 
@@ -45,7 +50,8 @@ struct NotchView: View {
             Color.black
             content(layout: layout, state: state)
             if ears.left != nil || ears.right != nil {
-                CompactEarsView(left: ears.left, right: ears.right, isAsleep: model.earsAsleep,
+                CompactEarsView(left: ears.left, right: ears.right, overflow: model.earOverflow,
+                                isAsleep: model.earsAsleep,
                                 layout: layout, state: state, reduceMotion: reduceMotion)
             }
             if state == .compact, let peek = model.peekView {
@@ -221,6 +227,8 @@ private struct SlideBlurModifier: ViewModifier {
 private struct CompactEarsView: View {
     let left: NotchViewModel.EarSlot?
     let right: NotchViewModel.EarSlot?
+    /// The "+n" chip reporting active modules that didn't fit a spot, tucked under the fuller ear.
+    let overflow: NotchViewModel.EarOverflow?
     /// Settled in Closed: the frames stay (so waking slides the ears out as before) but hold nothing,
     /// and waking isn't a change of ears to animate.
     let isAsleep: Bool
@@ -235,27 +243,45 @@ private struct CompactEarsView: View {
         let isShown = state == .compact
         // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
         let tuck = state == .closed && !reduceMotion ? width + 8 : 0
+        let overflowID = overflow.map { "\($0.side).\($0.count)" }
         HStack(spacing: 0) {
-            ear(left, width: width, height: height)
+            ear(left, width: width, height: height,
+                overflowCount: overflow?.side == .left ? overflow?.count : nil)
                 .offset(x: tuck)
             Spacer(minLength: 0)
-            ear(right, width: width, height: height)
+            ear(right, width: width, height: height,
+                overflowCount: overflow?.side == .right ? overflow?.count : nil)
                 .offset(x: -tuck)
         }
         .frame(width: layout.bodySize(for: .compact).width, height: height)
         // Fading out to Closed waits until the content is under the notch, so the slide stays visible.
         .animation(fade(isShown: isShown)) { $0.opacity(isShown ? 1 : 0) }
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85), value: [left?.id, right?.id])
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85), value: [left?.id, right?.id, overflowID])
         .allowsHitTesting(false)
         .accessibilityHidden(!isShown)
     }
 
-    private func ear(_ slot: NotchViewModel.EarSlot?, width: CGFloat, height: CGFloat) -> some View {
-        ZStack {
+    private func ear(_ slot: NotchViewModel.EarSlot?, width: CGFloat, height: CGFloat,
+                     overflowCount: Int?) -> some View {
+        ZStack(alignment: .bottom) {
             if let slot, !isAsleep {
                 slot.view
                     .id(slot.id)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.5).combined(with: .opacity))
+            }
+            if let overflowCount, !isAsleep {
+                Text("+\(overflowCount)")
+                    .font(.system(size: 9, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    // Half of the capsule hangs off the ear onto the desktop, so the fill
+                    // stays dark (like the notch) and reads on any wallpaper.
+                    .background(Capsule(style: .continuous).fill(.black.opacity(0.55)))
+                    // Tucks under the ear: most of the capsule hangs off its bottom edge.
+                    .offset(y: 7)
+                    .transition(.opacity)
             }
         }
         .frame(width: width, height: height)
