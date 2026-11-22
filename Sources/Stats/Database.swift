@@ -19,10 +19,6 @@ struct SQLRow {
         return String(cString: raw)
     }
 
-    func optionalText(_ column: Int32) -> String? {
-        sqlite3_column_type(statement, column) == SQLITE_NULL ? nil : text(column)
-    }
-
     func real(_ column: Int32) -> Double { sqlite3_column_double(statement, column) }
     func integer(_ column: Int32) -> Int64 { sqlite3_column_int64(statement, column) }
 }
