@@ -293,7 +293,11 @@ private struct EarOverflowChipView: View {
             Spacer(minLength: 0)
             chip(overflow.side == .right ? overflow.count : nil)
         }
-        .frame(width: layout.bodySize(for: .compact).width, height: layout.geometry.compactHeight)
+        // The frame reaches below the ear's bottom edge by the chip's strip: the window is
+        // grown by the same amount, and SwiftUI only hits views whose own bounds cover a point.
+        .frame(width: layout.bodySize(for: .compact).width,
+               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight, alignment: .top)
+        .contentShape(Rectangle())
         .accessibilityHidden(true)
     }
 
@@ -311,11 +315,12 @@ private struct EarOverflowChipView: View {
                     // keeps its outline visible over the black body.
                     .background(Capsule(style: .continuous).fill(.black.opacity(0.85)))
                     .background(Capsule(style: .continuous).stroke(.white.opacity(0.25)))
-                    // Tucks under the ear: most of the capsule hangs off its bottom edge.
-                    .offset(y: 7)
+                    // Tucks under the ear: its bottom edge lands 7pt below the ear's.
+                    .offset(y: -(NotchViewModel.earOverflowChipHeight - 7))
             }
         }
-        .frame(width: layout.compactEarWidth, height: layout.geometry.compactHeight)
+        .frame(width: layout.compactEarWidth,
+               height: layout.geometry.compactHeight + NotchViewModel.earOverflowChipHeight)
     }
 }
 
