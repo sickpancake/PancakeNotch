@@ -252,6 +252,18 @@ struct HelpView: View {
                 ) {
                     EmptyView()
                 }
+                SettingsRow(
+                    title: settings.remembersCopies
+                        ? String(localized: "Finding something you copied")
+                        : String(localized: "Clipboard history is off"),
+                    subtitle: settings.remembersCopies
+                        ? String(localized: "Open the Shelf and click Clipboard, or press Tab. Passwords and other private copies are skipped, and the history is forgotten when PancakeNotch quits.")
+                        : String(localized: "Turn on Remember what I copy in Shelf settings to keep your last few copies in the Shelf.")
+                ) {
+                    if !settings.remembersCopies {
+                        Button(String(localized: "Turn On")) { settings.remembersCopies = true }
+                    }
+                }
             }
             MoreOnlineRow(topic: .shelf)
         }

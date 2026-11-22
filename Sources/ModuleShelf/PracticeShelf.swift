@@ -42,7 +42,9 @@ public final class PracticeShelf {
         settings.showsAirDropZone = false
 
         let store = ShelfStore(directory: folder.appending(path: "Shelf", directoryHint: .isDirectory))
-        module = ShelfModule(store: store, settings: settings)
+        // Always a few example copies, so the Shelf lesson can show the Clipboard row.
+        let clipboard = PracticeClipboard.make(directory: folder.appending(path: "Clipboard", directoryHint: .isDirectory))
+        module = ShelfModule(store: store, settings: settings, clipboard: clipboard)
         module.dragsOutWithinApp = true
         // Converting here leaves nothing behind: what it makes goes in the practice folder.
         module.keepsConvertedFiles = true
@@ -231,5 +233,24 @@ enum PracticeFiles {
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data
+    }
+}
+
+/// Example recent copies for the practice Shelf and snapshots (#79), on a private pasteboard so the
+/// real clipboard is never read.
+@MainActor
+public enum PracticeClipboard {
+    public static func make(directory: URL, seeded: Bool = true, running: Bool = false) -> ShelfClipboard {
+        let pasteboard = NSPasteboard(name: .init("io.github.sickpancake.PancakeNotch.practice.\(UUID().uuidString)"))
+        let clipboard = ShelfClipboard(directory: directory, pasteboard: pasteboard)
+        if running { clipboard.setRunning(true) }
+        guard seeded else { return clipboard }
+        if let jpeg = PracticeFiles.landscapeJPEG(), let png = ShelfClipboardReader.compressedImage(jpeg) {
+            clipboard.record(.image(png))
+        }
+        if let link = URL(string: "https://github.com/sickpancake/PancakeNotch") { clipboard.record(.link(link)) }
+        if let pinned = clipboard.record(.text(String(localized: "Wi-Fi: PancakeHouse-5G"))) { clipboard.togglePin(pinned.id) }
+        clipboard.record(.text(String(localized: "See you at 3 in room 4B")))
+        return clipboard
     }
 }
