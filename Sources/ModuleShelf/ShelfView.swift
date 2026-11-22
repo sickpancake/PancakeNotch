@@ -50,6 +50,8 @@ struct ShelfView: View {
             ShelfDropZones(zone: zone, convert: module.convertZone, showsAirDrop: module.dragCanAirDrop, layout: layout)
         } else if let prompt = module.prompt, !module.isChoosing {
             ShelfPromptCard(module: module, prompt: prompt)
+        } else if module.showsClipboard, let clipboard = module.clipboard {
+            ShelfClipboardRow(module: module, clipboard: clipboard)
         } else if module.store.items.isEmpty {
             ShelfEmptyView()
         } else {
@@ -102,6 +104,20 @@ private struct ShelfHeader: View {
                         Color.clear.frame(width: 0)
                     }
                     .font(.system(size: 12, weight: .semibold))
+                } else if module.showsClipboard, let clipboard = module.clipboard {
+                    if barWidth == 0 {
+                        Text("Clipboard", comment: "The Shelf's row of recent copies")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        Text(clipboard.showsTooLarge ? String(localized: "Too large to keep", comment: "A copy was too big for clipboard history")
+                             : clipboard.entries.count == 1 ? String(localized: "1 copy")
+                             : String(localized: "\(clipboard.entries.count) copies", comment: "Number of recent copies in the Shelf's Clipboard row"))
+                        Color.clear.frame(width: 0)
+                    }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .monospacedDigit()
                 } else {
                     if barWidth == 0 {
                         Text("Shelf")
@@ -143,6 +159,27 @@ private struct ShelfHeader: View {
                 } else if let note = module.pinNote, module.dropZone == nil, module.prompt == nil {
                     ShelfPinNoteView(module: module, note: note)
                         .transition(.opacity)
+                } else if module.showsClipboard, module.dropZone == nil, module.prompt == nil {
+                    if module.clipboard?.entries.contains(where: { !$0.isPinned }) == true {
+                        ShelfPillButton(title: String(localized: "Clear", comment: "Removes unpinned recent copies")) {
+                            module.clipboard?.removeAll()
+                        }
+                    }
+                    ShelfPillButton(title: String(localized: "Shelf", comment: "Switches from the Clipboard row back to the Shelf's items")) {
+                        module.showClipboard(false)
+                    }
+                } else if module.hasClipboard, module.dropZone == nil, module.prompt == nil {
+                    // Beside the drag handle and Clear all the room is tight: shorter labels, never "Clipboa…".
+                    if count > 0 {
+                        let clearable = module.clearableCount
+                        ViewThatFits(in: .horizontal) {
+                            clipboardHeader(count: clearable, clearAll: String(localized: "Clear all"))
+                            clipboardHeader(count: clearable, clearAll: String(localized: "Clear", comment: "Short form of \"Clear all\" when space is tight"))
+                            clipboardHeader(count: clearable, clearAll: String(localized: "Clear", comment: "Short form of \"Clear all\" when space is tight"), iconOnly: true)
+                        }
+                    } else {
+                        clipboardPill()
+                    }
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
                     let clearable = module.clearableCount
                     ShelfDragAllHandle(module: module)
@@ -159,6 +196,29 @@ private struct ShelfHeader: View {
             }
             .animation(.easeInOut(duration: 0.2), value: module.pinNote)
             .frame(width: layout.headerSideWidth, alignment: .trailing)
+        }
+    }
+
+    private func clipboardPill(iconOnly: Bool = false) -> some View {
+        ShelfPillButton(
+            title: String(localized: "Clipboard", comment: "Shows the Shelf's row of recent copies"),
+            symbol: iconOnly ? "doc.on.clipboard" : nil
+        ) { module.showClipboard(true) }
+    }
+
+    private func clipboardHeader(count: Int, clearAll: String, iconOnly: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            clipboardPill(iconOnly: iconOnly)
+            ShelfDragAllHandle(module: module)
+            if count > 0 {
+                ShelfPillButton(
+                    title: !module.confirmingClear ? clearAll
+                        : count == 1 ? String(localized: "Clear 1 item?")
+                        : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                    prominent: module.confirmingClear
+                ) { module.clearAll() }
+                .help(count < module.store.items.count ? String(localized: "Pinned items stay on the Shelf.") : "")
+            }
         }
     }
 }
@@ -189,6 +249,8 @@ extension View {
 
 struct ShelfPillButton: View {
     let title: String
+    /// Shown instead of the title when room is short; the title stays as the VoiceOver label.
+    var symbol: String? = nil
     var prominent = false
     /// The keyboard (Tab) is on this button.
     var isKeyFocused = false
@@ -198,7 +260,13 @@ struct ShelfPillButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Group {
+                if let symbol {
+                    Image(systemName: symbol).accessibilityLabel(Text(title))
+                } else {
+                    Text(title)
+                }
+            }
                 .font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(1)
                 .foregroundStyle(prominent ? .black : .white)

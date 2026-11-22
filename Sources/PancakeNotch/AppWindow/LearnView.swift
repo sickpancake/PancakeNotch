@@ -558,7 +558,7 @@ private final class AgentsLessonSignals {
         case .allowed: runner?.receive(.agentAllowed)
         case .opened: runner?.receive(.agentOpened)
         case .cleared: runner?.receive(.agentsCleared)
-        case .denied: break
+        case .denied, .replied: break
         }
     }
 
@@ -595,6 +595,7 @@ private final class ShelfSignals {
         case .dragOutEnded(let accepted): if accepted { runner.receive(.shelfDraggedOut) }
         case .selectionChanged(let count): if count >= 2 { runner.receive(.shelfSeveralSelected) }
         case .cleared: runner.receive(.shelfCleared)
+        case .clipboardOpened: runner.receive(.shelfClipboardOpened)
         case .menuClosed, .airDropped: break
         }
     }
