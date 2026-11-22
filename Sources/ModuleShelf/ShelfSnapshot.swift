@@ -29,7 +29,7 @@ public enum ShelfSnapshot {
         let root = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-shelf-snapshot-\(UUID().uuidString)")
         var rows: [NotchViewModel] = []
 
-        func row(_ state: NotchState = .expanded, files: [String] = [], extra: [ShelfInput] = [], setUp: (ShelfModule) -> Void = { _ in }) {
+        func row(_ state: NotchState = .expanded, files: [String] = [], extra: [ShelfInput] = [], clipboard: ShelfClipboard? = nil, setUp: (ShelfModule) -> Void = { _ in }) {
             let folder = root.appending(path: "\(rows.count)")
             try? FileManager.default.createDirectory(at: folder.appending(path: "Docs"), withIntermediateDirectories: true)
             let store = ShelfStore(directory: folder.appending(path: "Shelf"))
@@ -40,7 +40,7 @@ public enum ShelfSnapshot {
             }
             store.add(inputs + extra, duplicates: .addAgain)
             let settings = ShelfSettings(defaults: UserDefaults(suiteName: "io.github.sickpancake.PancakeNotch.snapshots.shelf") ?? .standard)
-            let module = ShelfModule(store: store, settings: settings)
+            let module = ShelfModule(store: store, settings: settings, clipboard: clipboard)
             module.isSnapshot = true
             module.thumbnails.preload(Dictionary(uniqueKeysWithValues: store.items.compactMap { item in
                 item.fileURL.map { (item.id, NSWorkspace.shared.icon(for: UTType(filenameExtension: $0.pathExtension) ?? .data)) }
@@ -133,7 +133,11 @@ public enum ShelfSnapshot {
             convert(module, ["Holiday.heic"], photo, .failed(ConvertFailure.failed.message))
         }
         row(.compact, files: Array(full.prefix(3))) { module in
-            module.convertPeekText = ShelfModule.doneText(files: [URL(fileURLWithPath: "/Report.pdf")])
+            module.peekNote = ShelfPeekNote(text: ShelfModule.doneText(files: [URL(fileURLWithPath: "/Report.pdf")]), symbol: "checkmark.circle.fill")
+            module.notch?.peekForSnapshot(module)
+        }
+        row(.compact, files: Array(full.prefix(3))) { module in
+            module.peekNote = .screenshotAdded
             module.notch?.peekForSnapshot(module)
         }
 
@@ -145,6 +149,15 @@ public enum ShelfSnapshot {
         }
 
         try? FileManager.default.removeItem(at: root)
+        // The Clipboard row (#79): recent copies with one pinned, then empty while history is on.
+        // With items on the Shelf the Clipboard pill shares the header with the drag handle and Clear all.
+        row(files: Array(files.prefix(3)), clipboard: PracticeClipboard.make(directory: root.appending(path: "ClipboardPill")))
+        row(files: Array(files.prefix(2)), clipboard: PracticeClipboard.make(directory: root.appending(path: "Clipboard"))) { module in
+            module.showClipboard(true)
+        }
+        row(clipboard: PracticeClipboard.make(directory: root.appending(path: "EmptyClipboard"), seeded: false, running: true)) { module in
+            module.showClipboard(true)
+        }
         return rows
     }
 }

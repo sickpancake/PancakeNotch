@@ -34,6 +34,14 @@ public enum TimerSnapshot {
         clock.advance(4 * 60 + 18)
     }
 
+    /// Pasta (8 min), Laundry (42 min) and an unnamed 25-minute timer, paused.
+    static func severalTimers(_ center: TimerCenter, _ clock: Clock) {
+        center.startTimer(seconds: 42 * 60, name: "Laundry")
+        center.startTimer(seconds: 8 * 60, name: "Pasta")
+        if let paused = center.startTimer(seconds: 25 * 60) { center.pauseTimer(id: paused) }
+        clock.advance(3 * 60 + 12)
+    }
+
     public static func models(layout: NotchLayout, others: () -> any NotchModule) -> [NotchViewModel] {
         func model(_ state: NotchState, _ modules: [any NotchModule], setUp: (NotchViewModel) -> Void = { _ in }) -> NotchViewModel {
             let model = NotchViewModel(layout: layout, state: state, arrangement: ModuleArrangement())
@@ -113,6 +121,34 @@ public enum TimerSnapshot {
                 settings.sideBySide = true
                 for index in 1...7 { _ = settings.addPreset(seconds: TimeInterval(index * 60), name: "Quick time \(index)") }
             })]),
+            // Several named timers (issue #70): the soonest in the ear with "+2", the list, a new one being
+            // named, a Done one while the others run, its strip, the list side by side, and two Done.
+            model(.compact, [module(setUp: severalTimers)]),
+            model(.compact, [others(), module(setUp: severalTimers)]),
+            model(.expanded, [module(setUp: severalTimers)]),
+            model(.expanded, [module(setUp: severalTimers)]) { model in
+                guard let timer = model.selectedModule as? TimerModule else { return }
+                timer.beginAdding()
+                timer.beginEditingName()
+                timer.newName = "Tea"
+            },
+            model(.expanded, [module { center, clock in
+                severalTimers(center, clock)
+                clock.advance(5 * 60)
+                center.timeMayHaveJumped()
+            }]),
+            model(.compact, [module { center, clock in
+                severalTimers(center, clock)
+                clock.advance(5 * 60)
+                center.timeMayHaveJumped()
+            }]) { $0.peekForSnapshot($0.modules[0]) },
+            model(.expanded, [module(setUp: severalTimers, settings: { $0.sideBySide = true })]),
+            // Two done long ago: the line drops "ended …" before "1 more done".
+            model(.expanded, [module { center, clock in
+                severalTimers(center, clock)
+                clock.advance(40 * 60)
+                center.timeMayHaveJumped()
+            }]),
         ]
     }
 }

@@ -31,7 +31,7 @@ views; only the chosen owners build their views, and pointer targeting uses the 
 | Shelf | it holds 15 items or more ("!" at 20, full); also briefly after a drop | "Show the Shelf's count beside the notch" |
 | Agents | a thread works or needs you, or finished, was stopped or failed and you haven't looked yet | no ear setting; switch Agents off or hide its tools |
 | AI Usage | the followed limit is under 10% left ("When close", default), or always once there's a reading ("Always") | "Beside the closed notch": Never |
-| Timer | a timer or stopwatch runs, is paused, or is stopped but not reset; **always while Done** | "Beside the notch": Don't show (Done still shows) |
+| Timer | any timer or the stopwatch runs, is paused, or is stopped but not reset; **always while Done** | "Beside the notch": Don't show (Done still shows) |
 | Keep Awake | it keeps the Mac awake | turning Keep Awake off |
 
 ## Who gets which ear
@@ -65,6 +65,16 @@ views; only the chosen owners build their views, and pointer targeting uses the 
     the two spots exactly as before.
 11. **Swap sides** flips left and right for everything, including a lone module's two views and the
     "+n" chip's ear.
+
+## Several timers
+
+12. The Timer is one module however many timers run (up to 10): it takes one ear, by the rules above.
+13. The ear shows **one timer**: a Done one first (the one that ended earliest), else the one ending
+    soonest, else the paused one with least left. A small **"+n"** after the time counts the other
+    timers. It sits inside the Timer's own ear, and is not the overflow chip of rule 10.
+14. **Each Done is its own alert.** Every timer that ends rings, opens the notch (or shows the strip) and
+    is announced once. Done timers queue: the ear and the Done card show the earliest, and stopping it shows
+    the next. The Timer keeps `waitsForYou` and #2 while any timer is Done.
 
 ## Opening from the ears
 

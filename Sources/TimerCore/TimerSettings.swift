@@ -148,8 +148,11 @@ public final class TimerSettings {
     }
 
     /// Names stay short (one line in a small button) and lose surrounding spaces.
-    static func cleanName(_ name: String) -> String {
-        String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+    /// The longest name a preset or timer keeps.
+    public static let nameLength = 24
+
+    public static func cleanName(_ name: String) -> String {
+        String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(nameLength))
     }
 
     /// Saved presets from an older or edited file: valid lengths only, at most `mostPresets`.

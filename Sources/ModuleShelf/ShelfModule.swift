@@ -20,6 +20,8 @@ public enum ShelfEvent: Equatable, Sendable {
     case menuClosed
     /// Clear all was confirmed.
     case cleared
+    /// The Clipboard row of recent copies opened.
+    case clipboardOpened
     /// A drag out of the Shelf ended; `accepted` is whether something took it.
     case dragOutEnded(accepted: Bool)
     /// Items were handed to AirDrop (from the drop zone or the menu), for statistics.
@@ -32,6 +34,12 @@ public enum ShelfEvent: Equatable, Sendable {
 public final class ShelfModule: NotchModule {
     public let store: ShelfStore
     public let settings: ShelfSettings
+    /// Recent copies (#79); shared by every copy of the module, like `store`. Nil where history isn't kept.
+    public let clipboard: ShelfClipboard?
+    /// Which row the open Shelf shows: what was dropped on it, or recent copies.
+    public var showsClipboard = false
+    /// The keyboard's place in the Clipboard row.
+    private(set) var clipboardCursor: UUID?
     let thumbnails = ShelfThumbnails()
     let largePreview = ShelfLargePreview()
     @ObservationIgnored let sharing = ShelfSharing()
@@ -84,9 +92,8 @@ public final class ShelfModule: NotchModule {
     public var isConverting: Bool { conversion?.isConverting == true }
     /// Runs conversions: the helper in the app, a fake in tests. Nil hides Convert.
     @ObservationIgnored var convertRunner: (any ShelfConvertRunning)? = ShelfConvertHelper.bundled
-    /// What the strip under the notch says when a conversion finished out of sight.
-    var convertPeekText: String?
-    var convertPeekFailed = false
+    /// What the strip under the notch says: a conversion finished out of sight, or a screenshot was caught.
+    var peekNote: ShelfPeekNote?
     @ObservationIgnored var convertClickMonitor: Any?
     @ObservationIgnored var convertAppObserver: (any NSObjectProtocol)?
     var prompt: Prompt? {
@@ -152,9 +159,10 @@ public final class ShelfModule: NotchModule {
         source is ShelfTileNSView
     }
 
-    public init(store: ShelfStore, settings: ShelfSettings) {
+    public init(store: ShelfStore, settings: ShelfSettings, clipboard: ShelfClipboard? = nil) {
         self.store = store
         self.settings = settings
+        self.clipboard = clipboard
         sharing.onFinish = { [weak self] in self?.setHold { $0.isSharing = false } }
         quickLook.onEnd = { [weak self] in self?.setHold { $0.isQuickLooking = false } }
     }
@@ -261,6 +269,7 @@ public final class ShelfModule: NotchModule {
 
     public func notchDidClose() {
         menu?.close()
+        clipboardCursor = nil
         detailID = nil
         leaveConversion()
         thumbnails.clear()
@@ -277,10 +286,11 @@ public final class ShelfModule: NotchModule {
 
     public var keepsDragsBelowMenuBar: Bool { settings.dragToTop == .openShelf }
 
-    /// "✓ Converted Report.pdf" under the notch when a conversion finished while it was closed.
+    /// "✓ Converted Report.pdf" under the notch when a conversion finished while it was closed, or
+    /// "Screenshot added to the Shelf".
     public func peekView(layout: NotchLayout) -> AnyView? {
-        guard let convertPeekText else { return nil }
-        return AnyView(ShelfConvertPeek(text: convertPeekText, failed: convertPeekFailed))
+        guard let peekNote else { return nil }
+        return AnyView(ShelfPeekStrip(note: peekNote))
     }
 
     public func dragUpdated(_ info: any NSDraggingInfo, at point: CGPoint) -> NSDragOperation {
@@ -434,6 +444,11 @@ public final class ShelfModule: NotchModule {
             return closes
         }
         let command = event.modifierFlags.contains(.command)
+        if event.keyCode == 48, prompt == nil, dropZone == nil, hasClipboard { // Tab: switch rows
+            showClipboard(!showsClipboard)
+            return true
+        }
+        if showsClipboard, let clipboard { return handleClipboardKey(event, clipboard) }
         if isChoosing, let handled = handleChoosingKey(event) { return handled }
         switch event.keyCode {
         case 49: // Space, like a click: show the item in the tall notch
@@ -554,6 +569,40 @@ public final class ShelfModule: NotchModule {
         case nil:
             apply(store.add(inputs, duplicates: settings.duplicatePolicy), inputs: inputs)
         }
+    }
+
+    /// A new screenshot caught from the screenshot folder (Shelf settings). It goes to the front with a
+    /// short note under the notch. It never opens a card by itself: one already on the Shelf is left
+    /// alone, and with no room the note says so — the Shelf's full card when the notch is open.
+    /// Returns false when the file couldn't be kept (no access).
+    @discardableResult
+    func catchScreenshot(_ url: URL) -> Bool {
+        let input = ShelfInput.file(url, owned: false)
+        guard !store.contains(input) else { return true }
+        // A card is up (duplicates, full): the screenshot joins what it's asking about.
+        if prompt != nil {
+            offer([input])
+            return true
+        }
+        guard !store.isFull else {
+            // The notch is open: the Shelf's own full card says so (and the screenshot waits for room).
+            if notch?.state == .expanded {
+                offer([input])
+            } else {
+                showPeek(.screenshotNoRoom)
+            }
+            return true
+        }
+        guard case .done(let added) = store.add([input], duplicates: .addAgain), added > 0 else { return false }
+        showPeek(.screenshotAdded)
+        return true
+    }
+
+    /// The strip under the notch for a few seconds (only while the notch is closed: open, the tiles show it).
+    func showPeek(_ note: ShelfPeekNote) {
+        guard let notch, notch.state != .expanded else { return }
+        peekNote = note
+        notch.peek(self, for: .seconds(3))
     }
 
     /// Content dropped while the shelf is full joins the waiting items. Unless duplicates are always
@@ -880,6 +929,135 @@ public final class ShelfModule: NotchModule {
             case .text(let text): text
             case .link(let url): url
             }
+        }
+    }
+
+    // MARK: Clipboard
+
+    /// Whether the open Shelf offers the Clipboard row: history is on, or pinned copies are still there.
+    var hasClipboard: Bool {
+        guard let clipboard else { return false }
+        return clipboard.isRunning || !clipboard.entries.isEmpty
+    }
+
+    func showClipboard(_ on: Bool) {
+        showsClipboard = on && hasClipboard
+        selection = []
+        clipboardCursor = nil
+        confirmingClear = false
+        if showsClipboard {
+            onEvent?(.clipboardOpened)
+            // Clicked open from the header: the arrow keys and P should work right away.
+            notch?.requestKeyFocus?()
+        }
+    }
+
+    private func handleClipboardKey(_ event: NSEvent, _ clipboard: ShelfClipboard) -> Bool {
+        let entries = clipboard.entries
+        let current = clipboardCursor.flatMap { id in entries.firstIndex { $0.id == id } }
+        let entry = current.map { entries[$0] }
+        switch event.keyCode {
+        case 123, 124: // ← →
+            guard !entries.isEmpty else { return true }
+            let step = event.keyCode == 123 ? -1 : 1
+            let next = current.map { min(max($0 + step, 0), entries.count - 1) } ?? (step > 0 ? 0 : entries.count - 1)
+            clipboardCursor = entries[next].id
+            return true
+        case 36, 76, 49: // Return, Enter, Space: copy it again
+            if let entry = entry ?? entries.first { copyClipboardEntry(entry) }
+            return true
+        case 35: // P: pin or unpin
+            if let entry { clipboard.togglePin(entry.id) }
+            return true
+        case 51, 117: // Delete
+            guard let entry, let index = current else { return true }
+            clipboard.remove(entry.id)
+            let rest = clipboard.entries
+            clipboardCursor = rest.isEmpty ? nil : rest[min(index, rest.count - 1)].id
+            return true
+        case 53: // Escape: back to the Shelf's own items
+            showClipboard(false)
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// A click on a recent copy: it becomes the keyboard's place in the row, and is copied again.
+    func clipboardTileClicked(_ entry: ShelfClipboardEntry) {
+        clipboardCursor = entry.id
+        notch?.requestKeyFocus?()
+        copyClipboardEntry(entry)
+    }
+
+    /// Puts a recent copy back on the clipboard, ready to paste.
+    func copyClipboardEntry(_ entry: ShelfClipboardEntry) {
+        let objects: [any NSPasteboardWriting]
+        switch entry.item.kind {
+        case .text(let text): objects = [text as NSString]
+        case .link(let url):
+            // Both flavors, so plain-text fields can paste the link too.
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .URL)
+            item.setString(url.absoluteString, forType: .string)
+            objects = [item]
+        case .file:
+            guard let image = clipboard?.fileURL(for: entry).flatMap(NSImage.init(contentsOf:)) else { return }
+            objects = [image]
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects(objects)
+        AccessibilityNotification.Announcement(String(localized: "Copied")).post()
+        let id = entry.id
+        copiedID = id
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            if self?.copiedID == id { self?.copiedID = nil }
+        }
+    }
+
+    /// Keeps a recent copy on the Shelf itself, where it can be converted, opened and kept for good.
+    func keepClipboardEntry(_ entry: ShelfClipboardEntry) {
+        switch entry.item.kind {
+        case .text(let text): offer([.text(text)])
+        case .link(let url): offer([.link(url)])
+        case .file:
+            guard let source = clipboard?.fileURL(for: entry),
+                  let folder = try? store.newFilesFolder() else { return }
+            let target = folder.appending(path: source.lastPathComponent)
+            guard (try? FileManager.default.copyItem(at: source, to: target)) != nil else { return }
+            offer([.file(target, owned: true)])
+        }
+        showClipboard(false)
+    }
+
+    func airDropClipboardEntry(_ entry: ShelfClipboardEntry) {
+        guard let item = clipboardShareable(entry) else { return }
+        setHold { $0.isSharing = true }
+        sharing.airDrop([item])
+        onEvent?(.airDropped(count: 1))
+    }
+
+    func shareClipboardEntry(_ entry: ShelfClipboardEntry, from view: NSView) {
+        guard let item = clipboardShareable(entry) else { return }
+        setHold { $0.isSharing = true }
+        sharing.share([item], from: view)
+    }
+
+    private func clipboardShareable(_ entry: ShelfClipboardEntry) -> Any? {
+        switch entry.item.kind {
+        case .text(let text): text
+        case .link(let url): url
+        case .file: clipboard?.fileURL(for: entry)
+        }
+    }
+
+    /// What dragging a recent copy out carries: the text, the link, or the image file.
+    func clipboardDragProvider(_ entry: ShelfClipboardEntry) -> NSItemProvider {
+        switch entry.item.kind {
+        case .text(let text): NSItemProvider(object: text as NSString)
+        case .link(let url): NSItemProvider(object: url as NSURL)
+        case .file: clipboard?.fileURL(for: entry).flatMap { NSItemProvider(contentsOf: $0) } ?? NSItemProvider()
         }
     }
 

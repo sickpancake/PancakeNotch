@@ -2,7 +2,8 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
-/// The Timer's compact ear: one ear, also when nothing else is active. Shows the timer while it isn't idle, else the stopwatch. Ticks once a second
+/// The Timer's compact ear: one ear, also when nothing else is active. Shows the timer ending soonest (or a
+/// Done one, first), with "+1" for each other timer (issue #70), else the stopwatch. Ticks once a second
 /// only while it's on screen and counting (`TimerModule.earTicks`, AGENTS.md rule 2).
 struct TimerEar: View {
     let module: TimerModule
@@ -31,7 +32,7 @@ struct TimerEar: View {
         let now = center.now
         if let end = center.timer.end {
             // Past the end (the alarm hasn't run yet), not a start in the future.
-            return end.addingTimeInterval(-(max(0, end.timeIntervalSince(now)).rounded(.down) + 1))
+            return end.addingTimeInterval(-max(0, end.timeIntervalSince(now)).rounded(.up))
         }
         if center.timer.isIdle, center.stopwatch.isRunning {
             let elapsed = center.stopwatch.elapsed(at: now)
@@ -45,7 +46,7 @@ struct TimerEar: View {
         let center = module.center
         let timer = center.timer
         if timer.isDone {
-            done
+            withBadge(done)
         } else if !timer.isIdle {
             timerFace(timer, now: now)
         } else if !center.stopwatch.isIdle {
@@ -84,7 +85,7 @@ struct TimerEar: View {
             switch content {
             case .ringAndTime: fitting(lead: .ring, text: text, widest: widest)
             case .time: fitting(lead: nil, text: text, widest: widest)
-            case .ring: TimerRing(module: module, size: 12)
+            case .ring: withBadge(TimerRing(module: module, size: 12))
             case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false)
             }
         }
@@ -113,16 +114,20 @@ struct TimerEar: View {
     /// worked out from `widest` (the longest the time will be), never from the time shown, so the size
     /// doesn't jump when the time gets a digit shorter or longer.
     private func fitting(lead: Lead?, text: String, widest: String? = nil, direction: DrumDirection = .down, animated: Bool = true) -> some View {
+        // The other timers' count comes off the room first, so the time never runs into it.
+        let badge = direction == .down ? badgeText : nil
+        let badgeWidth = badge.map { DrumMetrics.width(of: $0, size: Self.badgeSize, weight: .semibold) + 2 } ?? 0
         let fit = EarFit.choose(
             widest: widest.map { $0.count > text.count ? $0 : text } ?? text,
             hasLead: lead != nil,
-            available: width - 4
+            available: width - 4 - badgeWidth
         )
         return HStack(spacing: fit.spacing) {
             if let lead, fit.showsLead {
                 leadView(lead).scaleEffect(fit.leadSide / EarFit.leadSide).frame(width: fit.leadSide, height: fit.leadSide)
             }
             time(text, size: fit.size, direction: direction, animated: animated)
+            if let badge { badgeView(badge).padding(.leading, 2 - fit.spacing) }
         }
         .frame(width: max(0, width - 4))
     }
@@ -144,6 +149,29 @@ struct TimerEar: View {
             style: animated ? module.settings.digitAnimation : .off,
             direction: direction
         )
+    }
+
+    static let badgeSize: CGFloat = 7.5
+
+    /// "+1", "+2": the timers besides the one shown. Nil with one timer.
+    private var badgeText: String? {
+        let others = module.center.timers.count - 1
+        return others > 0 ? "+\(others)" : nil
+    }
+
+    private func badgeView(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: Self.badgeSize, weight: .semibold).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.6))
+            .fixedSize()
+            .contentTransition(.numericText())
+    }
+
+    private func withBadge(_ content: some View) -> some View {
+        HStack(spacing: 2) {
+            content
+            if let badgeText { badgeView(badgeText) }
+        }
     }
 
     private func sign(_ symbol: String, size: CGFloat = 11) -> some View {
@@ -171,7 +199,7 @@ struct TimerPeek: View {
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Timer done, \(detail)"))
+        .accessibilityLabel(Text(TimerDoneText.title(module.center) + ", " + detail))
     }
 
     private func line(_ detail: String, truncates: Bool = false) -> some View {
@@ -179,7 +207,7 @@ struct TimerPeek: View {
             Image(systemName: "bell.fill")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.6))
-            Text("Timer done")
+            Text(TimerDoneText.title(module.center))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white)
                 .fixedSize()
@@ -196,15 +224,27 @@ struct TimerPeek: View {
 /// wasn't just now ("5 min timer · ended 3:42 PM").
 @MainActor
 enum TimerDoneText {
+    /// "Timer done", or "Pasta done" for a named timer.
+    static func title(_ center: TimerCenter) -> String {
+        let timer = center.timer
+        return timer.name.isEmpty
+            ? String(localized: "Timer done")
+            : String(localized: "\(timer.name) done", comment: "Timer peek: a named timer finished")
+    }
+
     static func length(_ center: TimerCenter) -> String {
         String(localized: "\(TimerText.length(center.timer.total)) timer", comment: "Done card: e.g. 5 min timer")
     }
 
     static func detail(_ center: TimerCenter) -> String {
-        let length = length(center)
+        [length(center), ended(center)].compactMap(\.self).joined(separator: " · ")
+    }
+
+    /// "ended 3:42 PM", once it wasn't just now.
+    static func ended(_ center: TimerCenter) -> String? {
         guard case .done(let endedAt) = center.timer.phase,
-              center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return length }
-        return length + " · " + String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")
+              center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return nil }
+        return String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")
     }
 }
 

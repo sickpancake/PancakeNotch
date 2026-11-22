@@ -58,6 +58,11 @@ public final class ShelfSettings {
     public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
     public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
+    /// Off by default: the Shelf only watches the clipboard once you ask it to (#79).
+    public var remembersCopies: Bool { didSet { defaults.set(remembersCopies, forKey: Keys.remembersCopies) } }
+    /// How many recent copies the Clipboard keeps, not counting pinned ones.
+    public var clipboardLength: Int { didSet { defaults.set(clipboardLength, forKey: Keys.clipboardLength) } }
+    public static let clipboardLengths = [5, 10, 20]
     /// The Convert drop zone and "Convert…" on items.
     public var convertEnabled: Bool { didSet { defaults.set(convertEnabled, forKey: Keys.convertEnabled) } }
     public var convertDestination: ConvertDestination {
@@ -68,6 +73,8 @@ public final class ShelfSettings {
     public var convertQuality: ConvertQuality { didSet { defaults.set(convertQuality.rawValue, forKey: Keys.convertQuality) } }
     /// Experimental: Word and OpenDocument files to PDF (layout and pictures aren't kept).
     public var convertWordToPDF: Bool { didSet { defaults.set(convertWordToPDF, forKey: Keys.convertWordToPDF) } }
+    /// New screenshots land on the Shelf by themselves (off until switched on).
+    public var catchesScreenshots: Bool { didSet { defaults.set(catchesScreenshots, forKey: Keys.catchesScreenshots) } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -80,12 +87,16 @@ public final class ShelfSettings {
         autoClear = defaults.string(forKey: Keys.autoClear).flatMap(AutoClear.init(rawValue:)) ?? .never
         showsAirDropZone = defaults.object(forKey: Keys.airDropZone) as? Bool ?? true
         showsInEars = defaults.object(forKey: Keys.showsInEars) as? Bool ?? true
+        remembersCopies = defaults.bool(forKey: Keys.remembersCopies)
+        let length = defaults.integer(forKey: Keys.clipboardLength)
+        clipboardLength = Self.clipboardLengths.contains(length) ? length : 10
         dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
         convertEnabled = defaults.object(forKey: Keys.convertEnabled) as? Bool ?? true
         convertDestination = defaults.string(forKey: Keys.convertDestination).flatMap(ConvertDestination.init(rawValue:)) ?? .nextToOriginal
         convertFolder = defaults.string(forKey: Keys.convertFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
         convertQuality = defaults.string(forKey: Keys.convertQuality).flatMap(ConvertQuality.init(rawValue:)) ?? .balanced
         convertWordToPDF = defaults.bool(forKey: Keys.convertWordToPDF)
+        catchesScreenshots = defaults.bool(forKey: Keys.catchesScreenshots)
     }
 
     private enum Keys {
@@ -96,11 +107,14 @@ public final class ShelfSettings {
         static let autoClear = "shelf.autoClear"
         static let airDropZone = "shelf.airDropZone"
         static let showsInEars = "shelf.showsInEars"
+        static let remembersCopies = "shelf.clipboard.enabled"
+        static let clipboardLength = "shelf.clipboard.length"
         static let dragToTop = "shelf.dragToTop"
         static let convertEnabled = "shelf.convert.enabled"
         static let convertDestination = "shelf.convert.destination"
         static let convertFolder = "shelf.convert.folder"
         static let convertQuality = "shelf.convert.quality"
         static let convertWordToPDF = "shelf.convert.wordToPDF"
+        static let catchesScreenshots = "shelf.catchesScreenshots"
     }
 }

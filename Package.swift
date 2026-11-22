@@ -31,6 +31,8 @@ let package = Package(
             swiftSettings: testing
         ),
         .target(name: "NotchCore"),
+        // Calls back when files change (FSEvents, kqueue): Agents' logs, the Shelf's screenshot folder. No polling.
+        .target(name: "FileWatching"),
         .target(name: "HotKey"),
         .target(name: "Learn"),
         // Listening, usage and app-health statistics in a local SQLite file (ADR-0018).
@@ -45,7 +47,7 @@ let package = Package(
         // AI agents and their usage: the tools' own files, the hook socket, Connect, prices (ADR-0037). No UI.
         .target(
             name: "AgentsCore",
-            dependencies: ["Stats"],
+            dependencies: ["Stats", "FileWatching"],
             swiftSettings: testing,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
@@ -57,7 +59,7 @@ let package = Package(
         .executableTarget(name: "AgentHook", cSettings: [.define("PANCAKENOTCH_INTERNAL_TESTING", .when(configuration: .debug))]),
         .target(
             name: "ModuleShelf",
-            dependencies: ["NotchCore", "ConvertKit"],
+            dependencies: ["NotchCore", "ConvertKit", "FileWatching"],
             swiftSettings: testing
         ),
         // Convert (ADR-0038): formats, limits and the helper's messages. Foundation only, for the app.
