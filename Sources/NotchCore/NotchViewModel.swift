@@ -251,6 +251,8 @@ public final class NotchViewModel {
     public func activityChanged() {
         let resting: NotchState = modules.contains { $0.isActive } ? .compact : .closed
         if restingState != resting { restingState = resting }
+        // The "+n" chip may have appeared or left: refit so the window covers its strip.
+        fitWindow?(state)
     }
 
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
@@ -587,6 +589,25 @@ public final class NotchViewModel {
 
     /// Height of the band at the bottom of an ear that counts as the "+n" chip.
     static let earOverflowChipHeight: CGFloat = 12
+
+    /// Window frame for a state: the outline plus, in Compact, the strip under the ear the "+n"
+    /// chip hangs from, so the chip stays inside the window (drawn and hittable).
+    func windowFrame(for state: NotchState) -> CGRect {
+        var frame = layout.windowFrame(for: state)
+        if state == .compact, let strip = earOverflowFrame() { frame = frame.union(strip) }
+        return frame
+    }
+
+    /// The "+n" chip's dangling strip in screen coordinates, or `nil` while the chip is hidden.
+    func earOverflowFrame() -> CGRect? {
+        guard state == .compact, let overflow = earOverflow else { return nil }
+        let notch = layout.geometry.notchRect
+        let earBottom = notch.maxY - layout.geometry.compactHeight
+        let earWidth = layout.compactEarWidth
+        return CGRect(x: overflow.side == .left ? notch.minX - earWidth : notch.maxX,
+                      y: earBottom - Self.earOverflowChipHeight,
+                      width: earWidth, height: Self.earOverflowChipHeight)
+    }
 
     /// The overflow hint for the current allocation, or `nil` when every candidate fits or the
     /// chip's spot is taken by a peeking module's strip.
