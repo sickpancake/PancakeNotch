@@ -237,10 +237,14 @@ enum TimerDoneText {
     }
 
     static func detail(_ center: TimerCenter) -> String {
-        let length = length(center)
+        [length(center), ended(center)].compactMap(\.self).joined(separator: " · ")
+    }
+
+    /// "ended 3:42 PM", once it wasn't just now.
+    static func ended(_ center: TimerCenter) -> String? {
         guard case .done(let endedAt) = center.timer.phase,
-              center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return length }
-        return length + " · " + String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")
+              center.finishedWhileAway || center.now.timeIntervalSince(endedAt) >= 60 else { return nil }
+        return String(localized: "ended \(TimerText.time(endedAt))", comment: "Done card: when the timer ended")
     }
 }
 

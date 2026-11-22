@@ -147,6 +147,25 @@ struct MultipleTimersTests {
         #expect(TimerPane.Page(module) == .list)
     }
 
+    @Test func listRowsStayPutWhileOpen() throws {
+        let clock = TestClock()
+        let center = TimerCenter(now: { clock.now })
+        let module = TimerModule(center: center, settings: TimerSettings(defaults: scratchDefaults()), presents: false)
+        let pasta = try #require(center.startTimer(seconds: 300, name: "Pasta"))
+        center.startTimer(seconds: 360, name: "Tea")
+        module.notchDidOpen()
+        // Two +1 min on the top row: Pasta now ends after Tea, but stays on top and gets both.
+        module.addMinute(pasta)
+        module.addMinute(pasta)
+        #expect(module.listedTimers.map(\.name) == ["Pasta", "Tea"])
+        #expect(center.timer.name == "Tea")
+        center.startTimer(seconds: 60, name: "Egg")
+        #expect(module.listedTimers.map(\.name) == ["Pasta", "Tea", "Egg"])
+        module.notchDidClose()
+        module.notchDidOpen()
+        #expect(module.listedTimers.map(\.name) == ["Egg", "Tea", "Pasta"])
+    }
+
     @Test func newTimerPageAndNamedStart() {
         let clock = TestClock()
         let center = TimerCenter(now: { clock.now })

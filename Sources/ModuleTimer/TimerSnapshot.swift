@@ -122,7 +122,7 @@ public enum TimerSnapshot {
                 for index in 1...7 { _ = settings.addPreset(seconds: TimeInterval(index * 60), name: "Quick time \(index)") }
             })]),
             // Several named timers (issue #70): the soonest in the ear with "+2", the list, a new one being
-            // named, a Done one while the others run, its strip, and the list side by side.
+            // named, a Done one while the others run, its strip, the list side by side, and two Done.
             model(.compact, [module(setUp: severalTimers)]),
             model(.compact, [others(), module(setUp: severalTimers)]),
             model(.expanded, [module(setUp: severalTimers)]),
@@ -143,6 +143,12 @@ public enum TimerSnapshot {
                 center.timeMayHaveJumped()
             }]) { $0.peekForSnapshot($0.modules[0]) },
             model(.expanded, [module(setUp: severalTimers, settings: { $0.sideBySide = true })]),
+            // Two done long ago: the line drops "ended …" before "1 more done".
+            model(.expanded, [module { center, clock in
+                severalTimers(center, clock)
+                clock.advance(40 * 60)
+                center.timeMayHaveJumped()
+            }]),
         ]
     }
 }

@@ -462,11 +462,12 @@ private struct TimerDone: View {
                     .font(.system(size: isCompact ? 28 : 44, weight: .medium))
                 // Redrawn once, a minute after the end, when "ended 3:42 PM" joins the line.
                 TimelineView(.explicit(module.center.timer.endedAt.map { [$0.addingTimeInterval(60)] } ?? [])) { _ in
-                    Text(doneLine)
-                        .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    // "ended 3:42 PM" goes first when the line is long, so "1 more done" always shows.
+                    ViewThatFits(in: .horizontal) {
+                        doneText(doneLine(showsEnd: true))
+                        doneText(doneLine(showsEnd: false))
+                        doneText(doneLine(showsEnd: false)).minimumScaleFactor(0.8)
+                    }
                 }
             }
             .accessibilityElement(children: .combine)
@@ -494,20 +495,28 @@ private struct TimerDone: View {
     }
 }
 
-/// What the Done card says under "Done": the name and length, and how many more are done.
+/// What the Done card says under "Done": the name and length, how many more are done, and when it ended.
 extension TimerDone {
-    @MainActor var doneLine: String {
+    @MainActor func doneLine(showsEnd: Bool) -> String {
         let center = module.center
-        var parts = [TimerDoneText.detail(center)]
+        var parts = [TimerDoneText.length(center)]
         if !center.timer.name.isEmpty { parts.insert(center.timer.name, at: 0) }
         let more = center.doneTimers.count - 1
         if more > 0 { parts.append(String(localized: "\(more) more done", comment: "Done card: other timers also finished")) }
+        if showsEnd, let ended = TimerDoneText.ended(center) { parts.append(ended) }
         return parts.joined(separator: " · ")
+    }
+
+    func doneText(_ line: String) -> some View {
+        Text(line)
+            .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.6))
+            .lineLimit(1)
     }
 }
 
 /// Several timers at once (issue #70): a row each, ending soonest first, with +1 min, pause and cancel, and
-/// "+ New timer" under them.
+/// "+ New timer" under them. Rows keep their places while the notch stays open (`listedTimers`).
 private struct TimerList: View {
     let module: TimerModule
     let isCompact: Bool
@@ -518,7 +527,7 @@ private struct TimerList: View {
 
     private var rows: some View {
         let center = module.center
-        let timers = center.sortedTimers
+        let timers = module.listedTimers
         let rowHeight: CGFloat = isCompact ? 26 : 30
         let spacing: CGFloat = 5
         // As many rows as fit above the bottom line; the rest are counted there (soonest first, so the
