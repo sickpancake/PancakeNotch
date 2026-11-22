@@ -21,8 +21,8 @@ public struct DoneSummary: Equatable, Sendable {
     public var hasChanges: Bool { filesChanged > 0 || insertions > 0 || deletions > 0 }
 }
 
-/// Reads a `DoneSummary` with local `git`: once when a turn starts (where HEAD was) and once when it
-/// ends. Event-driven, never on a timer, no network; each run has a short time limit.
+/// Reads a `DoneSummary` with local `git`: once when a turn starts (a snapshot of the folder) and once
+/// when it ends. Event-driven, never on a timer, no network; each run has a short time limit.
 enum GitSummary {
     /// `git` from the Command Line Tools, Xcode or Homebrew. Never `/usr/bin/git`: without the tools it
     /// asks to install them.
@@ -35,30 +35,57 @@ enum GitSummary {
 
     static let timeout: TimeInterval = 2
 
-    /// The commit HEAD points at, or nil outside a repository.
-    static func head(cwd: String) async -> String? {
+    /// The folder as a stretch of work begins: the commit HEAD is on, and a tree of every file in it then
+    /// (uncommitted edits and new files not ignored included), so only what changes after counts.
+    struct Start: Equatable, Sendable {
+        var commit: String?
+        var tree: String?
+    }
+
+    /// Where the folder is now, or nil outside a repository.
+    static func start(cwd: String) async -> Start? {
         await Task.detached(priority: .utility) {
-            run(["rev-parse", "--verify", "-q", "HEAD"], cwd: cwd)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                .nilIfEmpty
+            guard insideWorkTree(cwd) else { return nil }
+            let start = Start(commit: line(["rev-parse", "--verify", "-q", "HEAD"], cwd: cwd), tree: snapshot(cwd: cwd))
+            return start.commit == nil && start.tree == nil ? nil : start
         }.value
     }
 
-    /// What changed since `start` (the commit HEAD was on when the work began; HEAD when unknown): commits
-    /// and uncommitted changes to tracked files, plus new files not ignored. Nil outside a repository.
-    static func summary(cwd: String, since start: String?, branch: String?) async -> DoneSummary? {
+    /// What changed since `start`: commits, edits and new files not ignored. Not knowing the start, it
+    /// counts from HEAD. Nil outside a repository.
+    static func summary(cwd: String, since start: Start?, branch: String?) async -> DoneSummary? {
         await Task.detached(priority: .utility) {
-            guard run(["rev-parse", "--is-inside-work-tree"], cwd: cwd)?.hasPrefix("true") == true else { return nil }
-            let base = start ?? "HEAD"
-            var summary = parseShortstat(run(["diff", "--shortstat", base, "--"], cwd: cwd) ?? "")
+            guard insideWorkTree(cwd), let now = snapshot(cwd: cwd) else { return nil }
+            let base = start?.tree ?? start?.commit ?? line(["rev-parse", "--verify", "-q", "HEAD^{tree}"], cwd: cwd) ?? emptyTree
+            var summary = parseShortstat(run(["diff", "--shortstat", base, now, "--"], cwd: cwd) ?? "")
             summary.branch = branch
-            let untracked = run(["ls-files", "--others", "--exclude-standard", "-z"], cwd: cwd) ?? ""
-            summary.filesChanged += untracked.split(separator: "\0").count
-            if let start {
-                summary.lastCommit = run(["log", "-1", "--format=%s", "\(start)..HEAD", "--"], cwd: cwd)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            if let commit = start?.commit {
+                summary.lastCommit = line(["log", "-1", "--format=%s", "\(commit)..HEAD", "--"], cwd: cwd)
             }
             return summary
         }.value
+    }
+
+    /// The tree object of the folder as it is, tracked and new files alike, written through a copy of
+    /// the index so the user's own index, stash and refs stay untouched.
+    private static func snapshot(cwd: String) -> String? {
+        guard let indexPath = line(["rev-parse", "--path-format=absolute", "--git-path", "index"], cwd: cwd) else { return nil }
+        let index = FileManager.default.temporaryDirectory.appending(path: "PancakeNotch-index-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: index) }
+        try? FileManager.default.copyItem(at: URL(fileURLWithPath: indexPath), to: index)
+        let environment = ["GIT_INDEX_FILE": index.path]
+        guard run(["add", "-A"], cwd: cwd, environment: environment) != nil else { return nil }
+        return line(["write-tree"], cwd: cwd, environment: environment)
+    }
+
+    private static let emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+    private static func insideWorkTree(_ cwd: String) -> Bool {
+        run(["rev-parse", "--is-inside-work-tree"], cwd: cwd)?.hasPrefix("true") == true
+    }
+
+    private static func line(_ arguments: [String], cwd: String, environment: [String: String] = [:]) -> String? {
+        run(arguments, cwd: cwd, environment: environment)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
     /// " 3 files changed, 42 insertions(+), 7 deletions(-)" (either count may be missing; empty: nothing).
@@ -75,7 +102,7 @@ enum GitSummary {
     }
 
     /// Runs git in `cwd`, nil when it fails or takes longer than `timeout`.
-    private static func run(_ arguments: [String], cwd: String) -> String? {
+    private static func run(_ arguments: [String], cwd: String, environment extra: [String: String] = [:]) -> String? {
         guard let executable, cwd.hasPrefix("/"), FileManager.default.fileExists(atPath: cwd) else { return nil }
         let process = Process()
         process.executableURL = executable
@@ -85,6 +112,7 @@ enum GitSummary {
         // Don't take the index lock the agent or the user's own git may need.
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["GIT_TERMINAL_PROMPT"] = "0"
+        environment.merge(extra) { $1 }
         process.environment = environment
         // A file, not a pipe: a process started elsewhere at the same moment can inherit a pipe and keep it
         // open after git exits, so a read to its end could wait forever.

@@ -97,7 +97,7 @@ public final class AgentsCenter {
     /// Each thread's project folder path, for its branch.
     @ObservationIgnored private var cwds: [String: String] = [:]
     /// The commit HEAD was on when each thread's current stretch of work began, for its done summary.
-    @ObservationIgnored private(set) var startCommits: [String: String] = [:]
+    @ObservationIgnored private(set) var starts: [String: GitSummary.Start] = [:]
     /// The finish waiting for its done summary before it peeks: the thread as it was before.
     @ObservationIgnored private var summaryPending: [String: AgentThread] = [:]
     /// Threads whose done summary is being read.
@@ -345,7 +345,7 @@ public final class AgentsCenter {
             if status == .working, previous?.status != .working, !(previous?.status.needsYou ?? false) {
                 thread.workStarted = update.at
                 thread.doneSummary = nil
-                noteStartCommit(of: update.id)
+                noteStart(of: update.id)
             }
             thread.status = status
             thread.statusSince = update.at
@@ -417,7 +417,7 @@ public final class AgentsCenter {
         hostBundleIDs[id] = nil
         links[id] = nil
         cwds[id] = nil
-        startCommits[id] = nil
+        starts[id] = nil
         summaryPending[id] = nil
         summarizing.remove(id)
         hasOwnTitle.remove(id)
@@ -425,14 +425,14 @@ public final class AgentsCenter {
 
     // MARK: Done summary (issue #65)
 
-    /// Where HEAD is as a stretch of work begins, so its summary covers the commits made during it.
-    private func noteStartCommit(of id: String) {
-        startCommits[id] = nil
+    /// The folder as a stretch of work begins, so its summary covers only what changes during it.
+    private func noteStart(of id: String) {
+        starts[id] = nil
         guard !isPractice, let cwd = cwds[id], storage[id]?.isCloud != true else { return }
         Task { [weak self] in
-            let head = await GitSummary.head(cwd: cwd)
+            let start = await GitSummary.start(cwd: cwd)
             guard let self, self.cwds[id] == cwd, self.storage[id]?.status.isFinished == false else { return }
-            self.startCommits[id] = head
+            self.starts[id] = start
         }
     }
 
@@ -440,7 +440,7 @@ public final class AgentsCenter {
     /// this Mac, a cloud session, a practice thread).
     private func summarize(_ id: String) -> Bool {
         guard !isPractice, let cwd = cwds[id], let thread = storage[id], !thread.isCloud, GitSummary.executable != nil else { return false }
-        let start = startCommits[id]
+        let start = starts[id]
         let finishedAt = thread.statusSince
         summarizing.insert(id)
         Task { [weak self] in
