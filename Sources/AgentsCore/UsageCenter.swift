@@ -23,6 +23,10 @@ public final class UsageCenter {
     public private(set) var firstReadProgress: Double?
     /// Changes even when an import only affects days outside the selected notch range.
     public private(set) var historyRevision = 0
+    /// What Devin's cloud sessions used, while Devin cloud is connected (it's then an account of its own).
+    public private(set) var devinUsage: DevinCloudUsage?
+    /// AI Usage came on screen (Devin cloud takes a fresh look).
+    @ObservationIgnored var onViewShown: (@MainActor () -> Void)?
 
     /// The account shown (falls back to all accounts when the saved one is gone).
     public var selection: AccountSelection {
@@ -182,6 +186,7 @@ public final class UsageCenter {
     public func viewShown() {
         viewers += 1
         live?.setVisible(true)
+        onViewShown?()
     }
 
     public func viewHidden() {
@@ -211,7 +216,7 @@ public final class UsageCenter {
 
     func setAccounts(_ found: [AgentAccount]) {
         discoveredAccounts = found
-        accounts = AgentAccount.named(found, nicknames: settings.nicknames)
+        accounts = AgentAccount.named(found + (devinUsage == nil ? [] : [.devinCloud]), nicknames: settings.nicknames)
         limits = limits.filter { id, _ in accounts.contains { $0.id == id } }
         let ids = Set(accounts.map(\.id))
         resetTracker.keep(accountIDs: ids)
@@ -347,6 +352,14 @@ public final class UsageCenter {
         return LimitResetNotice(items: [.init(account: account, reset: LimitReset(accountID: account.id, kind: .session, endedAt: now, leftBefore: 8))])
     }
 
+    /// Devin cloud's sessions of the last 30 days, or nil when it's disconnected (its account goes).
+    func setDevinUsage(_ value: DevinCloudUsage?) {
+        let hadAccount = devinUsage != nil
+        guard devinUsage != value else { return }
+        devinUsage = value
+        if hadAccount != (value != nil) { setAccounts(discoveredAccounts) }
+    }
+
     func setTotals(_ value: UsageTotals) {
         if totals != value { totals = value }
     }
@@ -405,6 +418,18 @@ public final class UsageCenter {
         center.settings.selection = .account(PracticeUsage.accounts[0].id)
         center.settings.range = .today
         center.refreshTotals()
+        return center
+    }
+
+    /// The practice accounts plus Devin cloud with a few pretend sessions (the off-screen snapshot).
+    public static func practiceWithDevin(now: Date = .now) -> UsageCenter {
+        let center = practice(now: now)
+        center.devinUsage = DevinCloudUsage(sessions: [
+            .init(id: "a", title: "Add a dark mode", started: now.addingTimeInterval(-3_600), acus: 6.4),
+            .init(id: "b", title: "Upgrade the date library", started: now.addingTimeInterval(-7_200), acus: 2.1),
+            .init(id: "c", title: "Move the API to v3", started: now.addingTimeInterval(-600), acus: 0.8),
+        ], updatedAt: now)
+        center.accounts = AgentAccount.named(PracticeUsage.accounts + [.devinCloud])
         return center
     }
 
