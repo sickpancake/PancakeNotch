@@ -155,13 +155,19 @@ struct TimerWidget: View {
             .accessibilityLabel(Text(timer.isDone ? String(localized: "Done") : TimerText.spoken(timer.remaining(at: now))))
     }
 
-    private var statusText: String {
-        timer.isDone ? String(localized: "Done") : timer.isPaused ? String(localized: "Paused") : String(localized: "Left")
+    /// "Left", or the timer's name ("Pasta", "Pasta · Paused"), then "+1" for each other timer.
+    var statusText: String {
+        let state = timer.isDone ? String(localized: "Done") : timer.isPaused ? String(localized: "Paused") : String(localized: "Left")
+        var text = timer.name.isEmpty ? state : timer.isRunning ? timer.name : timer.name + " · " + state
+        let others = module.center.timers.count - 1
+        if others > 0 { text += " +\(others)" }
+        return text
     }
 
     private var status: some View {
         Text(statusText)
             .font(.system(size: 10, weight: .medium))
+            .lineLimit(1)
             .foregroundStyle(.white.opacity(0.55))
             .contentTransition(.opacity)
             .animation(.easeInOut(duration: 0.2), value: timer.phase)

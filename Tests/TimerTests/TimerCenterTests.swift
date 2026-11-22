@@ -28,7 +28,7 @@ struct TimerCenterTests {
         let clock = TestClock()
         let center = TimerCenter(defaults: defaults, now: { clock.now })
         var rings = 0
-        center.onFinish = { rings += 1 }
+        center.onFinish = { _ in rings += 1 }
         return (center, clock, { rings })
     }
 
@@ -93,7 +93,7 @@ struct TimerCenterTests {
     @Test func theAlarmGoesOff() async throws {
         let center = TimerCenter()
         var rings = 0
-        center.onFinish = { rings += 1 }
+        center.onFinish = { _ in rings += 1 }
         center.startTimer(seconds: 1)
         // Allows a busy CI machine: a 1-second alarm once took over 5 seconds to come with all the tests running.
         try await settle { rings > 0 }
@@ -104,7 +104,7 @@ struct TimerCenterTests {
     @Test func cancelledItStaysQuiet() async throws {
         let center = TimerCenter()
         var rings = 0
-        center.onFinish = { rings += 1 }
+        center.onFinish = { _ in rings += 1 }
         center.startTimer(seconds: 1)
         center.cancelTimer()
         try await Task.sleep(for: .milliseconds(1_400))
@@ -134,7 +134,7 @@ struct TimerCenterTests {
         center.startTimer(seconds: 60)
         var rings = 0
         let reopened = TimerCenter(defaults: defaults, now: { clock.now + 3_600 })
-        reopened.onFinish = { rings += 1 }
+        reopened.onFinish = { _ in rings += 1 }
         reopened.timeMayHaveJumped()
         #expect(reopened.timer.isDone)
         #expect(reopened.finishedWhileAway)

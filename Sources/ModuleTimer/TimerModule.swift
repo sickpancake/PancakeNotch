@@ -28,6 +28,15 @@ public final class TimerModule: NotchModule {
     var editing: TimerWheelUnit?
     /// Digits typed into the editing wheel so far.
     var typed = ""
+    /// The page shows the presets and wheels for another timer beside those running ("+ New timer").
+    var addingTimer = false
+    /// The list's row order, taken when the notch opens: rows stay put under the pointer while +1 min or
+    /// pause would re-sort them (a second click on the same spot hits the same timer).
+    private var listOrder: [UUID]?
+    /// The next timer's name, typed into the name field ("Pasta").
+    var newName = ""
+    /// The name field has the keyboard: letters go into the name.
+    var editingName = false
     /// The timer finished while the open notch showed another module: a "Timer done" strip shows once
     /// it closes, unless the Done card was seen first (TimerAlarm.tla, PeekOnlyIfMissed).
     private(set) var peekPending = false
@@ -45,6 +54,9 @@ public final class TimerModule: NotchModule {
     @ObservationIgnored private var appSwitchObserver: (any NSObjectProtocol)?
     /// An old observation may already have queued its callback when this copy is reattached.
     @ObservationIgnored private var observationGeneration = 0
+    /// `notch` itself isn't observed: views that checked `earTicks` before `attach` (a timer restored at
+    /// launch) start ticking when this changes.
+    private var isAttached = false
 
     public init(center: TimerCenter, settings: TimerSettings, presents: Bool = true, extraPresets: [TimerPreset] = []) {
         self.center = center
@@ -62,7 +74,10 @@ public final class TimerModule: NotchModule {
 
     public var menuStatus: String? {
         let timer = center.timer
+        let count = center.timers.count
         switch timer.phase {
+        case .running(let end) where count > 1:
+            return String(localized: "\(count) timers, next ends \(TimerText.time(end))", comment: "Module Menu status: several timers")
         case .running(let end): return String(localized: "Ends \(TimerText.time(end))", comment: "Module Menu status")
         case .paused: return String(localized: "Paused", comment: "Module Menu status: the timer")
         case .done: return String(localized: "Done", comment: "Module Menu status: the timer finished")
@@ -82,17 +97,25 @@ public final class TimerModule: NotchModule {
     /// Opening the notch while a timer is done lands on its Done card, also while a song plays.
     public var wantsFocus: Bool { center.timer.isDone }
     public var waitsForYou: Bool { center.timer.isDone }
-    public var holdsOpen: Bool { editing != nil }
+    public var holdsOpen: Bool { editing != nil || editingName }
+
+    /// The presets and wheels show: no timer yet, or "+ New timer" beside the running ones.
+    var showsSetup: Bool { center.timers.isEmpty || (addingTimer && center.canAddTimer) }
 
     public var accessibilityStatus: String? {
         let now = center.now
         let timer = center.timer
-        switch timer.phase {
-        case .running: return String(localized: "Timer, \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
+        let label = TimerText.label(timer)
+        let others = center.timers.count - 1
+        let status: String? = switch timer.phase {
+        case .running: String(localized: "\(label), \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
         // Rounded up, as the countdown shows it.
-        case .paused: return String(localized: "Timer paused, \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
-        case .done: return String(localized: "Timer done")
-        case .idle: break
+        case .paused: String(localized: "\(label) paused, \(TimerText.spoken(timer.remaining(at: now).rounded(.up))) left")
+        case .done: String(localized: "\(label) done")
+        case .idle: nil
+        }
+        if let status {
+            return others > 0 ? status + ", " + String(localized: "\(others) more timers", comment: "VoiceOver: other timers running") : status
         }
         let elapsed = TimerText.spoken(center.stopwatch.elapsed(at: now).rounded(.down))
         if center.stopwatch.isRunning { return String(localized: "Stopwatch, \(elapsed)") }
@@ -104,13 +127,14 @@ public final class TimerModule: NotchModule {
         observationGeneration += 1
         if self.notch !== notch { endEditing() }
         self.notch = notch
+        isAttached = notch != nil
         guard notch != nil else {
             if presents { center.onFinish = nil }
             stopWatchingDisplay()
             endEditing()
             return
         }
-        if presents { center.onFinish = { [weak self] in self?.timerFinished() } }
+        if presents { center.onFinish = { [weak self] timer in self?.timerFinished(timer) } }
         watchDisplay()
         observe()
         notch?.activityChanged()
@@ -138,12 +162,22 @@ public final class TimerModule: NotchModule {
 
     public func notchDidOpen() {
         mode = Self.bestMode(center)
+        listOrder = center.sortedTimers.map(\.id)
         // The Done card is on screen: the finish has been seen.
         if center.timer.isDone, mode == .timer || settings.sideBySide { peekPending = false }
     }
 
     public func notchDidClose() {
         endEditing()
+        listOrder = nil
+    }
+
+    /// The timers in the open list: in the order they had when the notch opened, then any started since
+    /// in the order they were started, so no row moves under the pointer until the notch closes.
+    var listedTimers: [CountdownTimer] {
+        guard let listOrder else { return center.sortedTimers }
+        let kept = listOrder.compactMap(center.timer(id:))
+        return kept + center.timers.filter { !listOrder.contains($0.id) }
     }
 
     public func userSwitchedAway() {
@@ -173,12 +207,13 @@ public final class TimerModule: NotchModule {
             _ = settings.earPlacement
             _ = notch?.state
             _ = center.timer.isIdle
+            _ = showsSetup
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.notch != nil, self.observationGeneration == generation else { return }
                 // A timer started elsewhere (Home's copy shares the center): the wheels are gone, so typing
                 // ends (TimerWheels.tla, TypingOnlyOnScreen).
-                if !self.center.timer.isIdle { self.endEditing() }
+                if !self.showsSetup { self.endEditing() }
                 self.notch?.activityChanged()
                 self.showPendingPeek()
                 self.observe()
@@ -205,7 +240,7 @@ public final class TimerModule: NotchModule {
     /// be seen (TimerAlarm.tla). Open on this module: it shows in place. Open on another: a peek when it
     /// closes. Closed: it opens, or only shows the strip (the "When a timer ends" setting), over a
     /// full-screen app only if the setting says so.
-    private func timerFinished() {
+    private func timerFinished(_ timer: CountdownTimer) {
         TimerSound.play(settings.sound)
         if settings.hapticOnDone {
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
@@ -213,13 +248,14 @@ public final class TimerModule: NotchModule {
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
-            userInfo: [.announcement: String(localized: "Timer finished"), .priority: NSAccessibilityPriorityLevel.high.rawValue]
+            userInfo: [.announcement: String(localized: "\(TimerText.label(timer)) finished", comment: "VoiceOver: a timer ran out"), .priority: NSAccessibilityPriorityLevel.high.rawValue]
         )
         guard let notch else { return }
         notch.activityChanged()
         if notch.state == .expanded {
             if notch.selectedModule === self, !notch.showsHome {
                 endEditing()
+                addingTimer = false
                 mode = .timer
             } else {
                 peekPending = true
@@ -258,10 +294,13 @@ public final class TimerModule: NotchModule {
         if mode == .timer, center.timer.isDone { peekPending = false }
     }
 
+    /// A preset starts with the typed name, else its own.
     func startPreset(_ preset: TimerPreset) {
         notch?.userInteracted()
         endEditing()
-        center.startTimer(seconds: preset.seconds)
+        let name = TimerSettings.cleanName(newName)
+        guard center.startTimer(seconds: preset.seconds, name: name.isEmpty ? preset.name : name) != nil else { return }
+        finishAdding()
     }
 
     func startWheels() {
@@ -269,8 +308,43 @@ public final class TimerModule: NotchModule {
         commitTyping()
         endEditing()
         guard wheelSeconds >= 1 else { return }
-        center.startCustom(seconds: wheelSeconds)
+        guard center.startCustom(seconds: wheelSeconds, name: newName) != nil else { return }
+        finishAdding()
     }
+
+    /// "+ New timer": the presets and wheels, with a name field, beside the timers that run.
+    func beginAdding() {
+        notch?.userInteracted()
+        guard center.canAddTimer else { return }
+        addingTimer = true
+    }
+
+    /// Back to the timers without starting another.
+    func cancelAdding() {
+        notch?.userInteracted()
+        endEditing()
+        finishAdding()
+    }
+
+    private func finishAdding() {
+        addingTimer = false
+        newName = ""
+    }
+
+    /// A click on the name field: type the name. The notch takes the keyboard so the letters reach it.
+    func beginEditingName() {
+        notch?.userInteracted()
+        if editing != nil { commitTyping() }
+        editing = nil
+        editingName = true
+        notch?.requestKeyFocus?()
+        watchClicksAway()
+    }
+
+    func cancelTimer(_ id: UUID) { user { center.cancelTimer(id: id) } }
+    func pauseTimer(_ id: UUID) { user { center.pauseTimer(id: id) } }
+    func resumeTimer(_ id: UUID) { user { center.resumeTimer(id: id) } }
+    func addMinute(_ id: UUID) { user { center.addMinute(id: id) } }
 
     func stopTimer() {
         notch?.userInteracted()
@@ -295,6 +369,7 @@ public final class TimerModule: NotchModule {
         notch?.userInteracted()
         switch mode {
         case .timer:
+            if !center.timer.isDone, showsSetup { return startWheels() }
             switch center.timer.phase {
             case .idle: startWheels()
             case .running: center.pauseTimer()
@@ -322,6 +397,7 @@ public final class TimerModule: NotchModule {
     func beginEditing(_ unit: TimerWheelUnit) {
         notch?.userInteracted()
         if editing != nil { commitTyping() }
+        editingName = false
         editing = unit
         typed = ""
         notch?.requestKeyFocus?()
@@ -329,9 +405,10 @@ public final class TimerModule: NotchModule {
     }
 
     func endEditing() {
-        guard editing != nil else { return }
+        guard editing != nil || editingName else { return }
         commitTyping()
         editing = nil
+        editingName = false
         stopWatchingClicksAway()
         notch?.holdReleased()
     }
@@ -374,7 +451,10 @@ public final class TimerModule: NotchModule {
     public func handleKey(_ event: NSEvent) -> Bool {
         // ⌘, ⌥ and ⌃ shortcuts aren't the Timer's (⌥L isn't a lap).
         guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
-        if let editing, center.timer.isIdle {
+        if editingName, showsSetup, !center.timer.isDone {
+            return handleNameKey(event)
+        }
+        if let editing, showsSetup, !center.timer.isDone {
             return handleEditingKey(event, unit: editing)
         }
         // A held key is one press: holding L doesn't fire a lap 30 times a second, nor Space start/stop.
@@ -391,6 +471,10 @@ public final class TimerModule: NotchModule {
         case 36, 76: // Return
             guard center.timer.isDone else { return false }
             stopTimer()
+            return true
+        case 53: // Esc: back from "+ New timer" to the timers
+            guard addingTimer, !center.timers.isEmpty else { return false }
+            cancelAdding()
             return true
         case 48: // Tab
             guard !settings.sideBySide else { return false }
@@ -413,6 +497,27 @@ public final class TimerModule: NotchModule {
             return true
         }
         return false
+    }
+
+    /// Typing the name: letters, Delete, Return starts the wheels' time, Tab moves to the wheels, Esc
+    /// stops typing (the name stays).
+    private func handleNameKey(_ event: NSEvent) -> Bool {
+        switch event.keyCode {
+        case 53: // Esc
+            endEditing()
+        case 36, 76: // Return
+            startWheels()
+        case 48: // Tab
+            beginEditing(.hours)
+        case 51, 117: // Delete
+            newName = String(newName.dropLast())
+        default:
+            let characters = event.characters ?? ""
+            let printable = characters.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }
+            guard !characters.isEmpty, printable, newName.count + characters.count <= TimerSettings.nameLength else { return true }
+            newName += characters
+        }
+        return true
     }
 
     private func handleEditingKey(_ event: NSEvent, unit: TimerWheelUnit) -> Bool {
@@ -495,12 +600,12 @@ public final class TimerModule: NotchModule {
 
     /// Whether the ear may tick now: shown (compact, awake, on screen) and something counts.
     var earTicks: Bool {
-        !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true && notch?.state == .compact && notch?.earsAsleep == false
+        isAttached && !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true && notch?.state == .compact && notch?.earsAsleep == false
             && (center.timer.isRunning || (center.timer.isIdle && center.stopwatch.isRunning))
     }
 
     /// Practice and live pages also stop updating when their host window is hidden or covered.
-    var pageTicks: Bool { !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true }
+    var pageTicks: Bool { isAttached && !isSnapshot && !isDisplayAsleep && notch?.isOnScreen == true }
 }
 
 /// A wheel in the timer's custom time: hours, minutes or seconds.
