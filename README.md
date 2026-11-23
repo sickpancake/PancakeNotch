@@ -27,7 +27,7 @@ Later: calendar, AirPods/Bluetooth, and more.
 
 PancakeNotch isn't notarized by Apple (that needs a paid developer account), so macOS will warn you the first time:
 
-1. Download `PancakeNotch.zip` from the [website](https://sickpancake.github.io/PancakeNotch/) or [Releases](../../releases), unzip it, and move **PancakeNotch.app** to **Applications**.
+1. Download `PancakeNotch.dmg` from [Releases](../../releases), open it, and drag **PancakeNotch** onto **Applications**. Then eject the PancakeNotch disk in Finder's sidebar. (Releases also have `PancakeNotch.zip`, the same app zipped: unzip it and move **PancakeNotch.app** to **Applications**.)
 2. Open it. macOS will say it can't verify the developer — click **Done**.
 3. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to PancakeNotch.
 4. Confirm. You only need to do this once. After that, PancakeNotch checks for updates once a day and asks before installing one.

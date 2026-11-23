@@ -1,8 +1,8 @@
 name: Release
 
 # Pushing a version tag (e.g. v0.3.0) on a commit that's on main releases that version (ADR-0005): the
-# GitHub Release with PancakeNotch.zip, and the update feed on the website. The notes come from
-# CHANGELOG.md.
+# GitHub Release with PancakeNotch.dmg (to install) and PancakeNotch.zip (for updates), and the update
+# feed on the website. The notes come from CHANGELOG.md.
 #
 # Each job gets only what it needs, so code that runs during the build (the app's packages, the
 # website's npm packages, the tests) never runs next to the signing keys (ADR-0005, 2026-10-28):
@@ -183,7 +183,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/PancakeNotch.zip release/appcast.xml \
+          gh release create "$GITHUB_REF_NAME" release/PancakeNotch.dmg release/PancakeNotch.zip release/appcast.xml \
             --repo "$GITHUB_REPOSITORY" --title "PancakeNotch $VERSION Beta" \
             --notes-file release/notes.md --verify-tag
 

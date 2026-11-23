@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Signs one release: the only step that uses the signing keys (ADR-0005). It takes the app as built and
 # tested elsewhere (an ad hoc signed PancakeNotch.app, zipped) and writes to <folder>:
-#   PancakeNotch.zip  the app signed with the project certificate, for the GitHub Release
+#   PancakeNotch.zip  the app signed with the project certificate, for updates and the GitHub Release
+#   PancakeNotch.dmg  the same app in a disk image people install from, signed too (make-dmg.sh)
 #   appcast.xml       the update feed with this release added, signed with the update key
 #   notes.md          this version's release notes from CHANGELOG.md
 # It runs no build tools, package installs or the app, so nothing else ever runs next to the keys.
@@ -76,6 +77,7 @@ codesign --verify --strict --deep "$APP"
 
 mkdir -p "$OUT"
 ditto -c -k --norsrc --noextattr --noacl --keepParent "$APP" "$OUT/PancakeNotch.zip"
+"$ROOT/scripts/make-dmg.sh" "$APP" "$OUT/PancakeNotch.dmg" "$CODESIGN_IDENTITY"
 
 # The download's update signature, checked with the public key inside the app.
 SIGNED="$(printf '%s' "$UPDATE_KEY" | "$SPARKLE_BIN/sign_update" --ed-key-file - "$OUT/PancakeNotch.zip")"

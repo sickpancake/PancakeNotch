@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Checks a signed release with public information only (no keys), the way people's Macs will see it:
+#   - PancakeNotch.dmg is signed with the project certificate and holds the same app as the zip, a link
+#     to Applications and the window layout;
 #   - the app in PancakeNotch.zip is signed with the project certificate and carries this version, the
 #     update key, and the settings that make it refuse unsigned feeds and downloads;
 #   - every part runs with the hardened runtime, only the app has entitlements (exactly the expected
@@ -19,11 +21,12 @@ UNPACK="${2:?usage: scripts/check-release.sh <release-folder> <unpack-folder>}"
 : "${PANCAKENOTCH_VERSION:?}" "${PANCAKENOTCH_BUILD:?}" "${SPARKLE_PUBLIC_ED_KEY:?}" "${DOWNLOAD_URL:?}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ZIP="$RELEASE/PancakeNotch.zip"
+DMG="$RELEASE/PancakeNotch.dmg"
 FEED="$RELEASE/appcast.xml"
 NOTES="$RELEASE/notes.md"
 
 fail() { echo "$1" >&2; exit 1; }
-for file in "$ZIP" "$FEED" "$NOTES"; do
+for file in "$ZIP" "$DMG" "$FEED" "$NOTES"; do
   [[ -s "$file" ]] || fail "Missing $file."
 done
 [[ ! -e "$UNPACK" || -z "$(ls -A "$UNPACK")" ]] || fail "$UNPACK isn't empty."
@@ -100,6 +103,26 @@ read -r build version url length signature <<<"$entry"
 [[ "$url" == "$DOWNLOAD_URL" ]] || fail "The feed points at $url, not $DOWNLOAD_URL."
 [[ "$length" == "$(stat -f %z "$ZIP")" ]] || fail "The feed's download size doesn't match PancakeNotch.zip."
 swift "$ROOT/scripts/verify-update-signature.swift" "$ZIP" "$signature" "$SPARKLE_PUBLIC_ED_KEY"
+
+# The disk image: signed like the app, and holding exactly the app from the zip.
+codesign --verify --strict "$DMG" || fail "PancakeNotch.dmg's signature doesn't verify."
+authority="$(codesign -dvv "$DMG" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+[[ "$authority" == "PancakeNotch" ]] || fail "PancakeNotch.dmg is signed by '${authority:-nobody}', not the PancakeNotch certificate."
+cdhash() { codesign -dvvv "$1" 2>&1 | sed -n 's/^CDHash=//p'; }
+MOUNT="$(mktemp -d)"
+hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$MOUNT" "$DMG" || fail "PancakeNotch.dmg doesn't open."
+dmg_problem="$(
+  [[ "$(readlink "$MOUNT/Applications")" == /Applications ]] || echo "has no link to Applications"
+  [[ -s "$MOUNT/.DS_Store" && -s "$MOUNT/.background.tiff" ]] || echo "has no window layout"
+  # A valid signature with the zip's code hash means the very same app, byte for byte.
+  codesign --verify --strict --deep "$MOUNT/PancakeNotch.app" 2>/dev/null || echo "holds an app whose signature doesn't verify"
+  [[ "$(cdhash "$MOUNT/PancakeNotch.app")" == "$(cdhash "$APP")" ]] || echo "holds a different app than PancakeNotch.zip"
+  extra="$(ls -A "$MOUNT" | grep -vxE 'PancakeNotch\.app|Applications|\.DS_Store|\.background\.tiff|\.VolumeIcon\.icns|\.fseventsd' | tr '\n' ' ')"
+  [[ -z "$extra" ]] || echo "holds more than the app: $extra"
+  ! strings -a "$MOUNT/.DS_Store" | grep -qE '/Users/' || echo "has a home-folder path in its layout"
+)"
+hdiutil detach -quiet "$MOUNT" && rmdir "$MOUNT"
+[[ -z "$dmg_problem" ]] || fail "PancakeNotch.dmg $dmg_problem."
 
 "$ROOT/scripts/check-release-privacy.sh" "$APP" "$FEED" "$NOTES"
 echo "Release $PANCAKENOTCH_VERSION ($PANCAKENOTCH_BUILD) checks out."

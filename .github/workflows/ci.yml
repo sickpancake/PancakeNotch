@@ -107,8 +107,8 @@ jobs:
         run: ./scripts/build-site.sh "$RUNNER_TEMP/site"
 
   # The release workflow's steps end to end with throwaway keys (nothing is published): build, then
-  # certificate import and trust, signing, the update and feed signatures, the release checks, and the
-  # idle memory of a build that can update itself (Sparkle running). Also checks that the live update
+  # certificate import and trust, signing, the disk image, the update and feed signatures, the release
+  # checks, and the idle memory of a build that can update itself (Sparkle running). Also checks that the live update
   # feed is one the next release will accept, and that a changed or unsigned feed is refused.
   release-dry-run:
     needs: changes
