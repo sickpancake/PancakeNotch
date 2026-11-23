@@ -176,6 +176,33 @@ extension HomeReplayNotch {
         #expect(m.handleKey(escape))
         #expect(!m.isEditingHome && m.showsHome)
     }
+
+    /// ⌘Z and ⇧⌘Z step the shared Home history while editing in the notch (issue #135); plain Z and
+    /// keys after editing ends are not the notch's.
+    @Test func editingUndoRedoKeys() {
+        let m = model()
+        m.home.layout = HomeLayout(placements: [.init(kind: .clock, size: .small, slot: .init(page: 0, column: 0, row: 0))])
+        m.open(); m.beginHomeEditing()
+        m.home.edit { $0.resizing(.clock, to: .medium) }
+        func key(_ modifiers: NSEvent.ModifierFlags) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                             windowNumber: 0, context: nil, characters: "z", charactersIgnoringModifiers: "z",
+                             isARepeat: false, keyCode: 6)!
+        }
+        #expect(m.handleKey(key(.command)))
+        #expect(m.home.layout.placement(of: .clock)?.size == .small)
+        #expect(m.handleKey(key([.command, .shift])))
+        #expect(m.home.layout.placement(of: .clock)?.size == .medium)
+        // An empty history: ⌘Z is still the notch's key and a no-op; plain Z is not.
+        let m2 = model()
+        m2.open(); m2.beginHomeEditing()
+        let before = m2.home.layout
+        #expect(m2.handleKey(key(.command)))
+        #expect(m2.home.layout == before)
+        #expect(!m2.handleKey(key([])))
+        m2.endHomeEditing()
+        #expect(!m2.handleKey(key(.command)))
+    }
 }
 
 extension HomeReplayNotch {

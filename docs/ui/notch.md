@@ -313,7 +313,8 @@ click keeps its usual action. While editing, Home stays open, takes keyboard foc
 widget with a still context. Gentle independent wiggles stop when hidden, when dragging, or with
 Reduce Motion. The shared `HomeWiggle` modifier returns cards to level when disabled.
 
-The band replaces Settings and Edit with Add (Back while choosing a widget) and a prominent Done pill.
+The band replaces Settings and Edit with Add (Back while choosing a widget), a small Undo button
+(⌘Z on the shared history; ⇧⌘Z redoes) and a prominent Done pill.
 Outside editing, Edit beside the gear opens the window's Home editor. Compact icons leave room for
 the one-time intro hint. The hardware notch remains clear.
 
