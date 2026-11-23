@@ -159,6 +159,8 @@ public final class ShelfStore {
         var changed = false
         for index in items.indices where ids.contains(items[index].id) && items[index].isPinned != pinned {
             items[index].isPinned = pinned
+            // An unpinned item gets a fresh auto-clear window instead of expiring on the next open.
+            if !pinned { items[index].addedAt = now() }
             changed = true
         }
         if changed { save() }
@@ -242,8 +244,6 @@ public final class ShelfStore {
     /// `maxAge` (auto-clear). Runs when the notch opens; bookmarks are resolved off the main thread.
     public func prune(maxAge: TimeInterval?) async {
         let cutoff = maxAge.map { now().addingTimeInterval(-$0) }
-        // Pinned items never expire.
-        let expired = items.filter { item in !item.isPinned && (cutoff.map { item.addedAt < $0 } ?? false) }.map(\.id)
         let bookmarks: [(UUID, Data)] = items.compactMap { item in
             guard case .file(let bookmark, _) = item.kind else { return nil }
             return (item.id, bookmark)
@@ -252,6 +252,9 @@ public final class ShelfStore {
             bookmarks.map { ($0.0, ShelfBookmark.resolve($0.1)) }
         }.value
 
+        // Checked after the await, so an item pinned (or unpinned) meanwhile isn't cleared by mistake.
+        // Pinned items never expire.
+        let expired = items.filter { item in !item.isPinned && (cutoff.map { item.addedAt < $0 } ?? false) }.map(\.id)
         var missing: [UUID] = []
         var changed = false
         for (id, resolution) in resolved {

@@ -14,7 +14,8 @@ public struct ShelfItem: Codable, Identifiable, Equatable, Sendable {
     public var kind: Kind
     /// Last known path of a file item, refreshed whenever the notch opens.
     public var path: String?
-    public let addedAt: Date
+    /// When the item was added, or last unpinned: unpinning starts a fresh "Clear the Shelf after" window.
+    public var addedAt: Date
     /// Pinned items sit at the front of the Shelf and are never cleared automatically: not by
     /// "Clear the Shelf after", nor by removing items after dragging them out, nor (unless the user turns
     /// that off) by Clear all.

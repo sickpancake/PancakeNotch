@@ -92,6 +92,19 @@ struct ShelfPinStoreTests {
         #expect(names(store) == ["old pinned", "fresh"])
     }
 
+    @Test func unpinningAnOldItemGivesItAFreshAutoClearWindow() async throws {
+        let fixture = try ShelfFixture()
+        let old = fixture.makeStore()
+        old.add([.text("old pinned")], duplicates: .ask)
+        old.setPinned([try id(old, "old pinned")], true)
+        fixture.clock += 2 * 86_400
+        let store = fixture.makeStore()
+        store.setPinned([try id(store, "old pinned")], false)
+
+        await store.prune(maxAge: 86_400)
+        #expect(names(store) == ["old pinned"])
+    }
+
     @Test func clearCanKeepPinnedItems() throws {
         let fixture = try ShelfFixture()
         let store = fixture.makeStore()
