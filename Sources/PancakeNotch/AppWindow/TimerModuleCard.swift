@@ -101,7 +101,7 @@ struct TimerSettingsRows: View {
             }
             SettingsRow(
                 title: String(localized: "When a timer ends"),
-                subtitle: String(localized: "Open the notch on the Done card, or only slide out a small strip under it. Hover or click to open the card. Either way, Done stays beside the notch until you stop it.")
+                subtitle: String(localized: "Open the notch on the Done card, or show a small strip under it. Hover over the strip to keep it visible. Click it to open the card. Either way, Done stays beside the notch until you stop it.")
             ) {
                 MonochromeSegmented(
                     title: String(localized: "When a timer ends"),

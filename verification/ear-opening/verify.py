@@ -36,7 +36,7 @@ MUTATIONS = [
      "let second: Candidate? = nil", "EarUsabilityVerification", "SECOND_PLACEMENT"),
     ("ear-target-ignored", MODEL, "return (point.x < notch.minX ? allocation.left : allocation.right)?.moduleID",
      "return nil", "OpeningUsabilityVerification/eventOrdersKeepPointingAndOpeningInAgreement", "POINTED_OWNER"),
-    ("strip-target-ignored", MODEL, "if point.y < notch.maxY - geometry.compactHeight {",
+    ("strip-target-ignored", MODEL, "if peekStripContains(point) {",
      "if false {", "OpeningUsabilityVerification/eventOrdersKeepPointingAndOpeningInAgreement", "POINTED_OWNER"),
     ("explicit-target-ignored", MODEL, "if let moduleID, modules.contains(where: { $0.moduleID == moduleID }) {",
      "if let moduleID, false, modules.contains(where: { $0.moduleID == moduleID }) {",

@@ -145,16 +145,86 @@ struct OpeningChoiceTests {
         #expect(model.selectedModule?.moduleID == "nowPlaying")
     }
 
-    @Test func hoveringAStripOpensWhatItIsAbout() async throws {
+    @Test(arguments: [false, true])
+    func hoveringAStripHoldsItAndClickingOpensItsModule(clickOnly: Bool) async throws {
         let pointer = Pointer()
         let (model, _, agents, _) = makeModel(pointer)
-        agents.isActive = true
-        model.activityChanged()
-        #expect(model.peek(agents, for: .seconds(5)))
+        defer { model.reset() }
+        model.behavior.openOnClickOnly = clickOnly
+        #expect(model.peek(agents, for: .milliseconds(40)))
         pointer.location = strip
         model.hoverChanged(true)
-        try await settle(.milliseconds(40)) { model.state == .expanded }
+        try await settle(.milliseconds(0)) { model.isPeekHeld }
+        #expect(model.state == .compact)
+        #expect(model.layout.isPeeking)
+        model.tap()
+        #expect(model.state == .expanded)
+        #expect(model.peekModuleID == nil)
         #expect(model.selectedModule?.moduleID == "agents")
+    }
+
+    // Reaching an ear by crossing the strip opens it after the hover delay, like a direct
+    // entry: no new enter event fires inside the outline. Click-only still needs a click.
+    @Test(arguments: [false, true])
+    func crossingAStripToAnEarStillOpensIt(clickOnly: Bool) async throws {
+        let pointer = Pointer()
+        let (model, _, agents, _) = makeModel(pointer)
+        defer { model.reset() }
+        if !clickOnly {
+            // Open and close by hover first: the finished hover task must not block the crossing below.
+            pointer.location = rightEar
+            model.hoverChanged(true)
+            try await settle(.milliseconds(60)) { model.state == .expanded }
+            #expect(model.state == .expanded)
+            pointer.location = CGPoint(x: 5, y: 5)
+            model.hoverChanged(false)
+            try await settle(.milliseconds(60)) { model.state != .expanded }
+        }
+        model.behavior.openOnClickOnly = clickOnly
+        agents.isActive = true
+        model.activityChanged()
+        #expect(model.peek(agents, for: .milliseconds(500)))
+        pointer.location = strip
+        model.hoverChanged(true)
+        pointer.location = rightEar
+        model.updatePeekHover()
+        if clickOnly {
+            // Nothing is scheduled; wait past openDelay and confirm the ear stayed closed.
+            try await Task.sleep(for: .milliseconds(60))
+            #expect(model.state == .compact)
+        } else {
+            try await settle(.milliseconds(60)) { model.state == .expanded }
+            #expect(model.selectedModule?.moduleID == "agents")
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func peekExpiryDistinguishesTheStripFromAnEar(overStrip: Bool) async throws {
+        let pointer = Pointer()
+        let (model, _, agents, _) = makeModel(pointer)
+        defer { model.reset() }
+        model.behavior.closeDelay = .milliseconds(60)
+        pointer.location = overStrip ? strip : rightEar
+        #expect(model.peek(agents, for: .milliseconds(40)))
+        if overStrip {
+            // Click-only isolates the close path: resting on the ear can't open the notch first.
+            model.behavior.openOnClickOnly = true
+            // A strip can appear under a stationary pointer without an enter event.
+            try await settle(.milliseconds(0)) { model.isPeekHeld }
+            pointer.location = rightEar
+            model.updatePeekHover()
+            #expect(model.layout.isPeeking)
+            pointer.location = strip
+            model.updatePeekHover()
+            #expect(model.isPeekHeld)
+            pointer.location = rightEar
+            model.updatePeekHover()
+            #expect(model.layout.isPeeking)
+        }
+        try await settle(.milliseconds(60)) { model.peekModuleID == nil }
+        #expect(!model.layout.isPeeking)
+        #expect(model.peekModuleID == nil)
+        #expect(model.state == .compact)
     }
 
     // MARK: Opening the usual way
