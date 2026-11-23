@@ -6,6 +6,7 @@ so write them for people using the app: short, plain, no code talk.
 ## Unreleased
 
 - **Notes.** A new module for jotting things down for later, right in the notch: the first line is the title and it saves as you type. Pin the notes you need most, undo a delete, and sort by last edited, newest or oldest.
+- **Find a note fast.** A search field sits above the Notes list: press ⌘F and type a few words. Only notes with all of them stay, pinned ones first, with the words highlighted. Use the arrows and Return to open a match, and Esc to clear. In Notes' settings, hide the field until you search, search titles only, or keep the search for next time.
 - **Text files become notes.** Drop a .txt or .md file on the Shelf (or on Notes) and it's kept as a note. In Notes' settings, choose All text to turn dropped text into notes too, or Off to keep everything on the Shelf.
 - **Notes on Home and in Learn.** Small, medium and large Notes widgets for Home, and a short hands-on Notes lesson.
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.

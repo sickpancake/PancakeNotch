@@ -93,7 +93,7 @@ let package = Package(
         .target(name: "NotesCore", swiftSettings: testing),
         .target(
             name: "ModuleNotes",
-            dependencies: ["NotchCore", "NotesCore"]
+            dependencies: ["NotchCore", "NotesCore", "HotKey"]
         ),
         .testTarget(
             name: "PancakeNotchTests",

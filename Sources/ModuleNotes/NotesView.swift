@@ -38,15 +38,28 @@ struct NotesView: View {
                     NotesEmpty(module: module)
                         .transition(.opacity)
                 } else {
+                    let shown = module.shownNotes
+                    let selected = module.selectedNote(in: shown)
                     HStack(alignment: .top, spacing: 12) {
-                        NotesList(module: module)
-                            .frame(width: layout.listWidth)
-                        if let note = module.selectedNote {
+                        VStack(spacing: 6) {
+                            if module.showsSearchField {
+                                NotesSearchBar(module: module)
+                                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                            }
+                            NotesList(module: module, notes: shown, selectedID: selected?.id)
+                        }
+                        .frame(width: layout.listWidth)
+                        .clipped()
+                        if let note = selected {
                             NotesEditor(module: module, note: note)
                                 .id(note.id)
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
+                        } else if module.isFiltering {
+                            NotesNoMatch(module: module)
+                                .transition(.opacity)
                         }
                     }
+                    .animation(reduceMotion ? .easeInOut(duration: 0.15) : .easeInOut(duration: 0.2), value: module.showsSearchField)
                     .transition(.opacity)
                 }
             }
@@ -58,6 +71,7 @@ struct NotesView: View {
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
         .background(Color.black.opacity(0.001).onTapGesture { module.pageClicked() })
         .onAppear { module.pageShown() }
+        .onDisappear { module.pageHidden() }
         .overlay { NotesDropTarget(isTargeted: module.isDropTargeted).padding(8) }
         .foregroundStyle(.white)
         .animation(.easeInOut(duration: 0.2), value: module.store.notes.isEmpty)
@@ -75,10 +89,20 @@ struct NotesView: View {
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 if !module.store.notes.isEmpty {
-                    Text(NotesText.count(module.store.notes.count))
+                    Text(countText)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
+                        .monospacedDigit()
+                        .lineLimit(1)
                         .contentTransition(.numericText())
+                        .animation(.easeInOut(duration: 0.2), value: countText)
+                }
+                if module.settings.searchField == .whenSearching, !module.store.notes.isEmpty, !module.showsSearchField {
+                    NotchRoundButton(symbol: "magnifyingglass", label: String(localized: "Search Notes"), size: 24) {
+                        module.startSearching()
+                    }
+                    .help(Text("Search (⌘F)"))
+                    .transition(.opacity)
                 }
                 NotchRoundButton(symbol: "square.and.pencil", label: String(localized: "New Note", comment: "Notes"), size: 24) {
                     module.newNote()
@@ -88,6 +112,114 @@ struct NotesView: View {
                 .help(module.store.isFull ? Text("Notes is full. Delete a note to add one.") : Text("New Note (⌘N)"))
             }
             .frame(width: layout.bandSideWidth)
+            .animation(.easeInOut(duration: 0.2), value: module.showsSearchField)
+        }
+    }
+
+    /// "8 notes", or "2 of 8 notes" while a search narrows the list.
+    private var countText: String {
+        let total = module.store.notes.count
+        guard module.isFiltering else { return NotesText.count(total) }
+        return NotesText.matches(module.shownNotes.count, of: total)
+    }
+}
+
+/// The search field above the list: a magnifying glass, the words, and Clear (or a ⌘F hint).
+private struct NotesSearchBar: View {
+    let module: NotesModule
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(module.isSearching ? 0.8 : 0.45))
+                .accessibilityHidden(true)
+            Group {
+                if module.isSnapshot {
+                    Text(module.query.isEmpty ? String(localized: "Search", comment: "Notes: placeholder in the search field") : module.query)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(module.query.isEmpty ? 0.4 : 1))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    NotesSearchField(
+                        text: Binding(get: { module.query }, set: { module.setQuery($0) }),
+                        isFocused: module.isSearching,
+                        scope: module.settings.searchScope,
+                        focusRequest: module.searchFocusRequest
+                    ) { module.startSearching() }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            if !module.query.isEmpty {
+                Button {
+                    module.clearSearch()
+                    module.startSearching()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .help(Text("Clear Search (Esc)"))
+                .accessibilityLabel(Text("Clear Search"))
+                .transition(.opacity)
+            } else if !module.isSearching {
+                Text("⌘F")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.white.opacity(0.06))
+                .strokeBorder(.white.opacity(module.isSearching ? 0.3 : 0.12), lineWidth: 1)
+        )
+        // A click on the magnifying glass or the padding starts typing too, not only on the words.
+        .contentShape(.rect(cornerRadius: 8))
+        .onTapGesture { module.startSearching() }
+        .animation(.easeOut(duration: 0.15), value: module.query.isEmpty)
+        .animation(.easeOut(duration: 0.15), value: module.isSearching)
+    }
+}
+
+/// A search that finds nothing: says so where the note would be, with a way back to every note.
+private struct NotesNoMatch: View {
+    let module: NotesModule
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white.opacity(0.6))
+                .accessibilityHidden(true)
+            Text("No notes match")
+                .font(.system(size: 13, weight: .semibold))
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            NotchPill(title: String(localized: "Clear Search"), symbol: "xmark") {
+                module.clearSearch()
+            }
+            .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var detail: String {
+        let words = module.query.trimmingCharacters(in: .whitespaces)
+        return switch module.settings.searchScope {
+        case .titleAndText: String(localized: "None of your notes has “\(words)”.", comment: "Notes: a search found nothing")
+        case .titlesOnly: String(localized: "No note's title has “\(words)”.", comment: "Notes: a titles-only search found nothing")
         }
     }
 }
@@ -121,6 +253,9 @@ private struct NotesEmpty: View {
 /// The notes, pinned first, with an Undo row after a delete.
 private struct NotesList: View {
     let module: NotesModule
+    /// The notes to list (all, or a search's matches).
+    let notes: [Note]
+    let selectedID: Note.ID?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -141,14 +276,15 @@ private struct NotesList: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: module.store.lastDeleted?.id)
-        .animation(.easeInOut(duration: 0.2), value: module.notes.map(\.id))
+        .animation(.easeInOut(duration: 0.2), value: notes.map(\.id))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Notes list"))
+        .accessibilityLabel(module.isFiltering ? Text("Matching notes") : Text("Notes list"))
     }
 
     private var rows: some View {
-        ForEach(module.notes) { note in
-            NotesRow(module: module, note: note, isSelected: note.id == module.selectedNote?.id)
+        let search = module.search
+        return ForEach(notes) { note in
+            NotesRow(module: module, note: note, isSelected: note.id == selectedID, search: search)
         }
     }
 }
@@ -157,17 +293,19 @@ private struct NotesRow: View {
     let module: NotesModule
     let note: Note
     let isSelected: Bool
+    /// The search, so the words it found are highlighted (empty when not searching).
+    let search: NotesSearch
     @State private var isHovered = false
 
     var body: some View {
         Button { module.select(note.id) } label: {
             HStack(spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(NotesText.title(note))
+                    Text(NotesText.highlighted(NotesText.title(note), search: search))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(note.isEmpty ? 0.5 : 1))
                         .lineLimit(1)
-                    Text(note.preview.isEmpty ? NotesText.when(note.modified, now: module.store.now) : note.preview)
+                    Text(previewText)
                         .font(.system(size: 10.5))
                         .foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1)
@@ -198,6 +336,13 @@ private struct NotesRow: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
         .accessibilityAction(named: note.isPinned ? Text("Unpin") : Text("Pin")) { module.togglePin(note.id) }
         .accessibilityAction(named: Text("Delete")) { module.delete(note.id) }
+    }
+
+    /// The text after the title, starting near the first match while searching, or when it was edited.
+    private var previewText: AttributedString {
+        guard !note.preview.isEmpty else { return AttributedString(NotesText.when(note.modified, now: module.store.now)) }
+        guard search.scope == .titleAndText else { return AttributedString(note.preview) }
+        return NotesText.highlighted(search.snippet(of: note.preview), search: search)
     }
 }
 
@@ -270,7 +415,7 @@ private struct NotesEditor: View {
             }
             Group {
                 if module.isSnapshot {
-                    Text(draft.isEmpty ? String(localized: "Write something…") : draft)
+                    Text(draft.isEmpty ? AttributedString(String(localized: "Write something…")) : NotesText.highlighted(draft, search: module.search))
                         .foregroundStyle(.white.opacity(draft.isEmpty ? 0.4 : 1))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(.horizontal, 5)
@@ -285,7 +430,8 @@ private struct NotesEditor: View {
                         onEdit: { text in
                             draft = text
                             editRevision &+= 1
-                        }
+                        },
+                        search: module.isFiltering ? module.search : nil
                     )
                         .onChange(of: editRevision) { module.edit(note.id, text: draft) }
                         .overlay(alignment: .topLeading) {
