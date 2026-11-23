@@ -111,16 +111,18 @@ authority="$(codesign -dvv "$DMG" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
 cdhash() { codesign -dvvv "$1" 2>&1 | sed -n 's/^CDHash=//p'; }
 MOUNT="$(mktemp -d)"
 hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$MOUNT" "$DMG" || fail "PancakeNotch.dmg doesn't open."
-dmg_problem="$(
+dmg_problems() {
   [[ "$(readlink "$MOUNT/Applications")" == /Applications ]] || echo "has no link to Applications"
   [[ -s "$MOUNT/.DS_Store" && -s "$MOUNT/.background.tiff" ]] || echo "has no window layout"
-  # A valid signature with the zip's code hash means the very same app, byte for byte.
+  # A valid signature with the same code hash as the zip's app means the very same app.
   codesign --verify --strict --deep "$MOUNT/PancakeNotch.app" 2>/dev/null || echo "holds an app whose signature doesn't verify"
   [[ "$(cdhash "$MOUNT/PancakeNotch.app")" == "$(cdhash "$APP")" ]] || echo "holds a different app than PancakeNotch.zip"
-  extra="$(ls -A "$MOUNT" | grep -vxE 'PancakeNotch\.app|Applications|\.DS_Store|\.background\.tiff|\.VolumeIcon\.icns|\.fseventsd' | tr '\n' ' ')"
+  local extra
+  extra="$(ls -A "$MOUNT" | grep -vxE 'PancakeNotch\.app|Applications|\.DS_Store|\.background\.tiff|\.VolumeIcon\.icns|\.fseventsd' | tr '\n' ' ' || true)"
   [[ -z "$extra" ]] || echo "holds more than the app: $extra"
-  ! strings -a "$MOUNT/.DS_Store" | grep -qE '/Users/' || echo "has a home-folder path in its layout"
-)"
+  if strings -a "$MOUNT/.DS_Store" | grep -qE '/Users/'; then echo "has a home-folder path in its layout"; fi
+}
+dmg_problem="$(dmg_problems)"
 hdiutil detach -quiet "$MOUNT" && rmdir "$MOUNT"
 [[ -z "$dmg_problem" ]] || fail "PancakeNotch.dmg $dmg_problem."
 
