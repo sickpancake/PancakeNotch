@@ -595,6 +595,7 @@ private final class ShelfSignals {
         case .dragOutEnded(let accepted): if accepted { runner.receive(.shelfDraggedOut) }
         case .selectionChanged(let count): if count >= 2 { runner.receive(.shelfSeveralSelected) }
         case .cleared: runner.receive(.shelfCleared)
+        case .clipboardOpened: runner.receive(.shelfClipboardOpened)
         case .menuClosed, .airDropped: break
         }
     }

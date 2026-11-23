@@ -142,8 +142,9 @@ struct ShelfPasteTests {
         let fixture = try ShelfFixture()
         let (module, _) = makeModule(fixture, items: [item([(.string, "Same text")])])
         module.paste()
-        module.pasteFeedback = nil
+        #expect(module.pasteFeedback == .pasted(count: 1))
         module.paste()
+        // The card takes over: the first paste's "1 item pasted" doesn't stay above it.
         #expect(module.prompt == .duplicates(inputs: [.text("Same text")], count: 1))
         #expect(module.pasteFeedback == nil)
         #expect(module.store.items.count == 1)
@@ -160,6 +161,16 @@ struct ShelfPasteTests {
         #expect(module.store.items.first?.kind == .text("Old"))
         #expect(module.selection == [module.store.items[0].id])
         #expect(module.pasteFeedback == .pasted(count: 1))
+    }
+
+    /// A copied file that was deleted before the paste adds nothing, so it doesn't claim success.
+    @Test func aMissingFileSaysNothingToPaste() throws {
+        let fixture = try ShelfFixture()
+        let gone = fixture.root.appendingPathComponent("gone.txt")
+        let (module, _) = makeModule(fixture, items: [item([(.fileURL, gone.absoluteString)])])
+        module.paste()
+        #expect(module.store.items.isEmpty)
+        #expect(module.pasteFeedback == .nothing)
     }
 
     /// A full Shelf holds the pasted items back, like dropped ones.

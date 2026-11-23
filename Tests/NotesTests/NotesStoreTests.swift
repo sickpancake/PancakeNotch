@@ -153,10 +153,13 @@ struct NotesStoreTests {
         let defaults = UserDefaults(suiteName: "NotesTests-\(UUID().uuidString)")!
         let settings = NotesSettings(defaults: defaults)
         #expect(settings.isEnabled && settings.shelfText == .textFiles && settings.sort == .recentlyEdited)
+        #expect(settings.showsTextCounts)
         settings.shelfText = .allText
         settings.sort = .oldestFirst
         settings.opensNewNote = true
+        settings.showsTextCounts = false
         let again = NotesSettings(defaults: defaults)
         #expect(again.shelfText == .allText && again.sort == .oldestFirst && again.opensNewNote)
+        #expect(!again.showsTextCounts)
     }
 }

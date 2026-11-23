@@ -42,6 +42,7 @@ struct ModulesView: View {
                     arrangement: context.arrangement,
                     settings: context.shelfSettings,
                     store: context.shelfStore,
+                    screenshots: context.screenshots,
                     showsSettings: settingsBinding("shelf")
                 ) { openLesson(.shelf) }
                 AgentsModuleCard(context: context, showsSettings: settingsBinding("agents")) { openLesson(.agents) }
@@ -953,6 +954,7 @@ private struct ShelfModuleCard: View {
     let arrangement: ModuleArrangement
     @Bindable var settings: ShelfSettings
     let store: ShelfStore
+    let screenshots: ShelfScreenshots?
     @Binding var showsSettings: Bool
     let learn: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -990,7 +992,7 @@ private struct ShelfModuleCard: View {
                 settingsToggle
                 if showsSettings {
                     AppPalette.hairline.frame(height: 1)
-                    ShelfSettingsRows(settings: settings, store: store)
+                    ShelfSettingsRows(settings: settings, store: store, screenshots: screenshots)
                         .transition(.opacity)
                 }
             }
@@ -1061,6 +1063,7 @@ private struct ShelfModuleCard: View {
 private struct ShelfSettingsRows: View {
     @Bindable var settings: ShelfSettings
     let store: ShelfStore
+    let screenshots: ShelfScreenshots?
     @State private var confirmingClear = false
 
     var body: some View {
@@ -1095,6 +1098,7 @@ private struct ShelfSettingsRows: View {
             // The question is about the items it names: ask again if they change.
             .onChange(of: store.items.count) { confirmingClear = false }
         }
+        ShelfScreenshotsRow(settings: settings, screenshots: screenshots)
         if MissionControlDragGuard.isNeeded {
             SettingsRow(
                 title: String(localized: "Dragging a file to the top"),
@@ -1177,7 +1181,66 @@ private struct ShelfSettingsRows: View {
             Toggle(String(localized: "Show the Shelf's count beside the notch"), isOn: $settings.showsInEars)
                 .labelsHidden()
         }
+        SettingsRow(
+            title: String(localized: "Remember what I copy"),
+            subtitle: String(localized: "Keeps your last few copies of text, links and images in the Shelf's Clipboard row. Passwords are skipped, and nothing is kept after PancakeNotch quits.")
+        ) {
+            Toggle(String(localized: "Remember what I copy"), isOn: $settings.remembersCopies)
+                .labelsHidden()
+        }
+        if settings.remembersCopies {
+            SettingsRow(
+                title: String(localized: "Copies to keep"),
+                subtitle: String(localized: "Pinned copies stay and don't count.")
+            ) {
+                MonochromeSegmented(
+                    title: String(localized: "Copies to keep"),
+                    options: ShelfSettings.clipboardLengths.map { ($0, "\($0)") },
+                    selection: $settings.clipboardLength
+                )
+            }
+        }
         ShelfConvertSettingsRows(settings: settings)
+    }
+}
+
+/// "Catch new screenshots": the switch, which folder it watches, and what to do when macOS keeps
+/// PancakeNotch out of that folder or screenshots aren't saved as files.
+private struct ShelfScreenshotsRow: View {
+    @Bindable var settings: ShelfSettings
+    let screenshots: ShelfScreenshots?
+
+    var body: some View {
+        SettingsRow(title: String(localized: "Catch new screenshots"), subtitle: subtitle) {
+            HStack(spacing: 8) {
+                if isDenied {
+                    Button(String(localized: "Open System Settings…")) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    Button(String(localized: "Try Again")) { screenshots?.tryAgain() }
+                }
+                Toggle(String(localized: "Catch new screenshots"), isOn: $settings.catchesScreenshots)
+                    .labelsHidden()
+            }
+        }
+    }
+
+    private var isOn: Bool { settings.catchesScreenshots && settings.isEnabled }
+    private var isDenied: Bool { isOn && screenshots?.access == .denied }
+
+    private var subtitle: String {
+        guard isOn, let location = screenshots?.location else {
+            return String(localized: "New screenshots land on the Shelf, with a short note under the notch. The Shelf keeps up to \(ShelfStore.capacity) items.")
+        }
+        if !location.savesFiles {
+            return String(localized: "Your screenshots aren't saved as files right now. To save them, press ⇧⌘5, click Options and choose a folder under Save to.")
+        }
+        if isDenied {
+            return String(localized: "PancakeNotch can't see your \(location.folderName) folder. Turn it on for PancakeNotch under Files and Folders, then click Try Again.", comment: "Shelf settings; the screenshot folder's name")
+        }
+        return String(localized: "New screenshots from your \(location.folderName) folder land on the Shelf, with a short note under the notch. The Shelf keeps up to \(ShelfStore.capacity) items.", comment: "Shelf settings; the screenshot folder's name")
     }
 }
 

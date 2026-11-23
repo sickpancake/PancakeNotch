@@ -30,9 +30,14 @@ struct ShelfView: View {
                     if let count = module.notedCount, module.dropZone == nil {
                         ShelfNotedBadge(count: count)
                             .transition(.opacity)
+                    } else if let feedback = module.pasteFeedback, module.dropZone == nil, module.prompt == nil {
+                        // Over the tiles, not in the header: beside the default tabs there's no room for it.
+                        ShelfPasteBadge(feedback: feedback)
+                            .transition(.opacity)
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: module.notedCount)
+                .animation(.easeOut(duration: 0.2), value: module.pasteFeedback)
                 .padding(.top, layout.content.minY - layout.bandHeight)
             Spacer(minLength: 0)
         }
@@ -50,6 +55,8 @@ struct ShelfView: View {
             ShelfDropZones(zone: zone, convert: module.convertZone, showsAirDrop: module.dragCanAirDrop, layout: layout)
         } else if let prompt = module.prompt, !module.isChoosing {
             ShelfPromptCard(module: module, prompt: prompt)
+        } else if module.showsClipboard, let clipboard = module.clipboard {
+            ShelfClipboardRow(module: module, clipboard: clipboard)
         } else if module.store.items.isEmpty {
             ShelfEmptyView()
         } else {
@@ -82,6 +89,23 @@ private struct ShelfNotedBadge: View {
     }
 }
 
+/// Shown for a moment after a paste: what it added, or that there was nothing to paste.
+private struct ShelfPasteBadge: View {
+    let feedback: ShelfModule.PasteFeedback
+
+    var body: some View {
+        Label(feedback.message, systemImage: "doc.on.clipboard")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true) // Already read out by the announcement.
+    }
+}
+
 // MARK: Header
 
 private struct ShelfHeader: View {
@@ -102,6 +126,20 @@ private struct ShelfHeader: View {
                         Color.clear.frame(width: 0)
                     }
                     .font(.system(size: 12, weight: .semibold))
+                } else if module.showsClipboard, let clipboard = module.clipboard {
+                    if barWidth == 0 {
+                        Text("Clipboard", comment: "The Shelf's row of recent copies")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        Text(clipboard.showsTooLarge ? String(localized: "Too large to keep", comment: "A copy was too big for clipboard history")
+                             : clipboard.entries.count == 1 ? String(localized: "1 copy")
+                             : String(localized: "\(clipboard.entries.count) copies", comment: "Number of recent copies in the Shelf's Clipboard row"))
+                        Color.clear.frame(width: 0)
+                    }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .monospacedDigit()
                 } else {
                     if barWidth == 0 {
                         Text("Shelf")
@@ -113,7 +151,7 @@ private struct ShelfHeader: View {
                             Color.clear.frame(width: 0)
                         }
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(module.pasteFeedback == nil ? 0.5 : 0.85))
+                        .foregroundStyle(.white.opacity(0.5))
                         .monospacedDigit()
                         .contentTransition(.opacity)
                         .animation(.easeOut(duration: 0.2), value: status)
@@ -137,6 +175,27 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if module.showsClipboard, module.dropZone == nil, module.prompt == nil {
+                    if module.clipboard?.entries.contains(where: { !$0.isPinned }) == true {
+                        ShelfPillButton(title: String(localized: "Clear", comment: "Removes unpinned recent copies")) {
+                            module.clipboard?.removeAll()
+                        }
+                    }
+                    ShelfPillButton(title: String(localized: "Shelf", comment: "Switches from the Clipboard row back to the Shelf's items")) {
+                        module.showClipboard(false)
+                    }
+                } else if module.hasClipboard, module.dropZone == nil, module.prompt == nil {
+                    // Beside the drag handle and Clear all the room is tight: shorter labels, never "Clipboa…".
+                    if count > 0 {
+                        ViewThatFits(in: .horizontal) {
+                            clipboardHeader(count: count, clearAll: String(localized: "Clear all"))
+                            clipboardHeader(count: count, clearAll: String(localized: "Clear", comment: "Short form of \"Clear all\" when space is tight"))
+                            clipboardHeader(count: count, clearAll: String(localized: "Clear", comment: "Short form of \"Clear all\" when space is tight"), iconOnly: true)
+                        }
+                    } else {
+                        if module.settings.pasteEnabled { ShelfPasteButton(module: module, compact: false) }
+                        clipboardPill()
+                    }
                 } else if count == 0, module.dropZone == nil, module.prompt == nil, module.settings.pasteEnabled {
                     ShelfPasteButton(module: module, compact: false)
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
@@ -154,19 +213,10 @@ private struct ShelfHeader: View {
         }
     }
 
-    /// The item count, or for a moment after ⌘V what the paste did.
     private func status(count: Int) -> String? {
-        switch module.pasteFeedback {
-        case .pasted(let pasted):
-            pasted == 1 ? String(localized: "1 item pasted", comment: "Shelf: what ⌘V added")
-                : String(localized: "\(pasted) items pasted", comment: "Shelf: what ⌘V added")
-        case .nothing:
-            String(localized: "Nothing to paste", comment: "Shelf: ⌘V with an empty clipboard, or one the Shelf can't take")
-        case nil:
-            count == 0 ? nil
-                : count == 1 ? String(localized: "1 item")
-                : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
-        }
+        count == 0 ? nil
+            : count == 1 ? String(localized: "1 item")
+            : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
     }
 }
 
@@ -176,6 +226,8 @@ private struct ShelfPasteButton: View {
     let module: ShelfModule
     let compact: Bool
     @State private var isHovered = false
+    /// `.key` only while the notch has the keyboard: opened by hovering, ⌘V still goes to the app behind it.
+    @Environment(\.controlActiveState) private var activeState
 
     var body: some View {
         Button {
@@ -188,7 +240,13 @@ private struct ShelfPasteButton: View {
                     .frame(width: 28, height: 22)
                     .background(.white.opacity(isHovered ? 0.2 : 0.12), in: Capsule())
             } else {
-                Text("⌘V to paste", comment: "Shelf header: the keyboard shortcut that pastes, also a button")
+                Group {
+                    if activeState == .key {
+                        Text("⌘V to paste", comment: "Shelf header: the keyboard shortcut that pastes, also a button")
+                    } else {
+                        Text("Click to paste", comment: "Shelf header: paste button while ⌘V would go to another app")
+                    }
+                }
                     .font(.system(size: 11.5))
                     .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.5))
                     .lineLimit(1)
@@ -202,6 +260,28 @@ private struct ShelfPasteButton: View {
         .help(String(localized: "Paste what you copied (⌘V)", comment: "Shelf: tooltip on the paste button"))
         .accessibilityLabel(Text("Paste", comment: "Shelf: VoiceOver name of the paste button"))
         .accessibilityHint(Text("Adds the files, pictures, links or text you copied to the Shelf."))
+    }
+}
+
+extension ShelfHeader {
+    private func clipboardPill(iconOnly: Bool = false) -> some View {
+        ShelfPillButton(
+            title: String(localized: "Clipboard", comment: "Shows the Shelf's row of recent copies"),
+            symbol: iconOnly ? "doc.on.clipboard" : nil
+        ) { module.showClipboard(true) }
+    }
+
+    private func clipboardHeader(count: Int, clearAll: String, iconOnly: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            clipboardPill(iconOnly: iconOnly)
+            ShelfDragAllHandle(module: module)
+            ShelfPillButton(
+                title: !module.confirmingClear ? clearAll
+                    : count == 1 ? String(localized: "Clear 1 item?")
+                    : String(localized: "Clear \(count) items?", comment: "Second click confirms clearing the shelf"),
+                prominent: module.confirmingClear
+            ) { module.clearAll() }
+        }
     }
 }
 
@@ -231,6 +311,8 @@ extension View {
 
 struct ShelfPillButton: View {
     let title: String
+    /// Shown instead of the title when room is short; the title stays as the VoiceOver label.
+    var symbol: String? = nil
     var prominent = false
     /// The keyboard (Tab) is on this button.
     var isKeyFocused = false
@@ -240,7 +322,13 @@ struct ShelfPillButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Group {
+                if let symbol {
+                    Image(systemName: symbol).accessibilityLabel(Text(title))
+                } else {
+                    Text(title)
+                }
+            }
                 .font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(1)
                 .foregroundStyle(prominent ? .black : .white)

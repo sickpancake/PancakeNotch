@@ -238,6 +238,18 @@ struct HelpView: View {
                             .disabled(settings.convertQuality == .smaller)
                     }
                 }
+                if settings.catchesScreenshots {
+                    SettingsRow(
+                        title: String(localized: "A screenshot doesn't land on the Shelf"),
+                        subtitle: String(localized: "Only screenshots from your Mac's own tool (⇧⌘3, ⇧⌘4, ⇧⌘5) are caught, from the folder it saves to. If macOS asked about that folder and you said no, turn PancakeNotch on under Files and Folders.")
+                    ) {
+                        Button(String(localized: "Open Files and Folders")) {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                }
                 SettingsRow(
                     title: String(localized: "An item disappeared"),
                     subtitle: String(localized: "The Shelf only remembers where files are. Moved or renamed files stay; a deleted file leaves the Shelf the next time the notch opens.")
@@ -251,6 +263,18 @@ struct HelpView: View {
                     subtitle: String(localized: "\(store.items.count) of \(ShelfStore.capacity) now. When it's full, the notch shows what didn't fit and lets you make room.")
                 ) {
                     EmptyView()
+                }
+                SettingsRow(
+                    title: settings.remembersCopies
+                        ? String(localized: "Finding something you copied")
+                        : String(localized: "Clipboard history is off"),
+                    subtitle: settings.remembersCopies
+                        ? String(localized: "Open the Shelf and click Clipboard, or press Tab. Passwords and other private copies are skipped, and the history is forgotten when PancakeNotch quits.")
+                        : String(localized: "Turn on Remember what I copy in Shelf settings to keep your last few copies in the Shelf.")
+                ) {
+                    if !settings.remembersCopies {
+                        Button(String(localized: "Turn On")) { settings.remembersCopies = true }
+                    }
                 }
             }
             MoreOnlineRow(topic: .shelf)
