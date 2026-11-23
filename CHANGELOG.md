@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Install from a disk image.** Each release now comes as PancakeNotch.dmg: open it and drag PancakeNotch onto Applications.
 - **Notes.** A new module for jotting things down for later, right in the notch: the first line is the title and it saves as you type. Pin the notes you need most, undo a delete, and sort by last edited, newest or oldest.
 - **Find a note fast.** A search field sits above the Notes list: press ⌘F and type a few words. Only notes with all of them stay, pinned ones first, with the words highlighted. Use the arrows and Return to open a match, and Esc to clear. In Notes' settings, hide the field until you search, search titles only, or keep the search for next time.
 - **Text files become notes.** Drop a .txt or .md file on the Shelf (or on Notes) and it's kept as a note. In Notes' settings, choose All text to turn dropped text into notes too, or Off to keep everything on the Shelf.
