@@ -1,16 +1,24 @@
 name: Benchmark
 
-# Builds main (or another base) and this branch on the same machine and measures both (scripts/benchmark.sh):
+# Builds this branch and an earlier build on the same machine and measures both (scripts/benchmark.sh):
 # launch time, memory, CPU and download size. The table appears on the run's summary page.
+#
+# It holds a Mac for about 25 minutes, so it runs only before a release, not on every pull request:
+#   - on the release pull request (a branch named release/vX.Y.Z), against the last release;
+#   - by hand (Actions › Benchmark › Run workflow), against the last release or the base you name;
+#   - on perf-exp-* branches (experiments, measured without a pull request), against main.
 on:
   pull_request:
   push:
-    branches: ["perf-exp-*"]   # experiments, measured without a pull request
+    branches: ["perf-exp-*"]
   workflow_dispatch:
     inputs:
       runs:
         description: Runs per build (the table shows medians)
         default: "3"
+      base:
+        description: Compare with this branch, tag or commit (empty = the last release)
+        default: ""
 
 permissions:
   contents: read
@@ -22,6 +30,8 @@ concurrency:
 
 jobs:
   compare:
+    # Other pull requests get a skipped run (no Mac). Benchmark isn't a required check.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/')
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -39,15 +49,23 @@ jobs:
       - name: Build this branch
         run: ./scripts/build-app.sh release && mv build/PancakeNotch.app "$RUNNER_TEMP/branch.app"
       # An experiment can compare against another branch and take more runs: a `.benchmark-base`
-      # file holding "<branch, tag or commit> [runs]".
+      # file holding "<branch, tag or commit> [runs]". Without one, experiments compare with main and
+      # everything else with the last release (the newest vX.Y.Z tag), which is what a release changes.
       - name: Build the comparison
         env:
           INPUT_RUNS: ${{ inputs.runs }}
+          INPUT_BASE: ${{ inputs.base }}
         run: |
           read -r BASE RUNS < .benchmark-base 2>/dev/null || true
-          echo "BASE=${BASE:-main}" >> "$GITHUB_ENV"
+          BASE="${INPUT_BASE:-$BASE}"
+          if [[ -z "$BASE" && "$GITHUB_REF_NAME" == perf-exp-* ]]; then
+            BASE=main
+          fi
+          BASE="${BASE:-$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)}"
+          BASE="${BASE:-main}"
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
           echo "RUNS=${RUNS:-$INPUT_RUNS}" >> "$GITHUB_ENV"
-          COMPARISON="${BASE:-main}"
+          COMPARISON="$BASE"
           if git show-ref --verify --quiet "refs/remotes/origin/$COMPARISON"; then
             COMPARISON="refs/remotes/origin/$COMPARISON"
           fi
