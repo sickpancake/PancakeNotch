@@ -33,16 +33,19 @@ enum ShelfDropReader {
     }
 
     /// Reads the drop. Image data and long text are written straight to disk (never decoded) via `newFolder`.
-    static func read(_ pasteboard: NSPasteboard, newFolder: () throws -> URL) -> ShelfDrop {
+    /// `readsPromises` is off for the clipboard (⌘V): file promises only work while dragging, so a copied
+    /// picture falls through to its image data instead of waiting for a file that never comes.
+    static func read(_ pasteboard: NSPasteboard, readsPromises: Bool = true, newFolder: () throws -> URL) -> ShelfDrop {
         var drop = ShelfDrop()
         // One receiver per promised pasteboard item, in item order.
-        var receivers = ((pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self]) as? [NSFilePromiseReceiver]) ?? [])
-            .makeIterator()
+        var receivers = (readsPromises
+            ? (pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self]) as? [NSFilePromiseReceiver]) ?? []
+            : []).makeIterator()
 
         var remaining = dropLimit
         for item in pasteboard.pasteboardItems ?? [] {
             let types = item.types
-            let promise = types.contains { promiseTypes.contains($0.rawValue) } ? receivers.next() : nil
+            let promise = readsPromises && types.contains { promiseTypes.contains($0.rawValue) } ? receivers.next() : nil
 
             // A real file wins over a promised copy: the Shelf keeps a reference, not a duplicate.
             if let string = string(item, type: .fileURL, remaining: &remaining), let url = URL(string: string), url.isFileURL {

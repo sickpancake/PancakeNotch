@@ -126,16 +126,17 @@ private struct ShelfHeader: View {
                     if count > 0 {
                         let items = count == 1 ? String(localized: "1 item") : String(localized: "\(count) items", comment: "Shelf item count in the notch header")
                         let pinned = module.store.pinnedCount
+                        let status = pinned > 0 ? String(localized: "\(items) · \(pinned) pinned", comment: "Shelf header; item count, then how many are pinned") : items
                         ViewThatFits(in: .horizontal) {
-                            if pinned > 0 {
-                                Text("\(items) · \(pinned) pinned", comment: "Shelf header; item count, then how many are pinned")
-                            }
+                            Text(status)
                             Text(items)
                             Color.clear.frame(width: 0)
                         }
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.5))
                         .monospacedDigit()
+                        .contentTransition(.opacity)
+                        .animation(.easeOut(duration: 0.2), value: status)
                     }
                 }
             }
@@ -156,6 +157,17 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if let feedback = module.pasteFeedback, module.dropZone == nil, module.prompt == nil {
+                    // For a moment, in place of the buttons: the left half has no room beside the default
+                    // tabs, and over the tiles it would hide their previews.
+                    Label(feedback.message, systemImage: "doc.on.clipboard")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(height: 22)
+                        .transition(.opacity)
+                        .accessibilityHidden(true) // Already read out by the announcement.
                 } else if let note = module.pinNote, module.dropZone == nil, module.prompt == nil {
                     ShelfPinNoteView(module: module, note: note)
                         .transition(.opacity)
@@ -178,10 +190,14 @@ private struct ShelfHeader: View {
                             clipboardHeader(count: clearable, clearAll: String(localized: "Clear", comment: "Short form of \"Clear all\" when space is tight"), iconOnly: true)
                         }
                     } else {
+                        if module.settings.pasteEnabled { ShelfPasteButton(module: module, compact: false) }
                         clipboardPill()
                     }
+                } else if count == 0, module.dropZone == nil, module.prompt == nil, module.settings.pasteEnabled {
+                    ShelfPasteButton(module: module, compact: false)
                 } else if count > 0, module.dropZone == nil, module.prompt == nil {
                     let clearable = module.clearableCount
+                    if module.settings.pasteEnabled { ShelfPasteButton(module: module, compact: true) }
                     ShelfDragAllHandle(module: module)
                     if clearable > 0 {
                         ShelfPillButton(
@@ -196,9 +212,57 @@ private struct ShelfHeader: View {
             }
             .animation(.easeInOut(duration: 0.2), value: module.pinNote)
             .frame(width: layout.headerSideWidth, alignment: .trailing)
+            .animation(.easeOut(duration: 0.2), value: module.pasteFeedback)
         }
     }
 
+}
+
+/// "⌘V to paste" in the empty Shelf's header, a clipboard button beside "drag all" once it has items.
+/// A click pastes too, and takes keyboard focus so the next ⌘V reaches the Shelf.
+private struct ShelfPasteButton: View {
+    let module: ShelfModule
+    let compact: Bool
+    @State private var isHovered = false
+    /// `.key` only while the notch has the keyboard: opened by hovering, ⌘V still goes to the app behind it.
+    @Environment(\.controlActiveState) private var activeState
+
+    var body: some View {
+        Button {
+            module.requestFocus()
+            module.paste()
+        } label: {
+            if compact {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 28, height: 22)
+                    .background(.white.opacity(isHovered ? 0.2 : 0.12), in: Capsule())
+            } else {
+                Group {
+                    if activeState == .key {
+                        Text("⌘V to paste", comment: "Shelf header: the keyboard shortcut that pastes, also a button")
+                    } else {
+                        Text("Click to paste", comment: "Shelf header: paste button while ⌘V would go to another app")
+                    }
+                }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.5))
+                    .lineLimit(1)
+                    .frame(height: 22)
+                    .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .help(activeState == .key ? String(localized: "Paste what you copied (⌘V)", comment: "Shelf: tooltip on the paste button")
+              : String(localized: "Paste what you copied", comment: "Shelf: tooltip on the paste button while ⌘V would go to another app"))
+        .accessibilityLabel(Text("Paste", comment: "Shelf: VoiceOver name of the paste button"))
+        .accessibilityHint(Text("Adds the files, pictures, links or text you copied to the Shelf."))
+    }
+}
+
+extension ShelfHeader {
     private func clipboardPill(iconOnly: Bool = false) -> some View {
         ShelfPillButton(
             title: String(localized: "Clipboard", comment: "Shows the Shelf's row of recent copies"),

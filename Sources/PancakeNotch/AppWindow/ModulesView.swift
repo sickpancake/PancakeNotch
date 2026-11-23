@@ -1177,6 +1177,13 @@ private struct ShelfSettingsRows: View {
             )
         }
         SettingsRow(
+            title: String(localized: "Paste with ⌘V"),
+            subtitle: String(localized: "In the open Shelf, ⌘V adds the files, pictures, links or text you copied. It works once the Shelf has the keyboard: open it with your shortcut, or click it first.")
+        ) {
+            Toggle(String(localized: "Paste with ⌘V"), isOn: $settings.pasteEnabled)
+                .labelsHidden()
+        }
+        SettingsRow(
             title: String(localized: "Show AirDrop while dragging"),
             subtitle: String(localized: "Drop on it to send right away, without keeping the item.")
         ) {

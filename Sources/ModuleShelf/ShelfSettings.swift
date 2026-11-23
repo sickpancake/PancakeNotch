@@ -60,6 +60,8 @@ public final class ShelfSettings {
     public var dragToTop: DragToTop { didSet { defaults.set(dragToTop.rawValue, forKey: Keys.dragToTop) } }
     /// The compact ear from 15 items and the short pop-up after a drop.
     public var showsInEars: Bool { didSet { defaults.set(showsInEars, forKey: Keys.showsInEars) } }
+    /// ⌘V in the open Shelf, and its "⌘V to paste" button, add what's on the clipboard like a drop.
+    public var pasteEnabled: Bool { didSet { defaults.set(pasteEnabled, forKey: Keys.paste) } }
     /// Off by default: the Shelf only watches the clipboard once you ask it to (#79).
     public var remembersCopies: Bool { didSet { defaults.set(remembersCopies, forKey: Keys.remembersCopies) } }
     /// How many recent copies the Clipboard keeps, not counting pinned ones.
@@ -94,6 +96,7 @@ public final class ShelfSettings {
         let length = defaults.integer(forKey: Keys.clipboardLength)
         clipboardLength = Self.clipboardLengths.contains(length) ? length : 10
         dragToTop = defaults.string(forKey: Keys.dragToTop).flatMap(DragToTop.init(rawValue:)) ?? .openShelf
+        pasteEnabled = defaults.object(forKey: Keys.paste) as? Bool ?? true
         convertEnabled = defaults.object(forKey: Keys.convertEnabled) as? Bool ?? true
         convertDestination = defaults.string(forKey: Keys.convertDestination).flatMap(ConvertDestination.init(rawValue:)) ?? .nextToOriginal
         convertFolder = defaults.string(forKey: Keys.convertFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -114,6 +117,7 @@ public final class ShelfSettings {
         static let remembersCopies = "shelf.clipboard.enabled"
         static let clipboardLength = "shelf.clipboard.length"
         static let dragToTop = "shelf.dragToTop"
+        static let paste = "shelf.paste"
         static let convertEnabled = "shelf.convert.enabled"
         static let convertDestination = "shelf.convert.destination"
         static let convertFolder = "shelf.convert.folder"

@@ -117,6 +117,27 @@ public final class ShelfModule: NotchModule {
     var copiedID: UUID?
     /// How many dropped things just became notes, for a brief "Saved as a note" flash.
     var notedCount: Int?
+    /// What the header says for a moment after a paste (⌘V or the "⌘V to paste" button).
+    enum PasteFeedback: Equatable {
+        case pasted(count: Int)
+        /// The clipboard is empty, or holds nothing the Shelf takes (a colour, a private app format).
+        case nothing
+
+        var message: String {
+            switch self {
+            case .pasted(let count):
+                count == 1 ? String(localized: "1 item pasted", comment: "Shelf: what ⌘V added")
+                    : String(localized: "\(count) items pasted", comment: "Shelf: what ⌘V added")
+            case .nothing:
+                String(localized: "Nothing to paste", comment: "Shelf: ⌘V with an empty clipboard, or one the Shelf can't take")
+            }
+        }
+    }
+    var pasteFeedback: PasteFeedback?
+    /// Each flash's own number, so an older flash's timer never clears a newer identical one.
+    @ObservationIgnored private var pasteFeedbackToken = 0
+    /// The clipboard a paste reads: the system's, a private one in tests.
+    @ObservationIgnored var pasteboardForPaste: @MainActor () -> NSPasteboard = { .general }
     /// "Pinned" with Undo in the header for a moment after pinning or unpinning (ShelfPinning.swift).
     var pinNote: ShelfPinNote?
     /// The item shown in the tall notch (text editor, link editor or file preview). Holds the notch open.
@@ -278,6 +299,7 @@ public final class ShelfModule: NotchModule {
         thumbnails.clear()
         selection = []
         confirmingClear = false
+        pasteFeedback = nil
         dropZone = nil
         convertZone = nil
         if prompt != nil { dismissPrompt() }
@@ -452,6 +474,16 @@ public final class ShelfModule: NotchModule {
             return true
         }
         if showsClipboard, let clipboard { return handleClipboardKey(event, clipboard) }
+        switch Self.editAction(for: event) {
+        case #selector(NSText.paste(_:)):
+            // Off in settings: the key isn't the Shelf's.
+            return paste()
+        case #selector(NSText.copy(_:)) where !selection.isEmpty && prompt == nil:
+            copy(store.items.filter { selection.contains($0.id) })
+            return true
+        default:
+            break
+        }
         if isChoosing, let handled = handleChoosingKey(event) { return handled }
         switch event.keyCode {
         case 49: // Space, like a click: show the item in the tall notch
@@ -753,6 +785,71 @@ public final class ShelfModule: NotchModule {
         }
         // File names are known only once receiving has started; arrivals run on a later main-actor turn.
         batch.waiting = ShelfDropReader.expectedFileCount(drop.promises)
+    }
+
+    // MARK: Pasting
+
+    /// ⌘V and the header's "⌘V to paste": the clipboard takes the drop's path (`ShelfDropReader`, notes,
+    /// the duplicate and full cards), then what was added is selected so Delete takes it straight back off.
+    /// Returns false when pasting is switched off.
+    @discardableResult
+    func paste() -> Bool {
+        guard settings.pasteEnabled else { return false }
+        confirmingClear = false
+        notch?.userInteracted()
+        let pasteboard = pasteboardForPaste()
+        logger.info("Paste types: \(pasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
+        guard ShelfDropReader.canRead(pasteboard) else {
+            showPasteFeedback(.nothing)
+            return true
+        }
+        var inputs = ShelfDropReader.read(pasteboard, readsPromises: false) { try store.newFilesFolder() }.inputs
+        if let takesNotes, !inputs.isEmpty {
+            let kept = takesNotes(inputs)
+            let noted = inputs.filter { !kept.contains($0) }
+            store.discard(noted)
+            inputs = kept
+            if !noted.isEmpty { showNoted(noted.count) }
+            if inputs.isEmpty { return true }
+        }
+        guard !inputs.isEmpty else {
+            showPasteFeedback(.nothing)
+            return true
+        }
+        let before = Set(store.items.map(\.id))
+        closeDetail()
+        offer(inputs)
+        // A card (already there, or full: they wait for room) says what happened instead.
+        guard prompt == nil else {
+            pasteFeedback = nil
+            return true
+        }
+        var pasted = store.items.map(\.id).filter { !before.contains($0) }
+        if pasted.isEmpty {
+            // Moved to the front instead of added again: those are what was pasted.
+            let keys = Set(inputs.map(\.key))
+            pasted = store.items.filter { keys.contains($0.key) }.map(\.id)
+        }
+        guard !pasted.isEmpty else {
+            showPasteFeedback(.nothing)
+            return true
+        }
+        selection = Set(pasted)
+        selectionAnchor = pasted.first
+        selectionCursor = pasted.first
+        showPasteFeedback(.pasted(count: pasted.count))
+        return true
+    }
+
+    private func showPasteFeedback(_ feedback: PasteFeedback) {
+        AccessibilityNotification.Announcement(feedback.message).post()
+        pasteFeedback = feedback
+        pasteFeedbackToken += 1
+        let token = pasteFeedbackToken
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            if self?.pasteFeedbackToken == token { self?.pasteFeedback = nil }
+        }
     }
 
     // MARK: Store changes
