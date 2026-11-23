@@ -87,7 +87,7 @@ struct MotionCard: View {
                 .disabled(motion.macReducesMotion)
                 .help(motion.macReducesMotion
                     ? Text("On because Reduce motion is on for your Mac.")
-                    : Text("Reduce motion"))
+                    : Text("Turn calmer motion on or off for PancakeNotch."))
             }
             if motion.macReducesMotion {
                 SettingsRow(

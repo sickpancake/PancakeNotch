@@ -309,6 +309,14 @@ extension AppWindowController {
         try render("general-unbundled", rootView: AppWindowView(context: unbundled))
         try render("onboarding-setup-unbundled", rootView: OnboardingView(context: unbundled, step: .setup).appWindowStyle())
 
+        // General › Motion: PancakeNotch's own Reduce motion on, then locked on by the Mac's switch.
+        for (name, macOn) in [("general-motion-own", false), ("general-motion-mac", true)] {
+            let motion = MotionSettings(defaults: defaults, readMacSetting: { macOn }, macChanges: nil)
+            motion.reduceMotionInApp = !macOn
+            try render(name, rootView: GeneralSettingsView(preferences: preferences, updates: updates, motion: motion)
+                .padding(24).appWindowStyle(), size: CGSize(width: 820, height: 760))
+        }
+
         // The practice Shelf working: open with the example items, then with one item opened.
         let practice = PracticeShelf(seeded: true)
         defer { practice.close() }

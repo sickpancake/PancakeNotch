@@ -199,7 +199,37 @@ struct MotionSettingsTests {
         #expect(model.homeRenderedPages == [model.homePage])
     }
 
-    /// With Reduce motion, a page change is one cross-fade: no in-between position, one page drawn.
+    /// A real trackpad scroll moving up by `points` (fingers on the trackpad, so no momentum).
+    private func verticalScroll(_ phase: CGScrollPhase, points: Int32 = -30) -> NSEvent? {
+        guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
+                                  wheel1: points, wheel2: 0, wheel3: 0) else { return nil }
+        event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: Int64(points))
+        event.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
+        return NSEvent(cgEvent: event)
+    }
+
+    /// The model's NoHomeScrollWhileReduced, through the notch's real scroll handling: with Reduce motion
+    /// the fingers never drag Home between two pages; with full motion the same scroll does.
+    @Test func reducedTrackpadScrollNeverDragsHome() throws {
+        let mac = Mac()
+        let motion = settings(mac)
+        let full = twoPageHome(motion)
+        full.handleScroll(try #require(verticalScroll(.began)), at: .zero)
+        full.handleScroll(try #require(verticalScroll(.changed)), at: .zero)
+        #expect(full.homeScrollPosition != nil) // the control: this scroll does drag Home
+
+        mac.flip(to: true)
+        let reduced = twoPageHome(motion)
+        reduced.handleScroll(try #require(verticalScroll(.began)), at: .zero)
+        reduced.handleScroll(try #require(verticalScroll(.changed)), at: .zero)
+        #expect(reduced.homeScrollPosition == nil)
+        #expect(reduced.homeRenderedPages == [reduced.homePage])
+    }
+
+    /// With Reduce motion, a page change is one cross-fade: no in-between position, one page drawn. (In
+    /// tests a settle animation finishes at once, so this can't tell the arrow-key path's two branches
+    /// apart; the trackpad test above can tell the scroll path's.)
     @Test func reducedPageChangesNeverScroll() {
         let mac = Mac()
         let motion = settings(mac)
