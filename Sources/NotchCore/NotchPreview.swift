@@ -219,7 +219,7 @@ private struct NotchPreviewRepresentable: NSViewRepresentable {
     let host: NotchPreviewHost
 
     func makeNSView(context: Context) -> NotchContainerView {
-        let hosting = NSHostingView(rootView: NotchView(model: host.model))
+        let hosting = NSHostingView(rootView: NotchView(model: host.model).followsMotionSettings(host.model.motion))
         hosting.sizingOptions = []
         let container = NotchContainerView(content: hosting, contentSize: host.model.layout.largestWindowSize)
         container.dropDelegate = host.router

@@ -222,9 +222,22 @@ in-notch editor retains its existing page changes so its private drag stays moun
 
 ## Reduce Motion
 
-Read it with `@Environment(\.accessibilityReduceMotion)` in views, or
-`NSWorkspace.shared.accessibilityDisplayShouldReduceMotion` in models. Every animation in this guide has a
-Reduce Motion version, and new ones need one too:
+Reduce Motion is on when the Mac's switch is (Accessibility › Display) **or** PancakeNotch's own switch is
+(Settings › General › Motion). `MotionSettings` (NotchCore) combines the two:
+
+- **Views** read `@Environment(\.accessibilityReduceMotion)` as before. It follows both switches because every
+  window's root view gets `.followsMotionSettings()` (the notch window, the notch preview, the app window and
+  its snapshots, the Shelf's menu, off-screen notch pictures, and popovers, which are windows of their own). A
+  new `NSHostingView`, `NSHostingController`, `ImageRenderer` or popover needs it too, or it only follows the
+  Mac's switch.
+- **Models** read `MotionSettings.shared.reducesMotion` (the notch's model uses its `motion`), never
+  `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`, which misses PancakeNotch's own switch. A model
+  that keeps motion state (a scroll in flight) listens for `MotionSettings.didChangeNotification` and settles
+  it, the way `NotchViewModel.motionChanged()` puts Home back on a page.
+- **Rolling digits and symbol swaps** use `.motionContentTransition(…)` instead of `.contentTransition(…)`:
+  the same transition, or a cross-fade with Reduce Motion.
+
+Every animation in this guide has a Reduce Motion version, and new ones need one too:
 
 | Normally | With Reduce Motion |
 | --- | --- |
@@ -236,6 +249,9 @@ Reduce Motion version, and new ones need one too:
 | Rolling digits | Cross-fade (`DrumText`'s `fade`) |
 | Dancing sound bars, pulsing dot | A still pose |
 | Ears tucking under the notch | Fade only |
+| The outline growing for a peek strip | A cross-fade (`NotchView`'s `OutlineID`) |
+| Numbers rolling, symbols swapping | `.motionContentTransition(…)`: a cross-fade |
+| The progress bar's 1 s glide | `nil`: it steps once a second |
 | App window controls (`snappy`) | `nil`: change instantly |
 
 Write the choice right where the animation is, so the two stay together:

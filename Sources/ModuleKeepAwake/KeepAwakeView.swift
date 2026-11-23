@@ -292,7 +292,7 @@ struct KeepAwakeDial: View {
             Image(systemName: Self.symbol(center))
                 .font(.system(size: size * cupScale, weight: .semibold))
                 .foregroundStyle(.white.opacity(center.isHolding ? 0.9 : 0.45))
-                .contentTransition(.symbolEffect(.replace))
+                .motionContentTransition(.symbolEffect(.replace))
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)

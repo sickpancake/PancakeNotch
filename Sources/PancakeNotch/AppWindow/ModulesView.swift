@@ -213,7 +213,7 @@ private struct ModuleListRow: View {
                 Image(systemName: arrangement.isFavorite(moduleID) ? "star.fill" : "star")
                     .font(.app(size: 13, weight: .semibold))
                     .foregroundStyle(arrangement.isFavorite(moduleID) ? AppPalette.primaryText : AppPalette.tertiaryText)
-                    .contentTransition(.symbolEffect(.replace))
+                    .motionContentTransition(.symbolEffect(.replace))
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }

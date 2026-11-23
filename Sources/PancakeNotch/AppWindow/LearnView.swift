@@ -723,7 +723,7 @@ private struct PracticeTray: View {
         return HStack(spacing: 8) {
             Image(systemName: received > 0 ? "checkmark" : "tray.and.arrow.up")
                 .font(.app(size: 14, weight: .semibold))
-                .contentTransition(.symbolEffect(.replace))
+                .motionContentTransition(.symbolEffect(.replace))
             Text(received > 0 ? String(localized: "Got it") : String(localized: "Drag items out to here"))
                 .font(.app(size: 11.5, weight: .medium))
                 .multilineTextAlignment(.leading)

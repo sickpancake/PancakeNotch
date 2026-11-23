@@ -64,7 +64,7 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = .black
         window.contentMinSize = AppWindowView.minimumSize
-        let hostingView = NSHostingView(rootView: rootView)
+        let hostingView = NSHostingView(rootView: rootView.followsMotionSettings())
         hostingView.sizingOptions = [.minSize]
         window.contentView = hostingView
         window.setContentSize(size)
@@ -308,6 +308,14 @@ extension AppWindowController {
         unbundled.navigation.section = .general
         try render("general-unbundled", rootView: AppWindowView(context: unbundled))
         try render("onboarding-setup-unbundled", rootView: OnboardingView(context: unbundled, step: .setup).appWindowStyle())
+
+        // General › Motion: PancakeNotch's own Reduce motion on, then locked on by the Mac's switch.
+        for (name, macOn) in [("general-motion-own", false), ("general-motion-mac", true)] {
+            let motion = MotionSettings(defaults: defaults, readMacSetting: { macOn }, macChanges: nil)
+            motion.reduceMotionInApp = !macOn
+            try render(name, rootView: GeneralSettingsView(preferences: preferences, updates: updates, motion: motion)
+                .padding(24).appWindowStyle(), size: CGSize(width: 820, height: 760))
+        }
 
         // The practice Shelf working: open with the example items, then with one item opened.
         let practice = PracticeShelf(seeded: true)

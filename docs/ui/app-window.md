@@ -33,9 +33,10 @@ Every page is an `AppPage`:
 ```swift
 AppPage(
     title: String(localized: "General"),
-    subtitle: String(localized: "How PancakeNotch starts, where you find it and how it updates.")
+    subtitle: String(localized: "How PancakeNotch starts, where you find it, how it moves and how it updates.")
 ) {
     SettingsCard(header: String(localized: "Startup")) { … }
+    MotionCard(motion: motion)
     UpdatesCard(updates: updates)
 }
 ```

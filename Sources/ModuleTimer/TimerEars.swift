@@ -164,7 +164,7 @@ struct TimerEar: View {
             .font(.system(size: Self.badgeSize, weight: .semibold).monospacedDigit())
             .foregroundStyle(.white.opacity(0.6))
             .fixedSize()
-            .contentTransition(.numericText())
+            .motionContentTransition(.numericText())
     }
 
     private func withBadge(_ content: some View) -> some View {

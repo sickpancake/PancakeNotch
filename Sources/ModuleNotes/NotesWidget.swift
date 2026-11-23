@@ -31,7 +31,7 @@ struct NotesWidget: View {
             } value: {
                 Text(notes.count, format: .number)
                     .font(.system(size: 17, weight: .semibold))
-                    .contentTransition(.numericText())
+                    .motionContentTransition(.numericText())
             }
             .animation(.easeInOut(duration: 0.2), value: notes.count)
             .accessibilityElement(children: .ignore)

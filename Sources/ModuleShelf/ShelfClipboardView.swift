@@ -50,6 +50,7 @@ struct ShelfClipboardTile: View {
     let imageURL: URL?
     let isCursor: Bool
     let isCopied: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var image: NSImage?
 
@@ -65,7 +66,7 @@ struct ShelfClipboardTile: View {
                             .frame(width: 17, height: 17)
                             .background(.white, in: Circle())
                             .offset(x: -5, y: -5)
-                            .transition(.scale.combined(with: .opacity))
+                            .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
                             .accessibilityHidden(true)
                     }
                 }
@@ -85,7 +86,7 @@ struct ShelfClipboardTile: View {
                 }
                 .animation(.easeOut(duration: 0.15), value: isHovering)
                 .animation(.easeOut(duration: 0.15), value: isCopied)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: entry.isPinned)
+                .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.7), value: entry.isPinned)
             Text(entry.item.displayName)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.white.opacity(isCursor ? 1 : 0.8))

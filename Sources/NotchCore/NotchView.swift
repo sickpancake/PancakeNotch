@@ -10,9 +10,10 @@ struct NotchView: View {
         let state = model.state
         ZStack(alignment: .top) {
             if reduceMotion {
-                // Reduce Motion: cross-fade between states instead of morphing the outline.
+                // Reduce Motion: cross-fade between states instead of morphing the outline. A peek
+                // strip coming or going under the ears cross-fades too, rather than the outline growing.
                 notch(state: state)
-                    .id(state)
+                    .id(OutlineID(state: state, isPeeking: state == .compact && model.layout.isPeeking))
                     .transition(.opacity)
             } else {
                 notch(state: state)
@@ -114,6 +115,12 @@ struct NotchView: View {
             .transition(reduceMotion ? .opacity : .blurReveal)
         }
     }
+}
+
+/// What the Reduce Motion cross-fade swaps on: the state, and whether Compact shows a peek strip.
+private struct OutlineID: Hashable {
+    let state: NotchState
+    let isPeeking: Bool
 }
 
 /// Expanded panel shown while every module is switched off.
