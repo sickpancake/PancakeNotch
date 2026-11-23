@@ -5,6 +5,8 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Undo Home edits in the notch.** While editing Home in the notch, press ⌘Z to undo a change and ⇧⌘Z to redo it, or use the small undo button beside Done.
+
 ## 0.5.0
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.

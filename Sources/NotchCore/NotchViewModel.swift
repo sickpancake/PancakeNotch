@@ -399,6 +399,18 @@ public final class NotchViewModel {
         holdReleased()
     }
 
+    /// The notch's Undo and Redo for Home edits: the same history the window editor walks, so an edit
+    /// made on either surface steps back (or forward again) from here too.
+    public func undoHomeEdit() {
+        guard let previous = home.history.undo(current: home.layout) else { return }
+        withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) { home.layout = previous }
+    }
+
+    public func redoHomeEdit() {
+        guard let next = home.history.redo(current: home.layout) else { return }
+        withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) { home.layout = next }
+    }
+
     /// Practice notches (Settings, Learn) leave out the widgets of modules they don't have, instead of
     /// showing them as turned off.
     public var homeLeavesOutMissing = false
@@ -842,6 +854,11 @@ public final class NotchViewModel {
     public func handleKey(_ event: NSEvent) -> Bool {
         cancelAttentionClose()
         if isEditingHome, event.keyCode == 53 { endHomeEditing(); return true }
+        if isEditingHome, event.charactersIgnoringModifiers?.lowercased() == "z",
+           event.modifierFlags.contains(.command) {
+            if event.modifierFlags.contains(.shift) { redoHomeEdit() } else { undoHomeEdit() }
+            return true
+        }
         if !showsHome, selectedModule?.handleKey(event) == true { return true }
         if showsHome, event.keyCode == 125 || event.keyCode == 126 { // Down and Up arrows: Home's pages
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
