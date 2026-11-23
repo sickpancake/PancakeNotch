@@ -6,6 +6,7 @@ import SwiftUI
 struct GeneralSettingsView: View {
     @Bindable var preferences: Preferences
     let updates: Updates
+    var motion: MotionSettings = .shared
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var needsApproval = LaunchAtLogin.needsApproval
     @State private var launchError: String?
@@ -13,7 +14,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         AppPage(
             title: String(localized: "General"),
-            subtitle: String(localized: "How PancakeNotch starts, where you find it and how it updates.")
+            subtitle: String(localized: "How PancakeNotch starts, where you find it, how it moves and how it updates.")
         ) {
             SettingsCard(header: String(localized: "Startup"), footer: footer) {
                 SettingsRow(
@@ -51,6 +52,8 @@ struct GeneralSettingsView: View {
                 needsApproval = LaunchAtLogin.needsApproval
             }
 
+            MotionCard(motion: motion)
+
             UpdatesCard(updates: updates)
         }
     }
@@ -62,6 +65,44 @@ struct GeneralSettingsView: View {
             return String(localized: "To come back here, open PancakeNotch again from your Applications folder.")
         }
         return nil
+    }
+}
+
+/// PancakeNotch's own Reduce motion switch. While the Mac's switch is on, motion is reduced anyway: the
+/// switch shows on, can't be changed here, and a row says where to change it.
+struct MotionCard: View {
+    let motion: MotionSettings
+
+    var body: some View {
+        SettingsCard(header: String(localized: "Motion")) {
+            SettingsRow(
+                title: String(localized: "Reduce motion"),
+                subtitle: String(localized: "Fades instead of springs, slides, wiggles and bouncing sound bars, in the notch and in this window.")
+            ) {
+                Toggle(String(localized: "Reduce motion"), isOn: Binding(
+                    get: { motion.reducesMotion },
+                    set: { motion.switchClicked(toReduce: $0) }
+                ))
+                .labelsHidden()
+                .disabled(motion.macReducesMotion)
+                .help(motion.macReducesMotion
+                    ? Text("On because Reduce motion is on for your Mac.")
+                    : Text("Reduce motion"))
+            }
+            if motion.macReducesMotion {
+                SettingsRow(
+                    title: String(localized: "On for your whole Mac"),
+                    subtitle: String(localized: "Reduce motion is on in your Mac's Accessibility settings, so PancakeNotch follows it everywhere. Turn it off there to choose here.")
+                ) {
+                    Button { HelpLinks.openDisplayAccessibilitySettings() } label: {
+                        Label(String(localized: "Open Accessibility"), systemImage: "arrow.up.right")
+                            .labelStyle(TrailingIconLabelStyle())
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: motion.macReducesMotion)
     }
 }
 

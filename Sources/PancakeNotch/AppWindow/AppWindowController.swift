@@ -64,7 +64,7 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = .black
         window.contentMinSize = AppWindowView.minimumSize
-        let hostingView = NSHostingView(rootView: rootView)
+        let hostingView = NSHostingView(rootView: rootView.followsMotionSettings())
         hostingView.sizingOptions = [.minSize]
         window.contentView = hostingView
         window.setContentSize(size)

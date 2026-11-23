@@ -78,7 +78,7 @@ struct NotesView: View {
                     Text(NotesText.count(module.store.notes.count))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
-                        .contentTransition(.numericText())
+                        .motionContentTransition(.numericText())
                 }
                 NotchRoundButton(symbol: "square.and.pencil", label: String(localized: "New Note", comment: "Notes"), size: 24) {
                     module.newNote()
@@ -121,6 +121,7 @@ private struct NotesEmpty: View {
 /// The notes, pinned first, with an Undo row after a delete.
 private struct NotesList: View {
     let module: NotesModule
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 4) {
@@ -137,7 +138,7 @@ private struct NotesList: View {
             }
             if module.store.lastDeleted != nil {
                 NotesUndoRow(module: module)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.2), value: module.store.lastDeleted?.id)

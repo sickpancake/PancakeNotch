@@ -87,6 +87,13 @@ enum HelpLinks {
         }
     }
 
+    /// System Settings › Accessibility › Display, where the Mac's Reduce motion switch lives.
+    static func openDisplayAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.universalaccess?Seeing_Display") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// System Settings › Privacy & Security › Automation (Music and Spotify control).
     static func openAutomationSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {

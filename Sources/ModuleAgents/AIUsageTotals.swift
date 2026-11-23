@@ -1,4 +1,5 @@
 import AgentsCore
+import NotchCore
 import SwiftUI
 
 /// The right column: the range switch, then the tokens, what they're worth and the top models.
@@ -29,7 +30,7 @@ struct AIUsageTotals: View {
         Text("\(AIUsageText.tokens(totals.tokens)) tokens")
             .font(.system(size: 22, weight: .semibold))
             .lineLimit(1)
-            .contentTransition(.numericText())
+            .motionContentTransition(.numericText())
             .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: totals.tokens)
         Text(AIUsageText.money(totals.cost, label: center.moneyLabel, paysPerToken: center.paysPerToken))
             .font(.system(size: 12))
@@ -67,7 +68,7 @@ private struct DevinNumbers: View {
             Text("\(AIUsageText.acus(acus)) ACUs")
                 .font(.system(size: 22, weight: .semibold))
                 .lineLimit(1)
-                .contentTransition(.numericText(value: acus))
+                .motionContentTransition(.numericText(value: acus))
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: acus)
             Text(count == 1 ? String(localized: "In 1 cloud session") : String(localized: "In \(count) cloud sessions"))
                 .font(.system(size: 12))

@@ -1,4 +1,5 @@
 import AppKit
+import NotchCore
 import SwiftUI
 
 /// The app window's colours. The window is always dark, like the notch itself, and strictly
@@ -548,6 +549,7 @@ struct MonochromeDropdown<Value: Hashable>: View {
                 isOpen = false
                 choose(value)
             }
+            .followsMotionSettings() // A popover is its own window.
         }
         .accessibilityRepresentation {
             Picker(title, selection: Binding(get: { selection }, set: { choose($0) })) {

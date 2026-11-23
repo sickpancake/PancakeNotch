@@ -25,7 +25,7 @@ struct KeepAwakeWidget: View {
                 Image(systemName: KeepAwakeDial.symbol(center))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(center.isHolding ? 0.9 : 0.6))
-                    .contentTransition(.symbolEffect(.replace))
+                    .motionContentTransition(.symbolEffect(.replace))
             } value: {
                 Text(center.isHolding ? String(localized: "On", comment: "Keep Awake widget") : String(localized: "Off", comment: "Keep Awake widget"))
                     .font(.system(size: 17, weight: .semibold))

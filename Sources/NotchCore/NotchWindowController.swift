@@ -283,7 +283,7 @@ public final class NotchWindowController {
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
         let panel = NotchPanel(contentRect: model.windowFrame(for: model.state))
         panel.onResignKey = { [weak model] in model?.keyFocusLost() }
-        let hostingView = NSHostingView(rootView: NotchView(model: model))
+        let hostingView = NSHostingView(rootView: NotchView(model: model).followsMotionSettings(model.motion))
         hostingView.sizingOptions = []
         let container = NotchContainerView(content: hostingView, contentSize: layout.largestWindowSize)
         container.onVisibilityChange = { [weak self, weak model] visible in

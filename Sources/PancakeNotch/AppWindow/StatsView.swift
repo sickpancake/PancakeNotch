@@ -1,6 +1,7 @@
 import AgentsCore
 import AppKit
 import Charts
+import NotchCore
 import Stats
 import SwiftUI
 
@@ -543,7 +544,7 @@ private struct LiveHealth: View {
                     .font(.app(size: 34, weight: .bold))
                     .kerning(-0.8)
                     .monospacedDigit()
-                    .contentTransition(.numericText())
+                    .motionContentTransition(.numericText())
                     .padding(.top, 14)
                 BudgetMeter(fraction: budgetFraction)
                     .padding(.top, 12)
@@ -568,7 +569,7 @@ private struct LiveHealth: View {
                     .font(.app(size: 34, weight: .bold))
                     .kerning(-0.8)
                     .monospacedDigit()
-                    .contentTransition(.numericText())
+                    .motionContentTransition(.numericText())
                     .padding(.top, 14)
                 Text("of one processor core, over the last second")
                     .font(.app(size: 12))
@@ -972,7 +973,7 @@ private struct StatsTile: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                    .contentTransition(.numericText())
+                    .motionContentTransition(.numericText())
             }
             .padding(.top, 14)
             Text(caption)

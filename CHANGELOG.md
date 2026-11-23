@@ -15,6 +15,7 @@ so write them for people using the app: short, plain, no code talk.
 - **Codex cloud and GitHub's coding agent in Agents.** Turn on Codex cloud or GitHub coding agent under Agents settings, and their cloud tasks show up next to your other agents: working, needs you, done or stopped, with the pull request once there is one. PancakeNotch uses the Codex CLI and the GitHub CLI you're already signed in to, and asks only while a task runs or when you come back to your Mac.
 - **Pull request checks.** With GitHub coding agent on, a finished cloud agent's pull request shows whether its checks are running, passed or failed.
 - **Quick replies to Devin.** A Devin cloud session waiting for your next message gets Continue and Stop right in the notch.
+- **Reduce motion.** A new switch under General › Motion calms PancakeNotch down: fades instead of springs, slides and wiggles, and still sound bars, in the notch and the window. It's also on whenever Reduce motion is on for your whole Mac (Accessibility › Display), which PancakeNotch now follows everywhere, including the peek strip and Home's page scrolling.
 - **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
 
 ## 0.4.0 — beta

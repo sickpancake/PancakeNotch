@@ -620,7 +620,7 @@ struct HomeClockWidget: View {
             .font(.system(size: size, weight: .semibold))
             .monospacedDigit()
             .lineLimit(1)
-            .contentTransition(.numericText())
+            .motionContentTransition(.numericText())
             .animation(.easeInOut(duration: 0.25), value: date)
     }
 }
