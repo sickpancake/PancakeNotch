@@ -13,17 +13,19 @@ type Feature = { title: string; line: string; art: ReactNode; top?: boolean; fre
 
 const FEATURES: Feature[] = [
   { title: 'Now Playing', line: 'Music from any app: the cover and sound bars beside the notch, the controls inside.', art: <NowPlayingArt />, top: true },
-  { title: 'Shelf', line: 'Drop files, notes and links on the notch. Pick them up later.', art: <ShelfArt /> },
-  { title: 'Convert', line: 'Turn pictures, PDFs, sound and video into another format in one click.', art: <ConvertArt />, fresh: true },
-  { title: 'Timer and Stopwatch', line: 'Count down or keep laps. The time left waits beside the notch.', art: <TimerArt />, top: true, fresh: true },
-  { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt />, fresh: true },
-  { title: 'Agents', line: 'Claude Code, Codex, Cursor and Devin at work. Allow or Deny from the notch.', art: <AgentsArt /> },
-  { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, and a heads-up when one resets.', art: <UsageArt /> },
+  { title: 'Notes', line: 'Jot things down right in the notch. Pin, search with ⌘F, and drop text files in.', art: <NotesArt />, fresh: true },
+  { title: 'Shelf', line: 'Drop or paste files, notes and links. Pin what matters, and catch new screenshots.', art: <ShelfArt />, fresh: true },
+  { title: 'Convert', line: 'Turn pictures, PDFs, sound and video into another format in one click.', art: <ConvertArt /> },
+  { title: 'Timers and Stopwatch', line: 'Name several timers or keep laps. The next one up waits beside the notch.', art: <TimerArt />, top: true, fresh: true },
+  { title: 'Keep Awake', line: 'Keep your Mac and its screen awake while your agents work.', art: <KeepAwakeArt /> },
+  { title: 'Agents', line: 'Claude Code, Codex, Cursor and Devin, local or in the cloud. Allow or Deny from the notch.', art: <AgentsArt />, fresh: true },
+  { title: 'AI Usage', line: 'Your Claude and Codex limits and tokens, and the ACUs your Devin sessions use.', art: <UsageArt /> },
   { title: 'Home', line: 'Every module as a widget, in the open notch. Drag them where you want.', art: <MenuArt /> },
   { title: 'Statistics', line: 'What you listen to, and how light the app stays.', art: <StatsArt /> },
   { title: 'Full screen', line: 'Steps aside while you watch a video.', art: <FullScreenArt /> },
+  { title: 'Reduce motion', line: 'Fades instead of springs and still sound bars. Follows your Mac’s setting too.', art: <ReduceMotionArt />, fresh: true },
   { title: 'Your shortcut', line: 'Open it from the keyboard, with keys you choose.', art: <ShortcutArt /> },
-  { title: 'Open on click', line: 'Rather it opened only when you click? One switch.', art: <ClickArt />, top: true, fresh: true },
+  { title: 'Open on click', line: 'Rather it opened only when you click? One switch.', art: <ClickArt />, top: true },
 ]
 
 // The row starts where the page's text starts, and bleeds off the right edge.
@@ -368,6 +370,44 @@ function ClickArt() {
     <div aria-hidden="true" className="flex flex-col items-center">
       <span className="block h-7 w-32 rounded-b-2xl bg-black ring-1 ring-white/10" />
       <Icon name="cursor" className="mt-9 text-5xl text-ink" />
+    </div>
+  )
+}
+
+/** An open note: a search field above, then its title and a few lines of text. */
+function NotesArt() {
+  return (
+    <div aria-hidden="true" className={cn('w-[14.5rem] rounded-2xl p-3.5', SURFACE)}>
+      <div className="flex h-6 items-center gap-2 rounded-full bg-[#1f1f1f] px-2.5 text-[11px] leading-none text-soft">
+        <svg viewBox="0 0 24 24" className="size-3" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <circle cx="10.5" cy="10.5" r="6" />
+          <path d="m15 15 4.5 4.5" />
+        </svg>
+        <span>⌘F</span>
+      </div>
+      <div className="mt-3.5 space-y-2.5">
+        <span className="block h-2 w-24 rounded-full bg-white/70" />
+        <span className="block h-1.5 w-full rounded-full bg-white/18" />
+        <span className="block h-1.5 w-40 rounded-full bg-white/18" />
+        <span className="block h-1.5 w-28 rounded-full bg-white/18" />
+      </div>
+    </div>
+  )
+}
+
+/** The Reduce motion switch, on, under a still row of sound bars. */
+function ReduceMotionArt() {
+  return (
+    <div aria-hidden="true" className={cn('flex w-[13.5rem] items-center gap-3 rounded-2xl p-3.5', SURFACE)}>
+      <span className="flex h-5 items-center gap-[3px]">
+        {[0.5, 0.75, 0.6, 0.85, 0.55].map((height, i) => (
+          <span key={i} className="w-[3px] rounded-full bg-white" style={{ height: `${height * 100}%` }} />
+        ))}
+      </span>
+      <span className="h-1.5 w-14 rounded-full bg-white/18" />
+      <span className="ml-auto flex h-6 w-10 items-center justify-end rounded-full bg-white p-0.5">
+        <span className="size-5 rounded-full bg-black" />
+      </span>
     </div>
   )
 }
