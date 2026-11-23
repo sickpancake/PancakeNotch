@@ -108,8 +108,8 @@ jobs:
 
   # The release workflow's steps end to end with throwaway keys (nothing is published): build, then
   # certificate import and trust, signing, the disk image, the update and feed signatures, the release
-  # checks, and the idle memory of a build that can update itself (Sparkle running). Also checks that the live update
-  # feed is one the next release will accept, and that a changed or unsigned feed is refused.
+  # checks, and the idle memory of a build that can update itself (Sparkle running). Also checks that the
+  # live update feed is one the next release will accept, and that a changed or unsigned feed is refused.
   release-dry-run:
     needs: changes
     # Skipped (which counts as passed) only when a pull request changes neither the app nor CHANGELOG.md.
