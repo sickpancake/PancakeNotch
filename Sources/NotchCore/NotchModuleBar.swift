@@ -74,7 +74,7 @@ struct NotchModuleBar: View {
     /// Icon, name and chevron of the "Home only" button.
     private static func menuButtonWidth(title: String) -> CGFloat {
         let text = (title as NSString).size(withAttributes: [.font: titleFont]).width
-        return 8 + 14 + 6 + ceil(text) + 5 + 8 + 9
+        return 8 + 14 + 6 + ceil(text) + 2 + 6 + 10 + 8
     }
 
     static func menuTitle(for model: NotchViewModel) -> String {
