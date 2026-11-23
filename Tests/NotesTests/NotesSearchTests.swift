@@ -93,6 +93,12 @@ struct NotesSearchTests {
         #expect(ranges.map { (text as NSString).substring(with: $0) } == ["Café", "café"])
     }
 
+    @Test func titlesOnlyHighlightsOnlyTheTitle() {
+        let text = "\nPancake place\nThe best pancake in town"
+        let ranges = NotesSearch("pancake", scope: .titlesOnly).nsRanges(in: text)
+        #expect(ranges == [NSRange(location: 1, length: 7)])
+    }
+
     // MARK: The module
 
     @Test func searchingNarrowsTheListAndKeepsPinnedFirst() {

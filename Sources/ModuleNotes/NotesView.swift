@@ -71,6 +71,7 @@ struct NotesView: View {
         .frame(width: layout.body.width, height: layout.body.height, alignment: .top)
         .background(Color.black.opacity(0.001).onTapGesture { module.pageClicked() })
         .onAppear { module.pageShown() }
+        .onDisappear { module.pageHidden() }
         .overlay { NotesDropTarget(isTargeted: module.isDropTargeted).padding(8) }
         .foregroundStyle(.white)
         .animation(.easeInOut(duration: 0.2), value: module.store.notes.isEmpty)
@@ -143,7 +144,9 @@ private struct NotesSearchBar: View {
                 } else {
                     NotesSearchField(
                         text: Binding(get: { module.query }, set: { module.setQuery($0) }),
-                        isFocused: module.isSearching
+                        isFocused: module.isSearching,
+                        scope: module.settings.searchScope,
+                        focusRequest: module.searchFocusRequest
                     ) { module.startSearching() }
                 }
             }

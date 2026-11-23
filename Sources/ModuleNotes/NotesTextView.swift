@@ -57,9 +57,11 @@ struct NotesTextView: NSViewRepresentable {
         if textView.accessibilityLabel() != accessibilityLabel { textView.setAccessibilityLabel(accessibilityLabel) }
         let coordinator = context.coordinator
         let matches = search?.nsRanges(in: textView.string) ?? []
-        if matches != coordinator.highlighted {
+        let terms = search?.terms ?? []
+        if matches != coordinator.highlighted || terms != coordinator.highlightedTerms {
             Self.highlight(matches, in: textView)
             coordinator.highlighted = matches
+            coordinator.highlightedTerms = terms
         }
         let window = textView.window
         let hasFocus = window?.firstResponder === textView
@@ -79,7 +81,6 @@ struct NotesTextView: NSViewRepresentable {
             window?.makeFirstResponder(nil)
         }
         // A new search (or a note shown from one): bring its first match into view.
-        let terms = search?.terms ?? []
         if terms != coordinator.scrolledTerms {
             coordinator.scrolledTerms = terms
             if !isFocused, let first = matches.first {
@@ -103,12 +104,15 @@ struct NotesTextView: NSViewRepresentable {
                       let textRange = NSTextRange(location: start, end: end) else { continue }
                 layout.addRenderingAttribute(.backgroundColor, value: color, for: textRange)
             }
+            // Redraw the laid-out text so marks that went (or moved) don't linger on screen.
+            layout.textViewportLayoutController.layoutViewport()
         } else if let layout = textView.layoutManager {
             layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: length))
             for range in valid {
                 layout.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: range)
             }
         }
+        textView.needsDisplay = true
     }
 
     @MainActor
@@ -116,6 +120,8 @@ struct NotesTextView: NSViewRepresentable {
         var parent: NotesTextView
         /// What's highlighted now, so unchanged highlights aren't redrawn on every update.
         var highlighted: [NSRange] = []
+        /// The search those highlights are for: a reordered search redraws them even if the places match.
+        var highlightedTerms: [String] = []
         /// The search last scrolled to, so it scrolls once per search rather than on every keystroke.
         var scrolledTerms: [String] = []
 

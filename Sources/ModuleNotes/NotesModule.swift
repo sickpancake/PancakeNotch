@@ -1,4 +1,5 @@
 import AppKit
+import HotKey
 import NotchCore
 import NotesCore
 import Observation
@@ -28,12 +29,18 @@ public final class NotesModule: NotchModule {
     public internal(set) var isSearching = false
     /// ⌘F or the magnifying glass brought the field out (it only matters when the field shows only while searching).
     public internal(set) var searchRevealed = false
+    /// Counts requests to type in the search field, so each click or ⌘F focuses it again.
+    public internal(set) var searchFocusRequest = 0
     /// The note opened from a search stays in the list while you change it so it stops matching, until
     /// the search changes.
     public internal(set) var keptID: Note.ID?
     /// Told each time a search finds notes (the Learn lesson).
     @ObservationIgnored public var onFound: (() -> Void)?
     @ObservationIgnored public var isSnapshot = false
+    /// Claims ⌘F system-wide while Notes is open, so a hover-opened Notes gets it rather than the app
+    /// that still has the keyboard. Off for the Learn practice, whose window has the keyboard already.
+    @ObservationIgnored var usesGlobalFind = true
+    @ObservationIgnored private var findKey: GlobalHotKey?
 
     public init(store: NotesStore, settings: NotesSettings) {
         self.store = store
@@ -64,9 +71,27 @@ public final class NotesModule: NotchModule {
     /// The page came up after a click (a Notes tab, or the notch opened on Notes): take the keyboard so
     /// ⌘N, Return and the arrows work. A hover leaves the keyboard with the app you were typing in.
     func pageShown() {
+        if !isSnapshot, usesGlobalFind, let key = HotKey(keyCode: 3, modifiers: .command, keyLabel: "F") {
+            if findKey == nil { findKey = GlobalHotKey { [weak self] in self?.findPressed() } }
+            try? findKey?.register(key)
+        }
         guard !isSnapshot, let type = NSApp.currentEvent?.type,
               [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp].contains(type) else { return }
         notch?.requestKeyFocus?()
+    }
+
+    /// The page went away (the notch closed, or another module or Home shows): ⌘F is the other apps' again.
+    func pageHidden() {
+        findKey?.unregister()
+    }
+
+    /// ⌘F: search, from the list or from inside a note; again selects the words typed.
+    private func findPressed() {
+        if isSearching {
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+        } else {
+            startSearching()
+        }
     }
 
     /// A click on the page itself.
@@ -85,6 +110,7 @@ public final class NotesModule: NotchModule {
     }
 
     public func notchDidClose() {
+        pageHidden()
         stopEditing()
         stopSearching()
         keptID = nil
@@ -95,6 +121,7 @@ public final class NotesModule: NotchModule {
     }
 
     public func userSwitchedAway() {
+        pageHidden()
         stopEditing()
         stopSearching()
         store.removeEmpty()
@@ -112,12 +139,8 @@ public final class NotesModule: NotchModule {
 
     public func handleKey(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if modifiers == .command, event.keyCode == 3 { // ⌘F: search, from the list or from inside a note
-            if isSearching {
-                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-            } else {
-                startSearching()
-            }
+        if modifiers == .command, event.keyCode == 3 { // ⌘F
+            findPressed()
             return true
         }
         if isSearching { return handleSearchKey(event) }
@@ -159,7 +182,7 @@ public final class NotesModule: NotchModule {
         case 53: // Esc: clear the search, then leave the field
             if query.isEmpty { stopSearching() } else { clearSearch() }
             return true
-        case 125, 126 where !command: // Down, Up: the next or previous match
+        case 125 where !command, 126 where !command: // Down, Up: the next or previous match
             moveSelection(by: event.keyCode == 125 ? 1 : -1)
             return true
         case 36, 76: // Return: write in the shown match
@@ -205,6 +228,7 @@ public final class NotesModule: NotchModule {
         // Straight from writing to searching: the notch stays held, so no release in between.
         isEditing = false
         searchRevealed = true
+        searchFocusRequest &+= 1
         if !isSearching { isSearching = true }
         notch?.requestKeyFocus?()
     }
@@ -417,7 +441,9 @@ public extension NotesModule {
     /// A Notes with a few made-up notes, kept in memory, with the user's settings.
     public static func practice(now: Date = Date()) -> NotesModule {
         let settings = NotesSettings.user ?? NotesSettings(defaults: UserDefaults(suiteName: "PracticeNotes") ?? .standard)
-        return NotesModule(store: .practice(now: now), settings: settings)
+        let module = NotesModule(store: .practice(now: now), settings: settings)
+        module.usesGlobalFind = false
+        return module
     }
 }
 

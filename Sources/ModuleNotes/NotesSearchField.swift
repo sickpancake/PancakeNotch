@@ -1,4 +1,5 @@
 import AppKit
+import NotesCore
 import SwiftUI
 
 /// The words typed in the search field. An AppKit field rather than a SwiftUI `TextField` for the same
@@ -8,6 +9,10 @@ struct NotesSearchField: NSViewRepresentable {
     @Binding var text: String
     /// Whether the field should hold keyboard focus.
     let isFocused: Bool
+    /// What the search looks through, for VoiceOver's help.
+    let scope: NotesSearchScope
+    /// Goes up on every request to type in the field, so a click retries focus even while already searching.
+    let focusRequest: Int
     /// Called when the field takes keyboard focus (a click in it).
     let onFocus: () -> Void
 
@@ -39,7 +44,6 @@ struct NotesSearchField: NSViewRepresentable {
             attributes: [.foregroundColor: NSColor.white.withAlphaComponent(0.4), .font: NSFont.systemFont(ofSize: 12)]
         )
         field.setAccessibilityLabel(String(localized: "Search notes"))
-        field.setAccessibilityHelp(String(localized: "Type words from a note's title or text. Down and Up move through the matches, Return opens one, Esc clears the search."))
         field.unregisterDraggedTypes()
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -50,12 +54,19 @@ struct NotesSearchField: NSViewRepresentable {
         context.coordinator.parent = self
         // Leave the field editor alone while it's typing the same words (it would lose the caret).
         if field.stringValue != text { field.stringValue = text }
+        let help = scope == .titlesOnly
+            ? String(localized: "Type words from a note's title. Down and Up move through the matches, Return opens one, Esc clears the search.")
+            : String(localized: "Type words from a note's title or text. Down and Up move through the matches, Return opens one, Esc clears the search.")
+        if field.accessibilityHelp() != help { field.setAccessibilityHelp(help) }
         let window = field.window
         let hasFocus = field.currentEditor() != nil && window?.firstResponder === field.currentEditor()
-        if isFocused, !hasFocus {
+        let retry = focusRequest != context.coordinator.focusRequest
+        context.coordinator.focusRequest = focusRequest
+        if isFocused, !hasFocus || retry {
             // The notch window takes key focus a moment after the field appears: focus once it is in.
             DispatchQueue.main.async { [weak field] in
-                guard let field, let window = field.window, field.currentEditor() == nil else { return }
+                guard let field, let window = field.window,
+                      field.currentEditor() == nil || window.firstResponder !== field.currentEditor() else { return }
                 window.makeFirstResponder(field)
                 // Put the caret after the words, rather than selecting them all.
                 if let editor = field.currentEditor() {
@@ -69,6 +80,7 @@ struct NotesSearchField: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: NotesSearchField
+        var focusRequest = 0
 
         init(_ parent: NotesSearchField) { self.parent = parent }
 

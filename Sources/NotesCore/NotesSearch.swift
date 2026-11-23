@@ -60,9 +60,18 @@ public struct NotesSearch: Equatable, Sendable {
         return merged
     }
 
-    /// The same places as `ranges(in:)`, as `NSRange`s for AppKit text views.
+    /// The same places as `ranges(in:)`, as `NSRange`s for AppKit text views. A titles-only search marks
+    /// only the note's title, since that's all it looked at.
     public func nsRanges(in text: String) -> [NSRange] {
-        ranges(in: text).map { NSRange($0, in: text) }
+        scopedRanges(in: text).map { NSRange($0, in: text) }
+    }
+
+    /// `ranges(in:)`, kept to the title (the first line with text) for a titles-only search.
+    func scopedRanges(in text: String) -> [Range<String.Index>] {
+        guard scope == .titlesOnly else { return ranges(in: text) }
+        let title = Note(text: text, created: .distantPast).title
+        guard !title.isEmpty, let line = text.range(of: title) else { return [] }
+        return ranges(in: text).filter { $0.lowerBound >= line.lowerBound && $0.upperBound <= line.upperBound }
     }
 
     /// A one-line preview that starts just before the first match, so a word deep in a long note shows
@@ -82,7 +91,7 @@ public struct NotesSearch: Equatable, Sendable {
     public func runs(in text: String) -> [(text: Substring, isMatch: Bool)] {
         var runs: [(text: Substring, isMatch: Bool)] = []
         var cursor = text.startIndex
-        for range in ranges(in: text) {
+        for range in scopedRanges(in: text) {
             if cursor < range.lowerBound { runs.append((text[cursor..<range.lowerBound], false)) }
             runs.append((text[range], true))
             cursor = range.upperBound
