@@ -159,7 +159,7 @@ public final class NotesModule: NotchModule {
 
     public func handleKey(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if modifiers == .command, event.keyCode == 3 { // ⌘F
+        if modifiers == .command, event.keyCode == 3, !store.notes.isEmpty { // ⌘F (with nothing to search, it isn't ours)
             findPressed()
             return true
         }
@@ -403,6 +403,8 @@ public final class NotesModule: NotchModule {
             selectedID = index.flatMap { remaining.indices.contains($0) ? remaining[$0].id : remaining.last?.id }
         }
         stopEditing()
+        // The last note went: give the keyboard back to the app you were in, so its ⌘F and the rest work.
+        if store.notes.isEmpty { notch?.releaseKeyFocus?() }
     }
 
     public func undoDelete() {

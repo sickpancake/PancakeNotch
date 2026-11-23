@@ -261,7 +261,8 @@ struct NotesSearchTests {
     @Test func noNotesMeansNoSearch() {
         let module = makeModule([])
         #expect(!module.showsSearchField)
-        #expect(module.handleKey(key(3, "f", command: true)))
+        // Nothing to search: ⌘F isn't taken, so it can reach the app you were in.
+        #expect(!module.handleKey(key(3, "f", command: true)))
         #expect(!module.isSearching)
     }
 
