@@ -431,10 +431,12 @@ private struct NotesEditor: View {
                         onEdit: { text in
                             draft = text
                             editRevision &+= 1
+                            // Save right away: a burst's last characters must not depend on a
+                            // later view update running the store write (issue #134).
+                            module.edit(note.id, text: text)
                         },
                         search: module.isFiltering ? module.search : nil
                     )
-                        .onChange(of: editRevision) { module.edit(note.id, text: draft) }
                         .overlay(alignment: .topLeading) {
                             if draft.isEmpty {
                                 Text("Write something…")
