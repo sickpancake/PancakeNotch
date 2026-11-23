@@ -269,6 +269,11 @@ module, move it into NotchCore and reuse it instead of making another copy:
 - **Status pill** (Now Playing's source app): 20 high, 8 pt padding, 11 semibold, white 0.6 text on a white 0.06
   capsule (0.95 / 0.12 on hover).
 - **On/off icon toggles** (shuffle, repeat): dim white 0.45 when off; white on a white 0.16 circle when on.
+- **Text box** (Notes' editor and its search field): a continuous rounded rectangle (10 for the editor, 8 for
+  the 24 high search field) filled white 0.06 with a 1 pt border, white 0.12, or white 0.3 while it has the
+  keyboard. Placeholder white 0.4. Typing uses an AppKit view that takes no drags (`NotesTextView`,
+  `NotesSearchField`), so dropped text still reaches the module. Search matches are highlighted with a white
+  0.25 background (`NotesText.highlighted`), the same in the list and in the note.
 - **Thin progress bar**: a 4 pt capsule track (white 0.12–0.18) with a white 0.92 fill; times either side at
   10.5 medium monospaced digits, white 0.55.
 
@@ -280,7 +285,10 @@ both sides balanced without it (Now Playing hides shuffle and repeat together).
 
 - A menu, popover, prompt or drag in progress must keep the notch from closing under it: return true from
   `holdsOpen` while it's up and call `notch.holdReleased()` when it ends. Menus are standard dark system menus.
-- Keys go to `handleKey(_:)` while the notch has focus; give Tab a visible `keyFocusRing`.
+- Keys go to `handleKey(_:)` while the notch has focus, before any text field sees them; give Tab a visible
+  `keyFocusRing`. A module with a text field returns false for ordinary typing so it reaches the field, and
+  handles Esc, the arrows and Return itself (Notes' search: Esc clears, then leaves; arrows walk the matches).
+  While a field has the keyboard, hold the notch open with `holdsOpen`.
 - Clicking empty space in the panel shrinks the notch (the Shelf clears its selection first). Don't swallow those
   clicks with full-size invisible buttons.
 

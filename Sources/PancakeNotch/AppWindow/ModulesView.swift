@@ -1087,16 +1087,32 @@ private struct ShelfSettingsRows: View {
             title: String(localized: "On the Shelf now"),
             subtitle: String(localized: "\(store.items.count) of \(ShelfStore.capacity) items. Files stay where they are: the Shelf only remembers where to find them.")
         ) {
-            // Two clicks, like Clear all in the notch.
+            // Two clicks, like Clear all in the notch, which it follows: pinned items may stay.
+            let clearable = settings.clearAllKeepsPinned ? store.items.count - store.pinnedCount : store.items.count
             Button(!confirmingClear ? String(localized: "Clear Shelf")
-                   : store.items.count == 1 ? String(localized: "Clear 1 item?")
-                   : String(localized: "Clear \(store.items.count) items?")) {
-                if confirmingClear { store.clear() }
+                   : clearable == 1 ? String(localized: "Clear 1 item?")
+                   : String(localized: "Clear \(clearable) items?")) {
+                if confirmingClear { store.clear(keepingPinned: settings.clearAllKeepsPinned) }
                 confirmingClear.toggle()
             }
-            .disabled(store.items.isEmpty)
+            .disabled(clearable == 0)
+            .help(clearable == 0 && !store.items.isEmpty ? String(localized: "Every item is pinned. Unpin them, or let Clear Shelf remove pinned items too.") : "")
             // The question is about the items it names: ask again if they change.
-            .onChange(of: store.items.count) { confirmingClear = false }
+            .onChange(of: clearable) { confirmingClear = false }
+        }
+        SettingsRow(
+            title: String(localized: "Pinned items"),
+            subtitle: pinnedSubtitle
+        ) {
+            Button(String(localized: "Unpin All")) { store.setPinned(store.items.map(\.id), false) }
+                .disabled(store.pinnedCount == 0)
+        }
+        SettingsRow(
+            title: String(localized: "Clear all keeps pinned items"),
+            subtitle: String(localized: "Off: Clear all removes pinned items too. Pinned items are never cleared after a while, or after you drag them out.")
+        ) {
+            Toggle(String(localized: "Clear all keeps pinned items"), isOn: $settings.clearAllKeepsPinned)
+                .labelsHidden()
         }
         ShelfScreenshotsRow(settings: settings, screenshots: screenshots)
         if MissionControlDragGuard.isNeeded {
@@ -1126,7 +1142,7 @@ private struct ShelfSettingsRows: View {
         }
         SettingsRow(
             title: String(localized: "Remove items after dragging them out"),
-            subtitle: String(localized: "Off keeps them on the Shelf so you can drop them again.")
+            subtitle: String(localized: "Off keeps them on the Shelf so you can drop them again. Pinned items always stay.")
         ) {
             Toggle(String(localized: "Remove items after dragging them out"), isOn: $settings.removeAfterDragOut)
                 .labelsHidden()
@@ -1147,7 +1163,7 @@ private struct ShelfSettingsRows: View {
         }
         SettingsRow(
             title: String(localized: "Clear the Shelf after"),
-            subtitle: String(localized: "Older items are removed the next time the notch opens.")
+            subtitle: String(localized: "Older items are removed the next time the notch opens. Pinned items stay.")
         ) {
             MonochromeSegmented(
                 title: String(localized: "Clear the Shelf after"),
@@ -1201,6 +1217,14 @@ private struct ShelfSettingsRows: View {
             }
         }
         ShelfConvertSettingsRows(settings: settings)
+    }
+
+    private var pinnedSubtitle: String {
+        let how = String(localized: "Pinned items stay at the front of the Shelf. To pin one, right-click it, or open it and click the pin.")
+        let count = store.pinnedCount
+        guard count > 0 else { return how }
+        let now = count == 1 ? String(localized: "1 item is pinned.") : String(localized: "\(count) items are pinned.", comment: "Shelf settings; count of pinned items")
+        return now + " " + how
     }
 }
 

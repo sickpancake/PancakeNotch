@@ -8,8 +8,52 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request stops that pull request's older run, so stale runs don't hold one of the
+# few Macs a public repository gets at once. Runs on main each get their own group and always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # What a pull request changes, so the Mac jobs only run when they can find something. On main every
+  # check runs. If this job breaks, its outputs are empty and every check runs (the jobs below test for
+  # 'false', never 'true'), so a broken filter can't wave a change through.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.files.outputs.app }}
+      release: ${{ steps.files.outputs.release }}
+      convert: ${{ steps.files.outputs.convert }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its main parent
+          persist-credentials: false
+      - name: Changed files
+        id: files
+        shell: bash
+        run: |
+          set -uo pipefail
+          app=true release=true convert=true
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]] && files="$(git diff --name-only HEAD^1 HEAD)"; then
+            echo "$files"
+            # Nothing in these is built into the app or read by the tests and memory checks (the website
+            # job checks site/ and web/). CHANGELOG.md is the release notes: release-dry-run reads it.
+            if ! grep -qvE '^(docs|site|web|design|verification|\.agents|\.claude)/|^[^/]+\.md$|^LICENSE$' <<< "$files"; then
+              app=false
+              grep -qx 'CHANGELOG.md' <<< "$files" || release=false
+            fi
+            # The Convert helper is built from these; on main the check always runs, so a toolchain or
+            # runner change still shows up there.
+            grep -qE '^Sources/(ConvertKit|ConvertEngine|ConvertHelper)/|^scripts/(check-convert-memory\.sh|convert-fixtures\.swift|build-app\.sh|swift\.sh)$|^Package\.(swift|resolved)$|^\.github/workflows/ci\.yml$' <<< "$files" || convert=false
+          fi
+          echo "app=$app release=$release convert=$convert"
+          { echo "app=$app"; echo "release=$release"; echo "convert=$convert"; } >> "$GITHUB_OUTPUT"
+
   build-and-test:
+    needs: changes
+    # Skipped (which counts as passed) only when a pull request changes nothing the app is built from.
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
     runs-on: macos-15
     # Usually about 11 minutes. A stuck step once held this job for GitHub's 6-hour limit.
     timeout-minutes: 45
@@ -38,8 +82,13 @@ jobs:
         run: ./scripts/check-agents-memory.sh build/PancakeNotch.app
       - name: Convert memory budget (ADR-0038, conversions near the "Too big" limits)
         # Usually about 4 minutes; each conversion also has its own 2-minute limit in the script.
+        # On pull requests, only when they change what the Convert helper is built from; always on main.
+        if: needs.changes.outputs.convert != 'false'
         timeout-minutes: 20
         run: ./scripts/check-convert-memory.sh build/PancakeNotch.app/Contents/MacOS/pancakenotch-convert
+      - name: Convert memory budget skipped
+        if: needs.changes.outputs.convert == 'false'
+        run: echo "::notice::Convert memory check skipped; this pull request doesn't change Convert's code. It runs on main after the merge."
 
   # The website builds (home page in web/, Help in site/), so a change that breaks it shows up here
   # and not after the merge.
@@ -62,6 +111,9 @@ jobs:
   # idle memory of a build that can update itself (Sparkle running). Also checks that the live update
   # feed is one the next release will accept, and that a changed or unsigned feed is refused.
   release-dry-run:
+    needs: changes
+    # Skipped (which counts as passed) only when a pull request changes neither the app nor CHANGELOG.md.
+    if: ${{ !cancelled() && needs.changes.outputs.release != 'false' }}
     runs-on: macos-15
     env:
       DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/dry-run/PancakeNotch.zip

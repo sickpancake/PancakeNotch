@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-/// The Shelf's items, newest first, saved to `items.json` in the Shelf folder (ADR-0013).
+/// The Shelf's items, pinned ones first, then newest first, saved to `items.json` in the Shelf folder (ADR-0013).
 ///
 /// Files are kept as bookmarks (references), so they follow moves and renames. Items the Shelf owns
 /// (promised files, dropped image data, long text) live in `Files/<id>/` and are deleted with their item.
@@ -49,7 +49,7 @@ public final class ShelfStore {
         self.now = now
         do {
             let data = try Data(contentsOf: indexURL)
-            items = try JSONDecoder().decode([ShelfItem].self, from: data)
+            items = Self.pinnedFirst(try JSONDecoder().decode([ShelfItem].self, from: data))
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             // Only a genuinely missing index starts fresh. fileExists also returns false when
             // directory access is denied, so it can't safely distinguish these cases.
@@ -64,6 +64,13 @@ public final class ShelfStore {
     }
 
     public var isFull: Bool { items.count >= Self.capacity }
+
+    public var pinnedCount: Int { items.lazy.filter(\.isPinned).count }
+
+    /// Pinned items first, each group keeping its order (the Shelf's "line" never shuffles otherwise).
+    static func pinnedFirst(_ items: [ShelfItem]) -> [ShelfItem] {
+        items.filter(\.isPinned) + items.filter { !$0.isPinned }
+    }
 
     // MARK: Adding
 
@@ -138,8 +145,40 @@ public final class ShelfStore {
         save()
     }
 
-    public func clear() {
-        remove(items.map(\.id))
+    /// Removes every item, or with `keepingPinned` every item that isn't pinned.
+    public func clear(keepingPinned: Bool = false) {
+        remove(items.filter { !keepingPinned || !$0.isPinned }.map(\.id))
+    }
+
+    // MARK: Pinning
+
+    /// Pins or unpins items. Pinned items move to the front of the Shelf; unpinned ones go back to the
+    /// front of the rest.
+    public func setPinned(_ ids: some Collection<UUID>, _ pinned: Bool) {
+        let ids = Set(ids)
+        var changed = false
+        for index in items.indices where ids.contains(items[index].id) && items[index].isPinned != pinned {
+            items[index].isPinned = pinned
+            // An unpinned item gets a fresh auto-clear window instead of expiring on the next open.
+            if !pinned { items[index].addedAt = now() }
+            changed = true
+        }
+        if changed { save() }
+    }
+
+    /// Puts pins and order back the way they were (Undo after pinning). Items added or removed since
+    /// are left alone: new ones keep their place, removed ones stay removed.
+    public func restorePins(_ pins: [UUID: Bool], order: [UUID]) {
+        var rank: [UUID: Int] = [:]
+        for (index, id) in order.enumerated() { rank[id] = index }
+        for index in items.indices {
+            if let pinned = pins[items[index].id] { items[index].isPinned = pinned }
+        }
+        // Items in the old order go back to it; anything newer stays in front, as it was added.
+        let known = items.filter { rank[$0.id] != nil }.sorted { rank[$0.id]! < rank[$1.id]! }
+        let newer = items.filter { rank[$0.id] == nil }
+        items = newer + known
+        save()
     }
 
     /// Content that will never be added (the "Shelf is full" card was closed): delete its owned files.
@@ -205,7 +244,6 @@ public final class ShelfStore {
     /// `maxAge` (auto-clear). Runs when the notch opens; bookmarks are resolved off the main thread.
     public func prune(maxAge: TimeInterval?) async {
         let cutoff = maxAge.map { now().addingTimeInterval(-$0) }
-        let expired = items.filter { item in cutoff.map { item.addedAt < $0 } ?? false }.map(\.id)
         let bookmarks: [(UUID, Data)] = items.compactMap { item in
             guard case .file(let bookmark, _) = item.kind else { return nil }
             return (item.id, bookmark)
@@ -214,6 +252,9 @@ public final class ShelfStore {
             bookmarks.map { ($0.0, ShelfBookmark.resolve($0.1)) }
         }.value
 
+        // Checked after the await, so an item pinned (or unpinned) meanwhile isn't cleared by mistake.
+        // Pinned items never expire.
+        let expired = items.filter { item in !item.isPinned && (cutoff.map { item.addedAt < $0 } ?? false) }.map(\.id)
         var missing: [UUID] = []
         var changed = false
         for (id, resolution) in resolved {
@@ -260,6 +301,9 @@ public final class ShelfStore {
 
     private func save() {
         hasUnsavedEdits = false
+        // Whatever changed (a drop, a duplicate moved to the front, a pin), pinned items stay in front.
+        let ordered = Self.pinnedFirst(items)
+        if ordered.map(\.id) != items.map(\.id) { items = ordered }
         do {
             // If recovery failed at launch, retry before writing: never overwrite the only copy of
             // an unreadable index. Unique backup names also preserve repeated recoveries in one second.

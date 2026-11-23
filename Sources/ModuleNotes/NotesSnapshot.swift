@@ -33,6 +33,20 @@ public enum NotesSnapshot {
                 module.store.delete(module.notes.last!.id)
             }]),
             model([module { $0.isDropTargeted = true }]),
+            // Searching: two matches, words highlighted, the field focused.
+            model([module { module in
+                module.setQuery("the")
+                module.isSearching = true
+            }]),
+            // A match deep in a long note: the row's preview starts near it.
+            model([module { module in
+                module.store.add("Trip\nPack the charger, the passport, sunscreen, a book for the plane and the blue jacket", source: .dropped)
+                module.setQuery("jacket")
+            }]),
+            // Nothing matches.
+            model([module { $0.setQuery("taxes") }]),
+            // The field shows only while searching: a magnifying glass beside New Note instead.
+            model([module { $0.settings.searchField = .whenSearching }]),
         ]
     }
 }

@@ -6,6 +6,7 @@ so write them for people using the app: short, plain, no code talk.
 ## Unreleased
 
 - **Notes.** A new module for jotting things down for later, right in the notch: the first line is the title and it saves as you type. Pin the notes you need most, undo a delete, and sort by last edited, newest or oldest.
+- **Find a note fast.** A search field sits above the Notes list: press ⌘F and type a few words. Only notes with all of them stay, pinned ones first, with the words highlighted. Use the arrows and Return to open a match, and Esc to clear. In Notes' settings, hide the field until you search, search titles only, or keep the search for next time.
 - **Text files become notes.** Drop a .txt or .md file on the Shelf (or on Notes) and it's kept as a note. In Notes' settings, choose All text to turn dropped text into notes too, or Off to keep everything on the Shelf.
 - **Notes on Home and in Learn.** Small, medium and large Notes widgets for Home, and a short hands-on Notes lesson.
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.
@@ -17,6 +18,7 @@ so write them for people using the app: short, plain, no code talk.
 - **Quick replies to Devin.** A Devin cloud session waiting for your next message gets Continue and Stop right in the notch.
 - **Paste onto the Shelf.** Press ⌘V in the open Shelf to add what you copied: files, pictures, links and text, just like a drop. Or click **⌘V to paste** at the top of the Shelf. What you pasted is selected, so Delete takes it back off, and ⌘C copies selected items. Turn it off with **Paste with ⌘V** in Shelf settings.
 - **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
+- **Pin Shelf items.** Right-click an item on the Shelf and choose Pin, click the pin beside the back arrow when an item is open, or select it and press P. Pinned items stay at the front, show a small pin and are never cleared by themselves: not after a while, not after you drag them out, and not by Clear all unless you choose that in Shelf settings. Undo right after pinning, and Unpin All in Shelf settings.
 
 ## 0.4.0 — beta
 

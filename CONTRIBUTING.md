@@ -48,7 +48,10 @@ publishes to GitHub Pages when it changes on `main`. The app's Help page links t
 1. Add a `## X.Y.Z` section to `CHANGELOG.md`. Write it for people using the app: it becomes the
    update window's text and the GitHub Release notes. Merge it in a pull request of its own, without
    website changes: GitHub Pages keeps one deploy per commit, so if merging it updates the website,
-   the release's own website update is dropped and the site keeps the older update feed.
+   the release's own website update is dropped and the site keeps the older update feed. Name its
+   branch `release/vX.Y.Z`: that pull request runs the Benchmark (launch time, memory, CPU and
+   download size against the last release; the table is on the run's summary page). Other pull
+   requests skip it, and it can also be run by hand from Actions › Benchmark.
 2. Push a `vX.Y.Z` tag on that commit on `main`. The Release workflow tests and builds the app, then
    waits for you.
 3. Approve it: open the run (Actions › Release) and choose **Review deployments › release ›
@@ -57,8 +60,9 @@ publishes to GitHub Pages when it changes on `main`. The app's Help page links t
    website really serves the new feed; if it fails, its message says how to fix it.
 
 The workflow's steps are scripts you can read: `build-app.sh`, then `sign-release.sh` (the only one
-that sees the keys), then `check-release.sh`. Every pull request runs them with throwaway keys (the
-`release-dry-run` CI job), so problems show up before release day.
+that sees the keys), then `check-release.sh`. Every pull request that changes the app or
+`CHANGELOG.md` runs them with throwaway keys (the `release-dry-run` CI job), so problems show up
+before release day. Pull requests that change only docs, Help or the website skip the Mac checks.
 
 Signing keys are made once with `./scripts/make-signing-keys.sh` and never committed. They live in
 two places only: the `release` environment's secrets on GitHub (Settings › Environments › release,

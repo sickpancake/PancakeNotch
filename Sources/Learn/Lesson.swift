@@ -18,7 +18,7 @@ public enum LessonSignal: Hashable, Sendable {
          usageAccountsOpened, usageAccountChosen, usageRangeChosen,
          timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped,
          keepAwakeTurnedOn, keepAwakeExtended, keepAwakeTurnedOff,
-         noteWritten, notePinned, noteDropped, noteDeleted
+         noteWritten, notePinned, noteFound, noteDropped, noteDeleted
 }
 
 /// One thing to try in a lesson. It ticks when its `signal` arrives.
@@ -418,7 +418,7 @@ public struct Lesson: Identifiable, Sendable {
         ]
     )
 
-    /// Write a note, pin it, make one from dropped text, then delete one.
+    /// Write a note, pin it, find one, make one from dropped text, then delete one.
     public static let notes = Lesson(
         id: .notes,
         title: String(localized: "Notes", comment: "Lesson title"),
@@ -438,6 +438,13 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Click the pin above the note. Pinned notes stay at the top of the list and on the Notes widget.", comment: "Lesson step detail"),
                 symbol: "pin",
                 signal: .notePinned
+            ),
+            LessonStep(
+                id: "notes.find",
+                title: String(localized: "Find a note", comment: "Lesson step title"),
+                detail: String(localized: "Press ⌘F and type “pancake”. Only the notes with that word stay in the list, with it highlighted. The arrows move through them and Return opens one; Esc clears the search.", comment: "Lesson step detail"),
+                symbol: "magnifyingglass",
+                signal: .noteFound
             ),
             LessonStep(
                 id: "notes.drop",
