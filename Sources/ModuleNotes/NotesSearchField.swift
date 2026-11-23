@@ -44,6 +44,7 @@ struct NotesSearchField: NSViewRepresentable {
             attributes: [.foregroundColor: NSColor.white.withAlphaComponent(0.4), .font: NSFont.systemFont(ofSize: 12)]
         )
         field.setAccessibilityLabel(String(localized: "Search notes"))
+        field.setAccessibilityHelp(String(localized: "Type words from a note's title or text. Down and Up move through the matches, Return opens one, Esc clears the search."))
         field.unregisterDraggedTypes()
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
