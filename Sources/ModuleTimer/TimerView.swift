@@ -18,7 +18,6 @@ struct TimerLayout: Equatable {
         notchWidth = layout.geometry.notchRect.width
     }
 
-    var contentHeight: CGFloat { body.height - bandHeight - Self.bottomPadding }
     var bandSideWidth: CGFloat { max(0, (body.width - notchWidth) / 2 - Self.sidePadding) }
 }
 

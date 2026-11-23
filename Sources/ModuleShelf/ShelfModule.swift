@@ -1142,12 +1142,6 @@ public final class ShelfModule: NotchModule {
         onEvent?(.airDropped(count: 1))
     }
 
-    func shareClipboardEntry(_ entry: ShelfClipboardEntry, from view: NSView) {
-        guard let item = clipboardShareable(entry) else { return }
-        setHold { $0.isSharing = true }
-        sharing.share([item], from: view)
-    }
-
     private func clipboardShareable(_ entry: ShelfClipboardEntry) -> Any? {
         switch entry.item.kind {
         case .text(let text): text
