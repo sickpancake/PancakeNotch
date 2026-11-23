@@ -200,7 +200,7 @@ struct OnboardingView: View {
                     .foregroundStyle(realNotchOpened ? Color.black : AppPalette.primaryText)
                     .frame(width: 58, height: 58)
                     .background(realNotchOpened ? Color.white : AppPalette.selection, in: .rect(cornerRadius: 15, style: .continuous))
-                    .contentTransition(.symbolEffect(.replace))
+                    .motionContentTransition(.symbolEffect(.replace))
                     .accessibilityHidden(true)
                 Text(realNotchOpened ? String(localized: "It works. Nicely done!") : String(localized: "Waiting for the notch to open…"))
                     .font(.app(size: 15, weight: .semibold))

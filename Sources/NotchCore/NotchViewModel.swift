@@ -193,6 +193,9 @@ public final class NotchViewModel {
     /// The window is on screen (set by the window controller): hidden, nothing in it needs to tick.
     public var isOnScreen = true { didSet { if !isOnScreen { endHomeEditing(); resetHomeMotion() } } }
     @ObservationIgnored private var swipe = NotchSwipeTracker()
+    /// The Mac's or PancakeNotch's own Reduce Motion: Home's page scrolling follows it.
+    @ObservationIgnored public let motion: MotionSettings
+    @ObservationIgnored private var motionToken: NotificationToken?
 
     public init(
         layout: NotchLayout,
@@ -200,6 +203,7 @@ public final class NotchViewModel {
         behavior: NotchBehavior = NotchBehavior(),
         arrangement: ModuleArrangement? = nil,
         home: HomeSettings? = nil,
+        motion: MotionSettings? = nil,
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         isMissionControlActive: @escaping @MainActor () -> Bool = { MissionControlDetector.isActive }
     ) {
@@ -209,9 +213,21 @@ public final class NotchViewModel {
         self.behavior = behavior
         self.arrangement = arrangement ?? ModuleArrangement()
         self.home = home ?? HomeSettings()
+        self.motion = motion ?? .shared
         self.pointerLocation = pointerLocation
         self.isMissionControlActive = isMissionControlActive
         watchNavigation()
+        motionToken = NotificationToken(
+            observing: MotionSettings.didChangeNotification, from: self.motion
+        ) { [weak self] in self?.motionChanged() }
+    }
+
+    /// Reduce Motion went on or off: a Home page caught between two places (a scroll that was moving,
+    /// settling or held by fingers) jumps to the page it was going to. Reduce Motion draws one page and
+    /// never finishes that scroll, so without this the page would stay stuck halfway once it's off again,
+    /// with its widgets not clickable.
+    func motionChanged() {
+        resetHomeMotion()
     }
 
     // MARK: Modules
@@ -266,7 +282,7 @@ public final class NotchViewModel {
         if let previous, previous !== target {
             switchedForward = arrangement.rank(of: moduleID) >= arrangement.rank(of: previous.moduleID)
         }
-        withAnimation(Self.switchAnimation) {
+        withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
             showsHome = false
             selectedID = moduleID
         }
@@ -290,7 +306,7 @@ public final class NotchViewModel {
         let opening = !showsHome
         guard opening || selectedModule != nil else { return }
         cancelAttentionClose()
-        withAnimation(Self.switchAnimation) {
+        withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
             showsHome = opening
             if opening { chosenHomePage = 0 }
         }
@@ -313,7 +329,7 @@ public final class NotchViewModel {
 
     private func navigationChanged() {
         guard showsHome, !homeIsAvailable else { return }
-        withAnimation(Self.switchAnimation) { showsHome = false }
+        withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) { showsHome = false }
         if state == .expanded { selectedModule?.notchDidOpen() }
     }
 
@@ -396,9 +412,9 @@ public final class NotchViewModel {
         guard showsHome, homePages.indices.contains(index), index != homePage else { return }
         cancelAttentionClose()
         homePageForward = index > homePage
-        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || snapshotClock != nil {
+        if isEditingHome || motion.reducesMotion || snapshotClock != nil {
             resetHomeMotion()
-            withAnimation(Self.switchAnimation) { chosenHomePage = index }
+            withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) { chosenHomePage = index }
         } else {
             if homeScrollPosition == nil { homeScrollPosition = CGFloat(homePage) }
             homeAnimationOrigin = homePage
@@ -507,7 +523,7 @@ public final class NotchViewModel {
     /// Scrolling up or down on Home moves one whole page per gesture (or per wheel step).
     private func scrollHome(_ event: NSEvent) -> Bool {
         let phase = NotchSwipeTracker.Phase(event)
-        if isEditingHome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !event.hasPreciseScrollingDeltas {
+        if isEditingHome || motion.reducesMotion || !event.hasPreciseScrollingDeltas {
             guard let step = homeScroll.handle(phase: phase, deltaY: event.scrollingDeltaY,
                 deltaX: event.scrollingDeltaX, isPrecise: event.hasPreciseScrollingDeltas,
                 time: event.timestamp) else { return false }
@@ -767,7 +783,7 @@ public final class NotchViewModel {
         let id = transitionID
         var target = layout
         target.panelHeight = height
-        withAnimation(Self.tallAnimation) {
+        withAnimation(Self.tallAnimation(reducesMotion: motion.reducesMotion)) {
             layout = target
         } completion: { [weak self] in
             guard let self, self.transitionID == id else { return }
@@ -1034,7 +1050,7 @@ public final class NotchViewModel {
             var target = layout
             target.isPeeking = true
             earsAsleep = false
-            withAnimation(Self.animation(opening: true)) {
+            withAnimation(Self.animation(opening: true, reducesMotion: motion.reducesMotion)) {
                 layout = target
                 if state == .closed { state = .compact }
             }
@@ -1084,7 +1100,7 @@ public final class NotchViewModel {
             return
         }
         transitionID += 1
-        withAnimation(Self.animation(opening: false)) {
+        withAnimation(Self.animation(opening: false, reducesMotion: motion.reducesMotion)) {
             layout.isPeeking = false
             if state == .compact { state = restingTarget }
         } completion: { [weak self] in
@@ -1117,7 +1133,7 @@ public final class NotchViewModel {
         let id = transitionID
         fitWindow?(max(state, newState))
         earsAsleep = false
-        withAnimation(Self.animation(opening: opening)) {
+        withAnimation(Self.animation(opening: opening, reducesMotion: motion.reducesMotion)) {
             state = newState
             // A taller panel shrinks along with the close.
             if closing { layout.panelHeight = .regular }
@@ -1174,23 +1190,25 @@ public final class NotchViewModel {
     }
 
     /// Growing to a taller panel and back: quicker than opening, it follows a click.
-    static var tallAnimation: Animation {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? .easeInOut(duration: 0.15)
-            : .spring(response: 0.28, dampingFraction: 0.88)
-    }
+    static var tallAnimation: Animation { tallAnimation(reducesMotion: MotionSettings.shared.reducesMotion) }
 
     /// Switching modules or showing Home: a quick slide, or a cross-fade with Reduce Motion.
-    static var switchAnimation: Animation {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? .easeInOut(duration: 0.15)
-            : .spring(response: 0.32, dampingFraction: 0.86)
-    }
+    static var switchAnimation: Animation { switchAnimation(reducesMotion: MotionSettings.shared.reducesMotion) }
 
     static func animation(opening: Bool) -> Animation {
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            return .easeInOut(duration: 0.2)
-        }
+        animation(opening: opening, reducesMotion: MotionSettings.shared.reducesMotion)
+    }
+
+    static func tallAnimation(reducesMotion: Bool) -> Animation {
+        reducesMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.28, dampingFraction: 0.88)
+    }
+
+    static func switchAnimation(reducesMotion: Bool) -> Animation {
+        reducesMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.32, dampingFraction: 0.86)
+    }
+
+    static func animation(opening: Bool, reducesMotion: Bool) -> Animation {
+        if reducesMotion { return .easeInOut(duration: 0.2) }
         return opening
             ? .spring(response: 0.42, dampingFraction: 0.8)
             : .spring(response: 0.45, dampingFraction: 1.0)

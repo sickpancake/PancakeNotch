@@ -17,6 +17,7 @@ struct NowPlayingWidget: View {
     let module: NowPlayingModule
     let size: HomeWidgetSize
     let context: HomeWidgetContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var track: NowPlayingTrack? { module.center.track }
 
@@ -106,7 +107,7 @@ struct NowPlayingWidget: View {
         .lineLimit(1)
         .truncationMode(.tail)
         .id(track.map { "\($0.title)|\($0.artist)" } ?? "nothing")
-        .transition(.opacity.combined(with: .offset(y: 3)))
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 3)))
         .animation(.easeInOut(duration: 0.3), value: track?.title)
         .accessibilityElement(children: .combine)
     }
@@ -138,7 +139,7 @@ struct NowPlayingWidget: View {
                             .overlay(alignment: .leading) {
                                 Capsule().fill(.white.opacity(0.92))
                                     .frame(width: proxy.size.width * min(1, max(0, elapsed / duration)))
-                                    .animation(isStill ? nil : .linear(duration: 1), value: elapsed)
+                                    .animation(isStill || reduceMotion ? nil : .linear(duration: 1), value: elapsed)
                             }
                     }
                     .frame(height: 3)

@@ -462,7 +462,7 @@ struct TransportButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .contentTransition(.symbolEffect(.replace))
+                .motionContentTransition(.symbolEffect(.replace))
                 .frame(width: size + 20, height: size + 14)
                 .background(.white.opacity(isHovered && isEnabled ? 0.1 : 0), in: Circle())
                 .contentShape(Circle())
@@ -492,7 +492,7 @@ private struct ModeButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white.opacity(isOn ? 1 : isHovered ? 0.8 : 0.45))
-                .contentTransition(.symbolEffect(.replace))
+                .motionContentTransition(.symbolEffect(.replace))
                 .frame(width: 28, height: 28)
                 .background(.white.opacity(isOn ? 0.16 : isHovered ? 0.08 : 0), in: Circle())
                 .contentShape(Circle())

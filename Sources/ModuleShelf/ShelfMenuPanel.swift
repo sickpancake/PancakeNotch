@@ -1,4 +1,5 @@
 import AppKit
+import NotchCore
 import SwiftUI
 
 /// One row of a `ShelfMenuPanel`.
@@ -32,7 +33,7 @@ final class ShelfMenuPanel {
         model = Model(entries: entries)
         panel = Panel()
         // Default sizing options: with none, `fittingSize` is zero and the menu is invisible.
-        let hosting = FirstClickHostingView(rootView: ShelfMenuView(model: model))
+        let hosting = FirstClickHostingView(rootView: ShelfMenuView(model: model).followsMotionSettings())
         let size = hosting.fittingSize
         hosting.frame = CGRect(origin: .zero, size: size)
         panel.contentView = hosting

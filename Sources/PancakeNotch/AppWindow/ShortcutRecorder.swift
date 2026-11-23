@@ -155,13 +155,21 @@ private struct RecordingDot: View {
             .frame(width: 7, height: 7)
             .opacity(isDimmed ? 0.25 : 1)
             .padding(.trailing, 2)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    isDimmed = true
-                }
-            }
+            .onAppear { pulse(!reduceMotion) }
+            // Reduce Motion switched while recording: stop (or start) the pulse.
+            .onChange(of: reduceMotion) { _, reduced in pulse(!reduced) }
             .accessibilityHidden(true)
+    }
+
+    private func pulse(_ pulses: Bool) {
+        guard pulses else {
+            // A plain change replaces the repeating animation, so the dot settles fully lit.
+            withTransaction(Transaction(animation: nil)) { isDimmed = false }
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            isDimmed = true
+        }
     }
 }
 

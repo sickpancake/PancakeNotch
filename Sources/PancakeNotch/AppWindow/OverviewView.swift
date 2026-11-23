@@ -358,7 +358,7 @@ private struct StatTile: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
+                .motionContentTransition(.numericText())
                 .padding(.top, 14)
             Text(caption)
                 .font(.app(size: 12))
