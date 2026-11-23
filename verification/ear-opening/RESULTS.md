@@ -2,7 +2,7 @@
 
 Result: **PASS within the stated bounds; no product finding.**
 
-Reviewed product source: `75ceb56fb6ebff9d729abe987b72b7dc2dcfeb25`.
+Reviewed product source: `b4d5fa14fa3f54ad4d094def73b0d48c837b4bf2`.
 Verified on 2026-11-22 using Apple Swift 6.3.3 (`swiftlang-6.3.3.1.3 clang-2100.1.1.101`),
 the project's SDK wrapper, Swift Testing, and Python 3.9.6. Exact product hashes and the
 toolchain record are in `coverage.json`.
