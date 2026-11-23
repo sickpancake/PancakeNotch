@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **The timer turns amber in its last minute.** Under a minute left, the ring and time in the notch change from white to amber, so a short timer catches your eye before it ends.
 - **Fixed a note losing its last few characters.** Text typed in one fast burst — an expander, macro or dictation — now saves in full.
 
 ## 0.5.0

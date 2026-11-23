@@ -196,4 +196,18 @@ struct TimerPolishTests {
         let tight = EarFit.choose(widest: "23:59:59", hasLead: true, available: 40)
         #expect(!tight.showsLead)
     }
+
+    @Test func theEarTurnsAmberInTheLastMinute() {
+        var timer = CountdownTimer()
+        timer.start(300, now: start)
+        #expect(TimerEar.tint(timer, at: start + 48) == .white) // 4:12
+        // 1:00 is still white; 0:59 flips, on the same tick the digits change.
+        #expect(TimerEar.tint(timer, at: start + 240) == .white)
+        #expect(TimerEar.tint(timer, at: start + 240.5) == .white)
+        #expect(TimerEar.tint(timer, at: start + 241) == TimerEar.lastMinute)
+        #expect(TimerEar.tint(timer, at: start + 252) == TimerEar.lastMinute) // 0:48
+        // Paused at 0:30 keeps the colour its time left implies.
+        timer.pause(now: start + 270)
+        #expect(TimerEar.tint(timer, at: start + 1000) == TimerEar.lastMinute)
+    }
 }

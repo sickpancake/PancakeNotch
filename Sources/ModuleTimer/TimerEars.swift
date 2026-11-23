@@ -79,17 +79,27 @@ struct TimerEar: View {
         // The widest the countdown will be: the layout is chosen for that, so it doesn't change size
         // when 10:00 becomes 9:59.
         let widest = TimerText.countdown(timer.total)
+        let tint = Self.tint(timer, at: now)
         if paused {
-            fitting(lead: .pause, text: text, widest: widest)
+            fitting(lead: .pause, text: text, widest: widest, tint: tint)
         } else {
             switch content {
-            case .ringAndTime: fitting(lead: .ring, text: text, widest: widest)
-            case .time: fitting(lead: nil, text: text, widest: widest)
-            case .ring: withBadge(TimerRing(module: module, size: 12))
-            case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false)
+            case .ringAndTime: fitting(lead: .ring, text: text, widest: widest, tint: tint)
+            case .time: fitting(lead: nil, text: text, widest: widest, tint: tint)
+            case .ring: withBadge(TimerRing(module: module, size: 12, tint: tint))
+            case .endTime: fitting(lead: nil, text: timer.end.map(TimerText.shortTime) ?? text, animated: false, tint: tint)
             }
         }
     }
+
+    /// Amber once the countdown shows under a minute (0:59 and below), white before: the one accent in the
+    /// otherwise monochrome ear, for the last minute when it matters most (issue #129). A static colour, so
+    /// nothing animates and the layout doesn't change.
+    static func tint(_ timer: CountdownTimer, at now: Date) -> Color {
+        timer.remaining(at: now).rounded(.up) < 60 ? lastMinute : .white
+    }
+
+    static let lastMinute = Color(red: 1, green: 159 / 255, blue: 10 / 255)
 
     /// The stopwatch has no ring (nothing to fill up): a stopwatch sign where the timer has its ring, a pause
     /// sign while it's stopped. "Ring only" has nothing to show for it, so it shows the sign and the time.
@@ -113,7 +123,7 @@ struct TimerEar: View {
     /// The sign and the time if they fit in one ear, else the time alone, smaller for long times. What fits is
     /// worked out from `widest` (the longest the time will be), never from the time shown, so the size
     /// doesn't jump when the time gets a digit shorter or longer.
-    private func fitting(lead: Lead?, text: String, widest: String? = nil, direction: DrumDirection = .down, animated: Bool = true) -> some View {
+    private func fitting(lead: Lead?, text: String, widest: String? = nil, direction: DrumDirection = .down, animated: Bool = true, tint: Color = .white) -> some View {
         // The other timers' count comes off the room first, so the time never runs into it.
         let badge = direction == .down ? badgeText : nil
         let badgeWidth = badge.map { DrumMetrics.width(of: $0, size: Self.badgeSize, weight: .semibold) + 2 } ?? 0
@@ -124,19 +134,19 @@ struct TimerEar: View {
         )
         return HStack(spacing: fit.spacing) {
             if let lead, fit.showsLead {
-                leadView(lead).scaleEffect(fit.leadSide / EarFit.leadSide).frame(width: fit.leadSide, height: fit.leadSide)
+                leadView(lead, tint: tint).scaleEffect(fit.leadSide / EarFit.leadSide).frame(width: fit.leadSide, height: fit.leadSide)
             }
-            time(text, size: fit.size, direction: direction, animated: animated)
+            time(text, size: fit.size, direction: direction, animated: animated).foregroundStyle(tint)
             if let badge { badgeView(badge).padding(.leading, 2 - fit.spacing) }
         }
         .frame(width: max(0, width - 4))
     }
 
     @ViewBuilder
-    private func leadView(_ lead: Lead) -> some View {
+    private func leadView(_ lead: Lead, tint: Color) -> some View {
         switch lead {
-        case .ring: TimerRing(module: module, size: 10)
-        case .pause: sign("pause.fill", size: 7)
+        case .ring: TimerRing(module: module, size: 10, tint: tint)
+        case .pause: sign("pause.fill", size: 7, tint: tint)
         case .stopwatch: sign("stopwatch", size: 9)
         }
     }
@@ -174,10 +184,10 @@ struct TimerEar: View {
         }
     }
 
-    private func sign(_ symbol: String, size: CGFloat = 11) -> some View {
+    private func sign(_ symbol: String, size: CGFloat = 11, tint: Color = .white) -> some View {
         Image(systemName: symbol)
             .font(.system(size: size, weight: .bold))
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(tint.opacity(0.85))
     }
 }
 
