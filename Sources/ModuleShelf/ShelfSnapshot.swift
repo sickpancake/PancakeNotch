@@ -154,7 +154,11 @@ public enum ShelfSnapshot {
             convert(module, ["Holiday.heic"], photo, .failed(ConvertFailure.failed.message))
         }
         row(.compact, files: Array(full.prefix(3))) { module in
-            module.convertPeekText = ShelfModule.doneText(files: [URL(fileURLWithPath: "/Report.pdf")])
+            module.peekNote = ShelfPeekNote(text: ShelfModule.doneText(files: [URL(fileURLWithPath: "/Report.pdf")]), symbol: "checkmark.circle.fill")
+            module.notch?.peekForSnapshot(module)
+        }
+        row(.compact, files: Array(full.prefix(3))) { module in
+            module.peekNote = .screenshotAdded
             module.notch?.peekForSnapshot(module)
         }
 

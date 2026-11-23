@@ -21,10 +21,12 @@ struct TimerRing: View {
     let module: TimerModule
     let size: CGFloat
     var lineWidth: CGFloat = 2
+    /// One timer of several (a row in the list); the notch's own timer when nil.
+    var timer: CountdownTimer?
 
     var body: some View {
         let center = module.center
-        let plan = RingPlan(center.timer)
+        let plan = RingPlan(timer ?? center.timer)
         // Read here so the ring starts again from the new time after a wake or a clock change.
         let epoch = center.clockEpoch
         DrainingRing(plan: plan, epoch: epoch, lineWidth: lineWidth, isSnapshot: module.isSnapshot, now: { center.now })
