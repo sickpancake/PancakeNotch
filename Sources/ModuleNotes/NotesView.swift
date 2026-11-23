@@ -94,8 +94,8 @@ struct NotesView: View {
                         .foregroundStyle(.white.opacity(0.55))
                         .monospacedDigit()
                         .lineLimit(1)
-                        .contentTransition(.numericText())
-                        .animation(.easeInOut(duration: 0.2), value: countText)
+                        .motionContentTransition(.numericText())
+                        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .easeInOut(duration: 0.2), value: countText)
                 }
                 if module.settings.searchField == .whenSearching, !module.store.notes.isEmpty, !module.showsSearchField {
                     NotchRoundButton(symbol: "magnifyingglass", label: String(localized: "Search Notes"), size: 24) {
@@ -256,6 +256,7 @@ private struct NotesList: View {
     /// The notes to list (all, or a search's matches).
     let notes: [Note]
     let selectedID: Note.ID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 4) {
@@ -272,7 +273,7 @@ private struct NotesList: View {
             }
             if module.store.lastDeleted != nil {
                 NotesUndoRow(module: module)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.2), value: module.store.lastDeleted?.id)

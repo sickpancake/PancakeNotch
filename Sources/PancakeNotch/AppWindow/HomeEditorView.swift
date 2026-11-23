@@ -827,6 +827,7 @@ private struct EditableWidget: View {
                 choosingSize = false
                 if size != placement.size { actions.resize(size) }
             }
+            .followsMotionSettings() // A popover is its own window.
         }
         .help(Text("Size"))
         .accessibilityHidden(true) // VoiceOver has the size actions on the widget itself.

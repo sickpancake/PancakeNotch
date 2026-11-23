@@ -195,7 +195,7 @@ struct AIUsageWidget: View {
             .font(.system(size: size, weight: .semibold).monospacedDigit())
             .lineLimit(1)
             .minimumScaleFactor(0.6)
-            .contentTransition(.numericText(value: left))
+            .motionContentTransition(.numericText(value: left))
             .animation(.easeInOut(duration: 0.3), value: AIUsageText.percent(left))
     }
 }

@@ -3,7 +3,7 @@
   "toolchain": "Apple Swift 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1), SDK selected by scripts/swift.sh; Python 3.9.6",
   "sha256": {
     "Sources/NotchCore/EarAllocator.swift": "c7f2c54be9a7162282c35befd7ca7b98d8ac1b565fe56499f782f79e1e23831a",
-    "Sources/NotchCore/NotchViewModel.swift": "80b9ca919160482ede491b2d5428cc0e4b4a318e8ca6dd67e7ed7a8c06a2297c",
+    "Sources/NotchCore/NotchViewModel.swift": "41fb515eb22750dac39c8c43c1dcbb5475319a818110fbc4aeabf73906b06f93",
     "Sources/NotchCore/NotchModule.swift": "449df9361405d28cbedc616cd05111bfd23f7edcd87a7a09ebd37570569a8b93",
     "Sources/ModuleNowPlaying/NowPlayingModule.swift": "2adb69da2d431d28649b202efa791f5f7d5a956a51e16e95274012d0f744d9bb",
     "Sources/ModuleTimer/TimerModule.swift": "991a72997a1637ff769f3cf5e506f742ddbd811bae64bd2108ccfd1bfbf436fe",

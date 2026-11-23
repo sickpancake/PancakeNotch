@@ -30,7 +30,7 @@ struct ShelfWidget: View {
                         Text(status)
                             .font(.system(size: 10, weight: .medium).monospacedDigit())
                             .foregroundStyle(.white.opacity(0.55))
-                            .contentTransition(.numericText(value: Double(items.count)))
+                            .motionContentTransition(.numericText(value: Double(items.count)))
                     }
                 }
                 if items.isEmpty {

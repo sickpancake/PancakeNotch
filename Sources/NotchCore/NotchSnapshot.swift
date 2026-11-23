@@ -38,6 +38,7 @@ public enum NotchSnapshot {
         .padding(12)
         .background(Color(white: 0.3))
         .environment(\.colorScheme, .dark)
+        .followsMotionSettings()
 
         let renderer = ImageRenderer(content: view)
         // Keep a long contact sheet below the renderer's large-image limit.

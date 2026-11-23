@@ -384,7 +384,7 @@ private struct TimerRunning: View {
                     Image(systemName: timer.isPaused ? "pause.fill" : module.symbol)
                         .font(.system(size: ringSize * 0.3, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.7))
-                        .contentTransition(.symbolEffect(.replace))
+                        .motionContentTransition(.symbolEffect(.replace))
                 }
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -610,7 +610,7 @@ private struct TimerRow: View {
             Spacer(minLength: 4)
             Text(TimerText.countdown(remaining))
                 .font(.system(size: isCompact ? 14 : 17, weight: .medium).monospacedDigit())
-                .contentTransition(.numericText(countsDown: true))
+                .motionContentTransition(.numericText(countsDown: true))
             .accessibilityElement(children: .ignore)
             HStack(spacing: 6) {
                 if !isCompact {

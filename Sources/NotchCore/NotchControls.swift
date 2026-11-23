@@ -83,7 +83,7 @@ public struct NotchRoundButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.36, weight: .bold))
-                .contentTransition(.symbolEffect(.replace))
+                .motionContentTransition(.symbolEffect(.replace))
                 .foregroundStyle(prominent ? .black : .white)
                 .frame(width: size, height: size)
                 .background(prominent ? .white.opacity(isHovered ? 0.88 : 1) : .white.opacity(isHovered ? 0.2 : 0.13), in: Circle())

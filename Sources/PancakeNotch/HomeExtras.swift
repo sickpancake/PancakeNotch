@@ -152,7 +152,7 @@ private struct HomeBatteryWidget: View {
                 } value: {
                     Text(Self.percent(power))
                         .font(.system(size: 17, weight: .semibold).monospacedDigit())
-                        .contentTransition(.numericText(value: Double(power.percent ?? 0)))
+                        .motionContentTransition(.numericText(value: Double(power.percent ?? 0)))
                 }
             case .medium:
                 HStack(spacing: 10) {
@@ -170,7 +170,7 @@ private struct HomeBatteryWidget: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(Self.percent(power))
                             .font(.system(size: 19, weight: .semibold).monospacedDigit())
-                            .contentTransition(.numericText(value: Double(power.percent ?? 0)))
+                            .motionContentTransition(.numericText(value: Double(power.percent ?? 0)))
                         Text(Self.source(power))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.55))
@@ -278,14 +278,14 @@ private struct HomeStatisticsWidget: View {
                 } value: {
                     Text(value)
                         .font(.system(size: 17, weight: .semibold).monospacedDigit())
-                        .contentTransition(.numericText())
+                        .motionContentTransition(.numericText())
                 }
             case .medium:
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(value)
                             .font(.system(size: 19, weight: .semibold).monospacedDigit())
-                            .contentTransition(.numericText())
+                            .motionContentTransition(.numericText())
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                         Text(metric.caption)
