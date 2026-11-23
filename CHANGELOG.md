@@ -6,6 +6,7 @@ so write them for people using the app: short, plain, no code talk.
 ## Unreleased
 
 - **The timer turns amber in its last minute.** Under a minute left, the ring and time in the notch change from white to amber, so a short timer catches your eye before it ends.
+- **Undo Home edits in the notch.** While editing Home in the notch, press ⌘Z to undo a change and ⇧⌘Z to redo it, or use the small undo button beside Done.
 - **Fixed a note losing its last few characters.** Text typed in one fast burst — an expander, macro or dictation — now saves in full.
 
 ## 0.5.0

@@ -36,4 +36,37 @@ struct ModuleBarLayoutTests {
         #expect(model.tabModules.count == 6)
         #expect(fit.buttonWidth < NotchModuleBar.buttonSize.width)
     }
+
+    @Test func sevenFavoritesKeepHomeAndTabsInsteadOfTheNameButton() {
+        let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+        let model = NotchViewModel(layout: layout, state: .expanded, arrangement: ModuleArrangement())
+        model.modules = ModuleArrangement.knownModules.map(RankedModule.init)
+        model.select("keepAwake")
+        let fit = NotchModuleBar.fit(for: model)
+        #expect(!fit.usesMenu)
+        #expect(fit.buttonWidth >= NotchModuleBar.minButtonWidth)
+        #expect(fit.tabModuleIDs.contains("keepAwake"))
+        #expect(fit.tabModuleIDs.count < model.tabModules.count)
+        #expect(fit.tabModuleIDs == Array(model.tabModules.map(\.moduleID).prefix(fit.tabModuleIDs.count)))
+    }
+
+    @Test func theCurrentModuleKeepsItsTabWhenTabsDropOff() {
+        let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+        let model = NotchViewModel(layout: layout, state: .expanded, arrangement: ModuleArrangement())
+        model.modules = ModuleArrangement.knownModules.map(RankedModule.init)
+        model.select("notes")
+        let fit = NotchModuleBar.fit(for: model)
+        #expect(!fit.usesMenu)
+        #expect(fit.tabModuleIDs.last == "notes")
+    }
+
+    @Test func theNameButtonShowsOnlyWhenChosen() {
+        let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+        let model = NotchViewModel(layout: layout, state: .expanded, arrangement: ModuleArrangement())
+        model.modules = ModuleArrangement.knownModules.map(RankedModule.init)
+        model.select("keepAwake")
+        #expect(model.arrangement.navigation == .tabsAndMenu)
+        model.arrangement.navigation = .menu
+        #expect(NotchModuleBar.fit(for: model).usesMenu)
+    }
 }
