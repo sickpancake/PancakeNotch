@@ -5,13 +5,20 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+## 0.5.0
+
+**This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.
+
 - **Install from a disk image.** Each release now comes as PancakeNotch.dmg: open it and drag PancakeNotch onto Applications.
 - **Notes.** A new module for jotting things down for later, right in the notch: the first line is the title and it saves as you type. Pin the notes you need most, undo a delete, and sort by last edited, newest or oldest.
 - **Find a note fast.** A search field sits above the Notes list: press ⌘F and type a few words. Only notes with all of them stay, pinned ones first, with the words highlighted. Use the arrows and Return to open a match, and Esc to clear. In Notes' settings, hide the field until you search, search titles only, or keep the search for next time.
+- **Count as you write.** Notes shows live word and character counts for the whole note or just the text you select. Turn them off with **Show text counts** in Notes settings.
 - **Text files become notes.** Drop a .txt or .md file on the Shelf (or on Notes) and it's kept as a note. In Notes' settings, choose All text to turn dropped text into notes too, or Off to keep everything on the Shelf.
 - **Notes on Home and in Learn.** Small, medium and large Notes widgets for Home, and a short hands-on Notes lesson.
+- **Run several named timers.** Use **New timer** to start another countdown without stopping the others. The notch shows the one ending soonest and how many others are running; each rings when it ends.
 - **Devin in Agents.** Connect Devin (Devin CLI and the Devin app) under Agents settings, and its sessions show up in the notch next to Claude Code, Codex and Cursor: working, needs you or done, with what it's doing right now. Allow once or Deny the commands it wants to run, right from the notch.
 - **Screenshots on the Shelf.** Turn on Catch new screenshots in Shelf settings and every new screenshot lands on the Shelf, with a short note under the notch, ready to drag into a chat, AirDrop or convert. It uses the folder your Mac saves screenshots to.
+- **Clipboard history on the Shelf.** Turn on **Remember what I copy** in Shelf settings, then open **Clipboard** to reuse, pin, drag out or AirDrop recent copies. Passwords are skipped, and the history clears when PancakeNotch quits.
 - **See what a finished agent changed.** When a local agent finishes, Agents shows its branch, how many files and lines changed, and its last commit, on its row, in the peek under the notch and on the Agents Home widget. Rest the pointer on it for Open in your editor, Terminal here and Copy summary. Only changes made while the agent works count, not edits you already had. PancakeNotch asks git when the agent starts and when it stops, on your Mac only.
 - **Devin cloud sessions in Agents.** Sessions that run on Devin's servers now show up too, next to your local agents: working, needs you, done or stopped, with their pull request once there is one. Click one to open it in your browser. Connect with a Devin personal access token under Agents settings; it's kept in your Keychain and only sent to Devin. PancakeNotch asks Devin only while a session runs, or when you come back to your Mac.
 - **Codex cloud and GitHub's coding agent in Agents.** Turn on Codex cloud or GitHub coding agent under Agents settings, and their cloud tasks show up next to your other agents: working, needs you, done or stopped, with the pull request once there is one. PancakeNotch uses the Codex CLI and the GitHub CLI you're already signed in to, and asks only while a task runs or when you come back to your Mac.
@@ -21,6 +28,9 @@ so write them for people using the app: short, plain, no code talk.
 - **Paste onto the Shelf.** Press ⌘V in the open Shelf to add what you copied: files, pictures, links and text, just like a drop. Or click **⌘V to paste** at the top of the Shelf. What you pasted is selected, so Delete takes it back off, and ⌘C copies selected items. Turn it off with **Paste with ⌘V** in Shelf settings.
 - **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
 - **Pin Shelf items.** Right-click an item on the Shelf and choose Pin, click the pin beside the back arrow when an item is open, or select it and press P. Pinned items stay at the front, show a small pin and are never cleared by themselves: not after a while, not after you drag them out, and not by Clear all unless you choose that in Shelf settings. Undo right after pinning, and Unpin All in Shelf settings.
+- **See what didn't fit beside the notch.** A small **+n** shows how many active modules didn't fit. Open it to see Home, or go straight to a hidden module if you use tabs-only navigation.
+- **Peek strips wait while you look.** Rest your pointer on a strip below the notch to keep it open. Click it to open its module.
+- **One undo history for Home.** Undo a Home layout change from either the notch or the window editor, even if you made it in the other one.
 
 ## 0.4.0 — beta
 
