@@ -72,6 +72,8 @@ public final class KeepAwakeSettings {
     /// What plugging in brings back after the battery stopped it (read when you plug in).
     public var plugIn: KeepAwakePlugIn { didSet { defaults.set(plugIn.rawValue, forKey: Keys.plugIn) } }
     public var reopen: KeepAwakeReopen { didSet { defaults.set(reopen.rawValue, forKey: Keys.reopen) } }
+    /// On battery, a strip at 20% and 10% reminds you to plug in.
+    public var warnsLowCharge: Bool { didSet { defaults.set(warnsLowCharge, forKey: Keys.warnsLowCharge) } }
     /// The length picked last: a plain Turn On uses it.
     public var lastLength: KeepAwakeLength {
         didSet { if let data = try? JSONEncoder().encode(lastLength) { defaults.set(data, forKey: Keys.lastLength) } }
@@ -94,6 +96,7 @@ public final class KeepAwakeSettings {
         lowBattery = defaults.string(forKey: Keys.lowBattery).flatMap(KeepAwakeLowBattery.init(rawValue:)) ?? .stop
         plugIn = defaults.string(forKey: Keys.plugIn).flatMap(KeepAwakePlugIn.init(rawValue:)) ?? .turnBackOn
         reopen = defaults.string(forKey: Keys.reopen).flatMap(KeepAwakeReopen.init(rawValue:)) ?? .carryOn
+        warnsLowCharge = defaults.object(forKey: Keys.warnsLowCharge) as? Bool ?? true
         let saved = defaults.data(forKey: Keys.lastLength).flatMap { try? JSONDecoder().decode(KeepAwakeLength.self, from: $0) }
         lastLength = saved.flatMap { KeepAwakeLength.choices.contains($0) ? $0 : nil } ?? .standard
         if defaults == UserDefaults.standard { Self.user = self }
@@ -119,6 +122,7 @@ public final class KeepAwakeSettings {
         static let lowBattery = "keepAwake.lowBattery"
         static let plugIn = "keepAwake.plugIn"
         static let reopen = "keepAwake.reopen"
+        static let warnsLowCharge = "keepAwake.warnsLowCharge"
         static let lastLength = "keepAwake.lastLength"
     }
 }

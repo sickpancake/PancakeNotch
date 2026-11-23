@@ -15,12 +15,14 @@ public struct KeepAwakeSession: Codable, Equatable, Sendable {
 }
 
 /// What Keep Awake tells with a strip under the notch (ADR-0041): it stopped by itself (the time ran out, the
-/// battery is low), the battery is low but it keeps going, or it came back on when you plugged in.
+/// battery is low), the battery is low but it keeps going, it came back on when you plugged in, or the
+/// battery reached a plug-in warning level (with the percent now).
 public enum KeepAwakeNotice: Equatable, Sendable {
     case timeUp
     case batteryLow
     case batteryLowKeepsGoing
     case backOn
+    case plugInSoon(percent: Int)
 
     /// It tells that Keep Awake stopped: turning on again makes the strip untrue.
     public var isStop: Bool { self == .timeUp || self == .batteryLow }
@@ -57,6 +59,8 @@ public final class KeepAwakeCenter {
     public static let longest: TimeInterval = 24 * 3600
     /// A session's end that comes more than this late (the Mac slept through it) ends quietly.
     static let lateness: TimeInterval = 60
+    /// On battery, a strip at each of these levels reminds you to plug in, once per discharge.
+    public static let chargeWarnings = [20, 10]
 
     public let settings: KeepAwakeSettings
     /// The session you started, if any.
@@ -80,6 +84,8 @@ public final class KeepAwakeCenter {
     @ObservationIgnored public var onNotice: ((KeepAwakeNotice) -> Void)?
     /// Told about each thing the user does (a lesson's practice notch).
     @ObservationIgnored public var onEvent: ((KeepAwakeEvent) -> Void)?
+    /// The battery reached a plug-in warning level: show a strip with the percent now (`warnIfLow`).
+    @ObservationIgnored public var onLowCharge: ((Int) -> Void)?
 
     /// A practice copy works even while the module is switched off (it holds nothing anyway).
     @ObservationIgnored private let isPractice: Bool
@@ -93,6 +99,8 @@ public final class KeepAwakeCenter {
     @ObservationIgnored private var wasLow = false
     @ObservationIgnored private var wasStopped = false
     @ObservationIgnored private var wasHolding = false
+    /// The lowest plug-in warning level passed since the battery was last above it (or plugged in).
+    @ObservationIgnored private var warnedAt: Int?
     @ObservationIgnored private var endTask: Task<Void, Never>?
     @ObservationIgnored private var tailTask: Task<Void, Never>?
     @ObservationIgnored private var watcher: PowerSourceWatcher?
@@ -280,7 +288,20 @@ public final class KeepAwakeCenter {
         // A reading on battery without a percent keeps the last one, so a glitch can't lift the stop.
         let state = state.onBattery && state.percent == nil ? PowerState(onBattery: true, percent: power.percent) : state
         change(\.power, state)
-        update()
+        let told = update()
+        warnIfLow(quietly: told)
+    }
+
+    /// Tells `onLowCharge` once as the battery passes each warning level on battery; past several at once (a
+    /// launch at 8%) it tells once, for the lowest. Plugging in or charging above a level lets it tell again.
+    /// `quietly`: a Keep Awake strip just said the battery is low, so this only remembers the level.
+    public func warnIfLow(quietly: Bool = false) {
+        guard let onLowCharge else { return }
+        let percent = isEnabled && settings.warnsLowCharge && power.onBattery ? power.percent : nil
+        let level = percent.flatMap { percent in Self.chargeWarnings.filter { percent <= $0 }.min() }
+        defer { warnedAt = level }
+        guard let percent, let level, warnedAt.map({ level < $0 }) ?? true, !quietly else { return }
+        onLowCharge(percent)
     }
 
     /// A setting changed (told at once by the settings, so the hold never lags behind what they say).
@@ -317,8 +338,9 @@ public final class KeepAwakeCenter {
     /// when you plug in; plugging in brings that back (or keeps it off, as the setting says), with a strip if
     /// it keeps the Mac awake again; a battery going low while Keep Awake keeps going tells once; a session at
     /// its end ends, with a strip if the Mac can sleep now and it isn't long past (the Mac slept through it);
-    /// a tail at its end ends.
-    private func update() {
+    /// a tail at its end ends. Returns whether it showed a strip.
+    @discardableResult
+    private func update() -> Bool {
         let moment = now
         var told: KeepAwakeNotice?
         var mayTellBackOn = false
@@ -369,12 +391,15 @@ public final class KeepAwakeCenter {
         if told == nil, mayTellBackOn, holding { told = .backOn }
         // Only what's true now: time up and the battery stop when the Mac can sleep; keeps going and back on
         // while it keeps the Mac awake. A timed session ends once; repeated events can't show another strip.
-        guard let told else { return }
-        switch told {
-        case .timeUp: if !holding { onNotice?(told) }
-        case .batteryLow: onNotice?(told)
-        case .batteryLowKeepsGoing, .backOn: if holding { onNotice?(told) }
+        guard let told else { return false }
+        let shows = switch told {
+        case .timeUp: !holding
+        case .batteryLow: true
+        case .batteryLowKeepsGoing, .backOn: holding
+        case .plugInSoon: false
         }
+        if shows { onNotice?(told) }
+        return shows
     }
 
     private func forgetStopped() {

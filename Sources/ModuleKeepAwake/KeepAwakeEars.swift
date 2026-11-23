@@ -45,10 +45,17 @@ struct KeepAwakePeek: View {
         .accessibilityLabel(Text(text.spoken))
     }
 
+    private var symbol: String {
+        switch reason {
+        case .batteryLow, .batteryLowKeepsGoing, .plugInSoon: "battery.25"
+        case .backOn: "cup.and.heat.waves.fill"
+        case .timeUp: "cup.and.heat.waves"
+        }
+    }
+
     private func line(_ title: String, _ detail: String?) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: reason == .batteryLow || reason == .batteryLowKeepsGoing ? "battery.25"
-                  : reason == .backOn ? "cup.and.heat.waves.fill" : "cup.and.heat.waves")
+            Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.6))
             Text(title)

@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **A reminder to plug in.** With Keep Awake on, a strip under the notch tells you when your battery reaches 20% and again at 10%. Turn it off with **Warn me to plug in** in Keep Awake's settings.
 - **Fixed a note losing its last few characters.** Text typed in one fast burst — an expander, macro or dictation — now saves in full.
 
 ## 0.5.0
