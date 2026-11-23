@@ -43,8 +43,9 @@ const QUESTIONS: { question: string; answer: ReactNode }[] = [
     answer: (
       <>
         Agents follows Claude Code and Codex with no setup, and Cursor and Devin once you connect them. Connect
-        Claude Code, Codex or Devin, and you can Allow or Deny their requests from the notch. AI Usage shows how much of your Claude
-        and Codex limits is left. <More href={`${HELP}#agents`}>How Agents works</More>
+        Claude Code, Codex or Devin, and you can Allow or Deny their requests from the notch. Cloud agents show up
+        too: Devin cloud sessions, Codex cloud and GitHub’s coding agent. AI Usage shows how much of your Claude
+        and Codex limits is left, and the ACUs Devin used. <More href={`${HELP}#agents`}>How Agents works</More>
       </>
     ),
   },
