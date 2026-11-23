@@ -30,14 +30,9 @@ struct ShelfView: View {
                     if let count = module.notedCount, module.dropZone == nil {
                         ShelfNotedBadge(count: count)
                             .transition(.opacity)
-                    } else if let feedback = module.pasteFeedback, module.dropZone == nil, module.prompt == nil {
-                        // Over the tiles, not in the header: beside the default tabs there's no room for it.
-                        ShelfPasteBadge(feedback: feedback)
-                            .transition(.opacity)
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: module.notedCount)
-                .animation(.easeOut(duration: 0.2), value: module.pasteFeedback)
                 .padding(.top, layout.content.minY - layout.bandHeight)
             Spacer(minLength: 0)
         }
@@ -86,23 +81,6 @@ private struct ShelfNotedBadge: View {
         .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.2), lineWidth: 1))
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Shown for a moment after a paste: what it added, or that there was nothing to paste.
-private struct ShelfPasteBadge: View {
-    let feedback: ShelfModule.PasteFeedback
-
-    var body: some View {
-        Label(feedback.message, systemImage: "doc.on.clipboard")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.2), lineWidth: 1))
-            .allowsHitTesting(false)
-            .accessibilityHidden(true) // Already read out by the announcement.
     }
 }
 
@@ -175,6 +153,17 @@ private struct ShelfHeader: View {
                         prominent: true
                     ) { module.removeChosen() }
                     .disabled(module.selection.isEmpty)
+                } else if let feedback = module.pasteFeedback, module.dropZone == nil, module.prompt == nil {
+                    // For a moment, in place of the buttons: the left half has no room beside the default
+                    // tabs, and over the tiles it would hide their previews.
+                    Label(feedback.message, systemImage: "doc.on.clipboard")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(height: 22)
+                        .transition(.opacity)
+                        .accessibilityHidden(true) // Already read out by the announcement.
                 } else if module.showsClipboard, module.dropZone == nil, module.prompt == nil {
                     if module.clipboard?.entries.contains(where: { !$0.isPinned }) == true {
                         ShelfPillButton(title: String(localized: "Clear", comment: "Removes unpinned recent copies")) {
@@ -210,6 +199,7 @@ private struct ShelfHeader: View {
                 }
             }
             .frame(width: layout.headerSideWidth, alignment: .trailing)
+            .animation(.easeOut(duration: 0.2), value: module.pasteFeedback)
         }
     }
 
