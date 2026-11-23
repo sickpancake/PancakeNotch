@@ -170,6 +170,16 @@ struct OpeningChoiceTests {
         let pointer = Pointer()
         let (model, _, agents, _) = makeModel(pointer)
         defer { model.reset() }
+        if !clickOnly {
+            // Open and close by hover first: the finished hover task must not block the crossing below.
+            pointer.location = rightEar
+            model.hoverChanged(true)
+            try await settle(.milliseconds(60)) { model.state == .expanded }
+            #expect(model.state == .expanded)
+            pointer.location = CGPoint(x: 5, y: 5)
+            model.hoverChanged(false)
+            try await settle(.milliseconds(60)) { model.state != .expanded }
+        }
         model.behavior.openOnClickOnly = clickOnly
         agents.isActive = true
         model.activityChanged()
