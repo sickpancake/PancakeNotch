@@ -257,7 +257,8 @@ private struct ShelfPasteButton: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.15), value: isHovered)
-        .help(String(localized: "Paste what you copied (⌘V)", comment: "Shelf: tooltip on the paste button"))
+        .help(activeState == .key ? String(localized: "Paste what you copied (⌘V)", comment: "Shelf: tooltip on the paste button")
+              : String(localized: "Paste what you copied", comment: "Shelf: tooltip on the paste button while ⌘V would go to another app"))
         .accessibilityLabel(Text("Paste", comment: "Shelf: VoiceOver name of the paste button"))
         .accessibilityHint(Text("Adds the files, pictures, links or text you copied to the Shelf."))
     }
