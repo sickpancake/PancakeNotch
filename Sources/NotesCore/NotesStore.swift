@@ -68,7 +68,7 @@ public final class NotesStore {
         let notes = [
             Note(text: String(localized: "Groceries\nEggs, flour, maple syrup, blueberries"),
                  created: now - 2 * day, modified: now - 3600, isPinned: true),
-            Note(text: String(localized: "Ideas for the weekend\nTry the new pancake place, call Sam"),
+            Note(text: String(localized: "Weekend pancake ideas\nTry the new pancake place, call Sam"),
                  created: now - day, modified: now - 5 * 3600),
             Note(text: String(localized: "Meeting notes.txt\nShip the beta on Friday. Ask about the icons."),
                  created: now - 3 * day, modified: now - 3 * day, source: .shelf(fileName: "Meeting notes.txt"))

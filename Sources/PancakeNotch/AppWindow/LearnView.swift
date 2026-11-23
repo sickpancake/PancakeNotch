@@ -326,6 +326,7 @@ struct LessonPlayer: View {
         keepAwake?.center.onEvent = nil
         keepAwake = nil
         notes?.store.onEvent = nil
+        notes?.onFound = nil
         notes = nil
     }
 
@@ -374,6 +375,7 @@ struct LessonPlayer: View {
                 default: break
                 }
             }
+            module.onFound = { runner.receive(.noteFound) }
             notes = module
             return
         }
