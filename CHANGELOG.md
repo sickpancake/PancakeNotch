@@ -16,6 +16,7 @@ so write them for people using the app: short, plain, no code talk.
 - **Pull request checks.** With GitHub coding agent on, a finished cloud agent's pull request shows whether its checks are running, passed or failed.
 - **Quick replies to Devin.** A Devin cloud session waiting for your next message gets Continue and Stop right in the notch.
 - **Devin in AI Usage.** With Devin cloud connected, AI Usage gets a Devin account showing the ACUs your sessions used today, in 7 days and in 30 days, and the sessions that used the most.
+- **Pin Shelf items.** Right-click an item on the Shelf and choose Pin, click the pin beside the back arrow when an item is open, or select it and press P. Pinned items stay at the front, show a small pin and are never cleared by themselves: not after a while, not after you drag them out, and not by Clear all unless you choose that in Shelf settings. Undo right after pinning, and Unpin All in Shelf settings.
 
 ## 0.4.0 — beta
 
