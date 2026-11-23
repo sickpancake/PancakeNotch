@@ -37,10 +37,13 @@ public final class NotesModule: NotchModule {
     /// Told each time a search finds notes (the Learn lesson).
     @ObservationIgnored public var onFound: (() -> Void)?
     @ObservationIgnored public var isSnapshot = false
-    /// Claims ⌘F system-wide while Notes is open, so a hover-opened Notes gets it rather than the app
-    /// that still has the keyboard. Off for the Learn practice, whose window has the keyboard already.
+    /// Claims ⌘F system-wide while Notes is open with notes to search, so a hover-opened Notes gets it
+    /// rather than the app that still has the keyboard. Off for the Learn practice, which takes its
+    /// window's keyboard when the page shows instead.
     @ObservationIgnored var usesGlobalFind = true
     @ObservationIgnored private var findKey: GlobalHotKey?
+    @ObservationIgnored private var isPageShown = false
+    @ObservationIgnored private var holdsFindKey = false
 
     public init(store: NotesStore, settings: NotesSettings) {
         self.store = store
@@ -71,9 +74,12 @@ public final class NotesModule: NotchModule {
     /// The page came up after a click (a Notes tab, or the notch opened on Notes): take the keyboard so
     /// ⌘N, Return and the arrows work. A hover leaves the keyboard with the app you were typing in.
     func pageShown() {
-        if !isSnapshot, usesGlobalFind, let key = HotKey(keyCode: 3, modifiers: .command, keyLabel: "F") {
-            if findKey == nil { findKey = GlobalHotKey { [weak self] in self?.findPressed() } }
-            try? findKey?.register(key)
+        isPageShown = true
+        updateFindKey()
+        // The practice notch in Learn: take its window's keyboard so the lesson's ⌘F works after a hover.
+        if !isSnapshot, !usesGlobalFind {
+            notch?.requestKeyFocus?()
+            return
         }
         guard !isSnapshot, let type = NSApp.currentEvent?.type,
               [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp].contains(type) else { return }
@@ -82,7 +88,21 @@ public final class NotesModule: NotchModule {
 
     /// The page went away (the notch closed, or another module or Home shows): ⌘F is the other apps' again.
     func pageHidden() {
-        findKey?.unregister()
+        isPageShown = false
+        updateFindKey()
+    }
+
+    /// Holds ⌘F only while Notes can act on it: the page is up and there's a note to search.
+    private func updateFindKey() {
+        let wanted = isPageShown && usesGlobalFind && !isSnapshot && !store.notes.isEmpty
+        guard wanted != holdsFindKey else { return }
+        if wanted, let key = HotKey(keyCode: 3, modifiers: .command, keyLabel: "F") {
+            if findKey == nil { findKey = GlobalHotKey { [weak self] in self?.findPressed() } }
+            holdsFindKey = (try? findKey?.register(key)) != nil
+        } else {
+            findKey?.unregister()
+            holdsFindKey = false
+        }
     }
 
     /// ⌘F: search, from the list or from inside a note; again selects the words typed.
@@ -410,6 +430,7 @@ public final class NotesModule: NotchModule {
     }
 
     private func storeChanged() {
+        updateFindKey()
         if let id = selectedID, store.note(id) == nil { selectedID = nil }
         if let id = keptID, store.note(id) == nil { keptID = nil }
         // The last note went: nothing left to search.

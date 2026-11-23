@@ -27,7 +27,8 @@ struct NotesTextView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
 
-        let textView = NoDropTextView()
+        // TextKit 1: its temporary attributes (the search highlights) clear and redraw reliably.
+        let textView = NoDropTextView(usingTextLayoutManager: false)
         textView.onFocus = { [weak coordinator = context.coordinator] in coordinator?.parent.onFocus() }
         textView.string = initialText()
         textView.delegate = context.coordinator
@@ -95,18 +96,7 @@ struct NotesTextView: NSViewRepresentable {
         let color = NSColor.white.withAlphaComponent(0.25)
         let length = (textView.string as NSString).length
         let valid = ranges.filter { NSMaxRange($0) <= length }
-        if let layout = textView.textLayoutManager, let content = layout.textContentManager {
-            let whole = layout.documentRange
-            layout.removeRenderingAttribute(.backgroundColor, for: whole)
-            for range in valid {
-                guard let start = content.location(whole.location, offsetBy: range.location),
-                      let end = content.location(start, offsetBy: range.length),
-                      let textRange = NSTextRange(location: start, end: end) else { continue }
-                layout.addRenderingAttribute(.backgroundColor, value: color, for: textRange)
-            }
-            // Redraw the laid-out text so marks that went (or moved) don't linger on screen.
-            layout.textViewportLayoutController.layoutViewport()
-        } else if let layout = textView.layoutManager {
+        if let layout = textView.layoutManager {
             layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: length))
             for range in valid {
                 layout.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: range)
