@@ -5,6 +5,8 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Fixed a note losing its last few characters.** Text typed in one fast burst — an expander, macro or dictation — now saves in full.
+
 ## 0.5.0
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.
