@@ -1057,6 +1057,7 @@ public final class NotchViewModel {
         guard layout.isPeeking else { return }
         if onStrip {
             hoverTask?.cancel()
+            hoverTask = nil
             guard isPeekHeld else { return }
             peekTask?.cancel()
             peekTask = nil
