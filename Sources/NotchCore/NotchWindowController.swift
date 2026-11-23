@@ -200,6 +200,7 @@ public final class NotchWindowController {
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
             panel.setFrame(model.windowFrame(for: model.state), display: true)
+            model.updatePeekHover()
         } else {
             createPanel(layout: layout)
         }
