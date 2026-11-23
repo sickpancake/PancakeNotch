@@ -73,6 +73,13 @@ struct NotchHomeView: View {
                     if model.isEditingHome {
                         NotchPill(title: model.showsHomePicker ? String(localized: "Back") : String(localized: "Add"),
                                   symbol: model.showsHomePicker ? "chevron.left" : "plus") { model.showsHomePicker.toggle() }
+                        // One small Undo: the ear beside the notch is too narrow for four controls;
+                        // ⇧⌘Z still redoes. It is never `.disabled`: a disabled button lets the tap
+                        // through to the root, whose tap ends editing — an inert-looking click would
+                        // cancel the session. An empty history is already a no-op.
+                        NotchRoundButton(symbol: "arrow.uturn.backward", label: String(localized: "Undo"), size: 24) { model.undoHomeEdit() }
+                            .opacity(model.home.history.canUndo ? 1 : 0.35)
+                            .animation(.easeInOut(duration: 0.15), value: model.home.history.canUndo)
                         NotchPill(title: String(localized: "Done"), symbol: "checkmark", prominent: true) { model.endHomeEditing() }
                     }
                     // Once, until it's used or dismissed: a pointer to the editor (the empty note has its own).

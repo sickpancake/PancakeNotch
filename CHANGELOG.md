@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Undo Home edits in the notch.** While editing Home in the notch, press ⌘Z to undo a change and ⇧⌘Z to redo it, or use the small undo button beside Done.
 - **Fixed a note losing its last few characters.** Text typed in one fast burst — an expander, macro or dictation — now saves in full.
 
 ## 0.5.0
