@@ -219,7 +219,7 @@ struct NotchModulesTests {
         )
     }
 
-    /// 1–9 pick the module at that place in the ranking, 0 goes Home (#131).
+    /// 1–9 pick the module with that number on the Modules page, 0 goes Home (#131).
     @Test func numberKeysJumpBetweenModules() throws {
         let (model, music, shelf) = makeModel()
         model.open()
@@ -242,7 +242,7 @@ struct NotchModulesTests {
     }
 
     /// The numbers match the Modules page, which numbers switched-off modules too.
-    @Test func numberKeysSkipSwitchedOffModules() throws {
+    @Test func numberKeysKeepModulesPageNumbers() throws {
         let (model, music, shelf) = makeModel()
         let timer = RankedModule("timer")
         model.modules = [shelf, music, timer]
@@ -261,6 +261,33 @@ struct NotchModulesTests {
         model.tap()
         #expect(model.state == .expanded)
         #expect(requests == 1)
+    }
+
+    /// A number pressed while editing Home finishes the edit but keeps the keys in the notch.
+    @Test func aNumberWhileEditingHomeKeepsTheKeys() throws {
+        let (model, _, shelf) = makeModel()
+        var requests = 0, releases = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.releaseKeyFocus = { releases += 1 }
+        model.open()
+        model.toggleHome()
+        model.beginHomeEditing()
+        #expect(model.isEditingHome)
+        let before = requests
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(!model.isEditingHome)
+        #expect(model.selectedModule === shelf)
+        #expect(requests == before + 1)
+        #expect(releases >= 1)
+    }
+
+    @Test func clickingOpenWithNoModulesLeavesTheKeys() {
+        let (model, _, _) = makeModel()
+        model.modules = []
+        var requests = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.tap()
+        #expect(requests == 0)
     }
 
     @Test func zeroDoesNothingWithTabsOnly() throws {

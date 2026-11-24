@@ -868,7 +868,10 @@ public final class NotchViewModel {
             let order = arrangement.order
             guard order.indices.contains(digit - 1),
                   let module = modules.first(where: { $0.moduleID == order[digit - 1] }) else { return false }
+            let wasEditingHome = isEditingHome
             select(module.moduleID)
+            // Finishing the edit hands the keys back to the other app; the person is still typing here.
+            if wasEditingHome { requestKeyFocus?() }
             return true
         }
         if event.keyCode == 53 { // Escape: leave Home for the module, else close all the way
@@ -919,7 +922,7 @@ public final class NotchViewModel {
                 open(focusing: moduleUnderPointer())
             }
             // Opened with a click: its keys (1–9, 0, Esc) work right away, as after the shortcut.
-            if state == .expanded { requestKeyFocus?() }
+            if state == .expanded, !modules.isEmpty { requestKeyFocus?() }
             return
         }
         // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.
