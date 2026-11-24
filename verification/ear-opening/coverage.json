@@ -1,16 +1,16 @@
 {
-  "sync_commit": "0bb0c869fc93a457002642f25eb302b5887cc460",
-  "toolchain": "Apple Swift 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1), SDK selected by scripts/swift.sh; Python 3.9.6",
+  "sync_commit": "285bbe1f775244ca33a0d832b8dd16dc049e97c9",
+  "toolchain": "Apple Swift 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101), SDK selected by scripts/swift.sh; Python 3.9.6",
   "sha256": {
-    "Sources/NotchCore/EarAllocator.swift": "c7f2c54be9a7162282c35befd7ca7b98d8ac1b565fe56499f782f79e1e23831a",
-    "Sources/NotchCore/NotchViewModel.swift": "41fb515eb22750dac39c8c43c1dcbb5475319a818110fbc4aeabf73906b06f93",
-    "Sources/NotchCore/NotchModule.swift": "449df9361405d28cbedc616cd05111bfd23f7edcd87a7a09ebd37570569a8b93",
+    "Sources/NotchCore/EarAllocator.swift": "6156b64fb185c49f443085beb581e2b783eb3cee3f1e645b65b308b43ce5374d",
+    "Sources/NotchCore/NotchViewModel.swift": "3fe55f1aa1be53545b5287094075f1e89f87a067621598715c4f02ad416d237c",
+    "Sources/NotchCore/NotchModule.swift": "24cc8f546ae871ee92efa3fd3bb4c377c75b85f8ef1d1cc29a9a22ee8517d16a",
     "Sources/ModuleNowPlaying/NowPlayingModule.swift": "2adb69da2d431d28649b202efa791f5f7d5a956a51e16e95274012d0f744d9bb",
-    "Sources/ModuleTimer/TimerModule.swift": "991a72997a1637ff769f3cf5e506f742ddbd811bae64bd2108ccfd1bfbf436fe",
-    "Sources/ModuleKeepAwake/KeepAwakeModule.swift": "3551fa673eb09697272df4d1a12b767f40916c3ca7c8486cd8cef2c129118a55",
+    "Sources/ModuleTimer/TimerModule.swift": "7e30eb1cfb094f39dc2043c00368ea5a6db66b346a1fbc9160e1a5d5f331e244",
+    "Sources/ModuleKeepAwake/KeepAwakeModule.swift": "bc962c04ca88fe1610cc287622232b3895743af26e6780343b61991fc508cc89",
     "Sources/ModuleAgents/AgentsModule.swift": "de6e47b008f33d746c153dab41c96182d55cc92c6c8de0c9133c6b2194164001",
     "Sources/ModuleAgents/AIUsageModule.swift": "30108cbb6d10eee301cbd13605863d1e57c5cff15a42fca8c0a3e0a2c5bdf5b9",
-    "Sources/ModuleShelf/ShelfModule.swift": "ffc6bc7e97c63303d2e947cce5607e87df195f6194ce5121ca2fcf919f6e23a7",
+    "Sources/ModuleShelf/ShelfModule.swift": "ec452ea23ebe29b952fb2e795910bce8da9866448bf4b61eecd649c4cf66ed98",
     "Sources/ModuleShelf/ShelfPreviewModule.swift": "abc4b7fdfabc307b0fb966107b13bcea0ce565624b52faaacfb065a679048285"
   }
 }
