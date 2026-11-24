@@ -5,6 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Number keys switch modules.** Open the notch with your shortcut or a click, then press 1–9 to jump to the module with that number on the Modules page, or 0 to go to Home. Typing in a note or a search box still types the number.
 - **The timer turns amber in its last minute.** Under a minute left, the ring and time in the notch change from white to amber, so a short timer catches your eye before it ends.
 - **Undo Home edits in the notch.** While editing Home in the notch, press ⌘Z to undo a change and ⇧⌘Z to redo it, or use the small undo button beside Done.
 - **A reminder to plug in.** With Keep Awake on, a strip under the notch tells you when your battery reaches 20% and again at 10%. Turn it off with **Warn me to plug in** in Keep Awake's settings.

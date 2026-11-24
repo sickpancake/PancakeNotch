@@ -383,7 +383,7 @@ public final class NotchViewModel {
         if !layout.outline(for: state, contains: pointerLocation()) { endHomeEditing() }
     }
 
-    public func endHomeEditing() {
+    public func endHomeEditing(keepsNotchFocused: Bool = false) {
         guard isEditingHome else { return }
         let shownPage = homePages.indices.contains(homePage) ? homePages[homePage] : 0
         isEditingHome = false
@@ -393,6 +393,7 @@ public final class NotchViewModel {
         if let monitor = homeOutsideGlobal { NSEvent.removeMonitor(monitor) }
         homeOutsideLocal = nil
         homeOutsideGlobal = nil
+        guard !keepsNotchFocused else { return }
         releaseKeyFocus?()
         holdReleased()
     }
@@ -854,6 +855,26 @@ public final class NotchViewModel {
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
             return true
         }
+        // 1–9: the module with that number on the Modules page (switched-off ones keep theirs), 0:
+        // Home. Not while typing in a field, or when something holds the module open (the tabs hide
+        // then too).
+        if let digit = Self.digitKeyCodes.firstIndex(of: event.keyCode),
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+           !(event.window?.firstResponder is NSTextView), isEditingHome || !isHeld {
+            if digit == 0 {
+                guard homeIsAvailable else { return false }
+                if !showsHome { toggleHome() }
+                return true
+            }
+            let order = arrangement.order
+            guard order.indices.contains(digit - 1),
+                  let module = modules.first(where: { $0.moduleID == order[digit - 1] }) else { return false }
+            // The person is still typing here: finish any Home edit without giving the keys back
+            // or closing the notch under the module they just picked.
+            endHomeEditing(keepsNotchFocused: true)
+            select(module.moduleID)
+            return true
+        }
         if event.keyCode == 53 { // Escape: leave Home for the module, else close all the way
             if showsHome, selectedModule != nil {
                 toggleHome()
@@ -867,6 +888,9 @@ public final class NotchViewModel {
         }
         return false
     }
+
+    /// Key codes of the 0–9 keys on the top row, in digit order.
+    private static let digitKeyCodes: [UInt16] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25]
 
     /// True while any module needs the notch to stay open.
     var isHeld: Bool { isEditingHome || modules.contains { $0.holdsOpen } }
@@ -898,6 +922,8 @@ public final class NotchViewModel {
             } else {
                 open(focusing: moduleUnderPointer())
             }
+            // Opened with a click: its keys (1–9, 0, Esc) work right away, as after the shortcut.
+            if state == .expanded, !modules.isEmpty { requestKeyFocus?() }
             return
         }
         // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.

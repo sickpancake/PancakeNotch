@@ -18,6 +18,8 @@ final class RankedModule: NotchModule {
     var opens = 0
     var closes = 0
     var switchedAway = 0
+    var holds = false
+    var holdsOpen: Bool { holds }
     weak var notch: NotchViewModel?
 
     init(_ id: String) { moduleID = id }
@@ -210,6 +212,100 @@ struct NotchModulesTests {
         #expect(!model.showsHome)
         #expect(model.state == .expanded)
         #expect(music.opens == 2)
+    }
+
+    static func key(_ digit: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
+            context: nil, characters: digit, charactersIgnoringModifiers: digit, isARepeat: false, keyCode: keyCode
+        )
+    }
+
+    /// 1–9 pick the module with that number on the Modules page, 0 goes Home (#131).
+    @Test func numberKeysJumpBetweenModules() throws {
+        let (model, music, shelf) = makeModel()
+        model.open()
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(model.selectedModule === shelf)
+        #expect(model.handleKey(try #require(Self.key("1", keyCode: 18))))
+        #expect(model.selectedModule === music)
+        // Only two modules: 3 is no one's.
+        #expect(!model.handleKey(try #require(Self.key("3", keyCode: 20))))
+        #expect(model.selectedModule === music)
+        // ⌘2 isn't a switch.
+        #expect(!model.handleKey(try #require(Self.key("2", keyCode: 19, modifiers: .command))))
+        #expect(model.selectedModule === music)
+        #expect(model.handleKey(try #require(Self.key("0", keyCode: 29))))
+        #expect(model.showsHome)
+        // From Home, a digit goes straight to its module.
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(!model.showsHome)
+        #expect(model.selectedModule === shelf)
+    }
+
+    /// The numbers match the Modules page, which numbers switched-off modules too.
+    @Test func numberKeysKeepModulesPageNumbers() throws {
+        let (model, music, shelf) = makeModel()
+        let timer = RankedModule("timer")
+        model.modules = [shelf, music, timer]
+        model.open()
+        // Timer is 5th on the Modules page; 3 and 4 are switched off.
+        #expect(model.handleKey(try #require(Self.key("5", keyCode: 23))))
+        #expect(model.selectedModule === timer)
+        #expect(!model.handleKey(try #require(Self.key("3", keyCode: 20))))
+        #expect(model.selectedModule === timer)
+    }
+
+    @Test func clickingOpenTakesTheKeys() {
+        let (model, _, _) = makeModel()
+        var requests = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.tap()
+        #expect(model.state == .expanded)
+        #expect(requests == 1)
+    }
+
+    /// A number pressed while editing Home finishes the edit but keeps the keys in the notch.
+    @Test func aNumberWhileEditingHomeKeepsTheKeys() throws {
+        let (model, _, shelf) = makeModel()
+        var requests = 0, releases = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.releaseKeyFocus = { releases += 1 }
+        model.open()
+        model.toggleHome()
+        model.beginHomeEditing()
+        #expect(model.isEditingHome)
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(!model.isEditingHome)
+        #expect(model.selectedModule === shelf)
+        #expect(releases == 0)
+        #expect(requests >= 1)
+    }
+
+    /// While a module holds the notch open (the tabs hide), numbers don't switch away from it.
+    @Test func numberKeysWaitWhileAModuleHoldsTheNotch() throws {
+        let (model, music, _) = makeModel()
+        model.open()
+        music.holds = true
+        #expect(!model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(model.selectedModule === music)
+    }
+
+    @Test func clickingOpenWithNoModulesLeavesTheKeys() {
+        let (model, _, _) = makeModel()
+        model.modules = []
+        var requests = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.tap()
+        #expect(requests == 0)
+    }
+
+    @Test func zeroDoesNothingWithTabsOnly() throws {
+        let (model, _, _) = makeModel()
+        model.arrangement.navigation = .tabs
+        model.open()
+        #expect(!model.handleKey(try #require(Self.key("0", keyCode: 29))))
+        #expect(!model.showsHome)
     }
 
     /// Home doesn't go away when a module is switched off under it (ADR-0042); leaving Home then shows
