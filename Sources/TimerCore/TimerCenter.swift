@@ -190,6 +190,12 @@ public final class TimerCenter {
     }
     public func repeatTimer(id: UUID) { update(id, .repeated) { $0.restart(now: now) } }
 
+    public func renameTimer(id: UUID, to name: String) {
+        guard let index = timers.firstIndex(where: { $0.id == id }) else { return }
+        timers[index].name = TimerSettings.cleanName(name)
+        save()
+    }
+
     private func update(_ id: UUID, _ event: TimerEvent, _ change: (inout CountdownTimer) -> Void) {
         guard let index = timers.firstIndex(where: { $0.id == id }) else { return }
         let before = timers[index]

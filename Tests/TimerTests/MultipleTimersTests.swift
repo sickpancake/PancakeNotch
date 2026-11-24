@@ -35,6 +35,13 @@ struct MultipleTimersTests {
         #expect(center.timer.name.count == TimerSettings.nameLength)
     }
 
+    @Test func timerCanBeRenamedByID() throws {
+        let (center, _, _) = makeCenter()
+        let pasta = try #require(center.startTimer(seconds: 300, name: "Pasta"))
+        center.renameTimer(id: pasta, to: "  Noodles  ")
+        #expect(center.timer(id: pasta)?.name == "Noodles")
+    }
+
     @Test func eachEndRingsOnceInOrder() {
         let (center, clock, finished) = makeCenter()
         center.startTimer(seconds: 600, name: "Laundry")
