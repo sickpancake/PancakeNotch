@@ -20,9 +20,6 @@ struct AgentsLayout: Equatable {
         notchWidth = layout.geometry.notchRect.width
     }
 
-    /// Room under the band.
-    var contentHeight: CGFloat { body.height - bandHeight - Self.bottomPadding }
-
     /// Width of each half of the band beside the notch.
     var bandSideWidth: CGFloat { max(0, (body.width - notchWidth) / 2 - Self.sidePadding) }
 }

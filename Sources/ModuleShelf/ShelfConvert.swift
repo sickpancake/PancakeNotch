@@ -77,8 +77,6 @@ final class ShelfConversion {
         return false
     }
 
-    var focusedOption: ConvertOption? { options.first { $0.format == focus } }
-
     /// "Choose another format" has something to offer.
     var canPickAnother: Bool { !roomIsShort && options.contains(where: \.isAvailable) }
 

@@ -67,7 +67,6 @@ struct CodexCloudTask: Decodable, Sendable {
     var updatedAt: Date?
     var environmentLabel: String?
     var summary: Summary?
-    var isReview: Bool?
 
     struct Summary: Decodable, Sendable { var filesChanged: Int? }
 

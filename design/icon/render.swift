@@ -61,7 +61,7 @@ struct Pen {
         ctx.setShadow(offset: CGSize(width: 0, height: -dy * s), blur: blur * s, color: c)
     }
     func fill(_ p: CGPath, _ c: CGColor) { ctx.addPath(p); ctx.setFillColor(c); ctx.fillPath() }
-    func fillEO(_ p: CGPath, _ c: CGColor) { ctx.addPath(p); ctx.setFillColor(c); ctx.fillPath(using: .evenOdd) }
+
     func linear(_ p: CGPath, _ g: CGGradient, _ a: CGPoint, _ b: CGPoint) {
         ctx.saveGState(); ctx.addPath(p); ctx.clip()
         ctx.drawLinearGradient(g, start: a, end: b, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
@@ -162,10 +162,6 @@ func poly(_ pts: [CGPoint]) -> CGPath {
     let p = CGMutablePath(); p.addLines(between: pts); p.closeSubpath(); return p
 }
 
-func smax(_ a: CGFloat, _ b: CGFloat, _ k: CGFloat) -> CGFloat {
-    let h = max(k - abs(a - b), 0) / k
-    return max(a, b) + h * h * k / 4
-}
 
 // MARK: - Shared icon body
 
