@@ -18,6 +18,8 @@ final class RankedModule: NotchModule {
     var opens = 0
     var closes = 0
     var switchedAway = 0
+    var holds = false
+    var holdsOpen: Bool { holds }
     weak var notch: NotchViewModel?
 
     init(_ id: String) { moduleID = id }
@@ -273,12 +275,20 @@ struct NotchModulesTests {
         model.toggleHome()
         model.beginHomeEditing()
         #expect(model.isEditingHome)
-        let before = requests
         #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
         #expect(!model.isEditingHome)
         #expect(model.selectedModule === shelf)
-        #expect(requests == before + 1)
-        #expect(releases >= 1)
+        #expect(releases == 0)
+        #expect(requests >= 1)
+    }
+
+    /// While a module holds the notch open (the tabs hide), numbers don't switch away from it.
+    @Test func numberKeysWaitWhileAModuleHoldsTheNotch() throws {
+        let (model, music, _) = makeModel()
+        model.open()
+        music.holds = true
+        #expect(!model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(model.selectedModule === music)
     }
 
     @Test func clickingOpenWithNoModulesLeavesTheKeys() {
