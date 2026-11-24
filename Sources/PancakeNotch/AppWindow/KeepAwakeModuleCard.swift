@@ -128,6 +128,13 @@ struct KeepAwakeSettingsRows: View {
                 }
             }
             SettingsRow(
+                title: String(localized: "Warn me to plug in"),
+                subtitle: String(localized: "On battery, a strip under the notch at 20% and again at 10% reminds you to plug in. Each shows once until you charge.")
+            ) {
+                Toggle(String(localized: "Warn me to plug in"), isOn: $settings.warnsLowCharge)
+                    .labelsHidden()
+            }
+            SettingsRow(
                 title: String(localized: "If PancakeNotch quits"),
                 subtitle: String(localized: "Whether a Keep Awake you turned on comes back when PancakeNotch opens again, after an update or if you quit it. Turn back on doesn't bring it back after your Mac restarts, so it's never left on from yesterday.")
             ) {

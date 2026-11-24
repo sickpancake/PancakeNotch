@@ -51,14 +51,22 @@ public final class KeepAwakeModule: NotchModule {
         observationGeneration += 1
         self.notch = notch
         guard notch != nil else {
-            if presents { center.onNotice = nil }
+            if presents {
+                center.onNotice = nil
+                center.onLowCharge = nil
+            }
             stopWatchingDisplay()
             return
         }
-        if presents { center.onNotice = { [weak self] reason in self?.noticed(reason) } }
+        if presents {
+            center.onNotice = { [weak self] reason in self?.noticed(reason) }
+            center.onLowCharge = { [weak self] percent in self?.noticed(.plugInSoon(percent: percent)) }
+        }
         watchDisplay()
         observe()
         notch?.activityChanged()
+        // A battery already low at launch: the warning waited for the notch.
+        if presents { center.warnIfLow() }
     }
 
     public func expandedView(layout: NotchLayout) -> AnyView {
@@ -115,7 +123,10 @@ public final class KeepAwakeModule: NotchModule {
             userInfo: [.announcement: Self.stripText(reason, comesBack: comesBack).spoken, .priority: NSAccessibilityPriorityLevel.medium.rawValue]
         )
         if notch.state == .expanded {
-            endPending = !(notch.selectedModule === self && !notch.showsHome)
+            // The page shows a stop, but not a plug-in warning.
+            var pageShows = notch.selectedModule === self && !notch.showsHome
+            if case .plugInSoon = reason { pageShows = false }
+            endPending = !pageShows
         } else {
             notch.requestPeek(from: self, for: stripTime, revealsInFullScreen: false)
         }
@@ -124,6 +135,8 @@ public final class KeepAwakeModule: NotchModule {
     private func showPendingStrip() {
         guard let notch, endPending, notch.state != .expanded else { return }
         endPending = false
+        // Plugged in while the warning waited: it's no longer true.
+        if case .plugInSoon = ended, !center.power.onBattery { return }
         notch.peek(self, for: stripTime)
     }
 
@@ -161,6 +174,10 @@ public final class KeepAwakeModule: NotchModule {
             let title = String(localized: "Keep Awake turned on", comment: "Keep Awake strip: on after plugging in")
             let plugged = String(localized: "Your Mac is plugged in", comment: "Keep Awake strip: back on after plugging in")
             return (title, plugged, title + ". " + plugged)
+        case .plugInSoon(let percent):
+            let title = String(localized: "Battery \(percent)%", comment: "Keep Awake strip: the battery reached a warning level")
+            let plug = String(localized: "Plug in soon", comment: "Keep Awake strip: the battery reached a warning level")
+            return (title, plug, title + ". " + plug)
         }
     }
 

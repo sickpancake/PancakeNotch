@@ -552,4 +552,69 @@ struct KeepAwakeCenterTests {
         defaults.set(0, forKey: "keepAwake.batteryCutoff")
         #expect(KeepAwakeSettings(defaults: defaults).batteryCutoff == nil)
     }
+
+    // MARK: Plug-in warnings
+
+    /// A center that warns, how to check it now (as attaching to the notch does), and the percents it warned at.
+    func warningCenter(_ state: PowerState) -> (center: KeepAwakeCenter, check: () -> Void, warned: () -> [Int]) {
+        final class Box { var warned: [Int] = [] }
+        let box = Box()
+        let center = makeCenter(power: state)
+        center.onLowCharge = { box.warned.append($0) }
+        return (center, { center.warnIfLow() }, { box.warned })
+    }
+
+    @Test func warnsOnceForEachLevelPassed() {
+        let (center, _, warned) = warningCenter(PowerState(onBattery: true, percent: 25))
+        center.warnIfLow()
+        #expect(warned().isEmpty)
+        center.setPower(PowerState(onBattery: true, percent: 19))
+        center.setPower(PowerState(onBattery: true, percent: 18))
+        #expect(warned() == [19])
+        center.setPower(PowerState(onBattery: true, percent: 8))
+        center.setPower(PowerState(onBattery: true, percent: 7))
+        #expect(warned() == [19, 8])
+    }
+
+    @Test func alreadyLowAtLaunchWarnsOnceForTheLowestLevel() {
+        let (center, check, warned) = warningCenter(PowerState(onBattery: true, percent: 8))
+        check()
+        center.setPower(PowerState(onBattery: true, percent: 7))
+        #expect(warned() == [8])
+    }
+
+    @Test func pluggingInOrChargingAboveALevelRearmsIt() {
+        let (center, _, warned) = warningCenter(PowerState(onBattery: true, percent: 25))
+        center.setPower(PowerState(onBattery: true, percent: 19))
+        center.setPower(PowerState(onBattery: false, percent: 19))
+        center.setPower(PowerState(onBattery: true, percent: 19))
+        #expect(warned() == [19, 19])
+        center.setPower(PowerState(onBattery: true, percent: 21))
+        center.setPower(PowerState(onBattery: true, percent: 20))
+        #expect(warned() == [19, 19, 20])
+    }
+
+    @Test func noBatteryOrTheSettingOffNeverWarns() {
+        let (center, check, warned) = warningCenter(PowerState(onBattery: false, percent: nil))
+        check()
+        settings.warnsLowCharge = false
+        center.setPower(PowerState(onBattery: true, percent: 8))
+        #expect(warned().isEmpty)
+        settings.warnsLowCharge = true
+        #expect(KeepAwakeSettings(defaults: defaults).warnsLowCharge, "Saved")
+    }
+
+    @Test func aKeepAwakeBatteryStripTakesThePlaceOfTheWarning() {
+        settings.batteryCutoff = 20
+        var notices: [KeepAwakeNotice] = []
+        let (center, _, warned) = warningCenter(PowerState(onBattery: true, percent: 30))
+        center.onNotice = { notices.append($0) }
+        center.turnOn(.untilStopped)
+        center.setPower(PowerState(onBattery: true, percent: 20))
+        #expect(notices == [.batteryLow])
+        #expect(warned().isEmpty, "One strip, not two")
+        center.setPower(PowerState(onBattery: true, percent: 10))
+        #expect(warned() == [10])
+    }
 }
+

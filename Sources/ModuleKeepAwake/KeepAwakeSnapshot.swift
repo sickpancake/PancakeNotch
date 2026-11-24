@@ -66,6 +66,7 @@ public enum KeepAwakeSnapshot {
             model(.compact, [ended(.batteryLow)]) { $0.peekForSnapshot($0.modules[0]) },
             model(.compact, [ended(.batteryLowKeepsGoing)]) { $0.peekForSnapshot($0.modules[0]) },
             model(.compact, [ended(.backOn)]) { $0.peekForSnapshot($0.modules[0]) },
+            model(.compact, [ended(.plugInSoon(percent: 19))]) { $0.peekForSnapshot($0.modules[0]) },
             // Kept going on a low battery: the page says so.
             model(.expanded, [module(power: PowerState(onBattery: true, percent: 8), setUp: { center, _ in center.turnOn(.untilStopped) },
                                      settings: { $0.lowBattery = .keepGoing })]),

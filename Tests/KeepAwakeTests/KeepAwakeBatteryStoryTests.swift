@@ -30,7 +30,9 @@ struct KeepAwakeBatteryStoryTests {
         var shown: [String] = []
     }
 
-    init(cutoff: Int? = 10, lowBattery: KeepAwakeLowBattery = .stop, plugIn: KeepAwakePlugIn = .turnBackOn) {
+    /// `warns`: the plug-in warnings at 20% and 10%; off unless a story is about them, so the others count
+    /// only Keep Awake's own strips.
+    init(cutoff: Int? = 10, lowBattery: KeepAwakeLowBattery = .stop, plugIn: KeepAwakePlugIn = .turnBackOn, warns: Bool = false) {
         let name = "KeepAwakeBatteryStory-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
@@ -38,6 +40,7 @@ struct KeepAwakeBatteryStoryTests {
         settings.batteryCutoff = cutoff
         settings.lowBattery = lowBattery
         settings.plugIn = plugIn
+        settings.warnsLowCharge = warns
         let clock = clock, battery = battery
         center = KeepAwakeCenter(settings: settings, defaults: defaults, holder: hold, now: { clock.now },
                                  power: { battery.state }, bootTime: { Date(timeIntervalSinceReferenceDate: 899_000_000) })
@@ -288,5 +291,40 @@ struct KeepAwakeBatteryStoryTests {
         battery.state = PowerState(onBattery: false, percent: 10)
         reopened.powerChanged()
         #expect(reopened.isHolding)
+    }
+
+    // MARK: Plug-in warnings
+
+    @Test func warnsAtTwentyAndTenOnceEachWithTheChargeNow() {
+        let story = KeepAwakeBatteryStoryTests(warns: true)
+        story.unplug(at: 25)
+        #expect(story.strips.shown.isEmpty, "Above 20% nothing")
+        story.drain(to: 19)
+        #expect(story.strips.shown == ["keepAwake"])
+        #expect(story.strip?.title == "Battery 19%")
+        #expect(story.strip?.detail == "Plug in soon")
+        story.drain(to: 15)
+        #expect(story.strips.shown.count == 1, "No second strip until 10%")
+        story.drain(to: 8)
+        #expect(story.strips.shown.count == 2)
+        #expect(story.strip?.title == "Battery 8%")
+        story.drain(to: 5)
+        #expect(story.strips.shown.count == 2, "It doesn't nag")
+    }
+
+    @Test func chargingLetsTheWarningsComeAgain() {
+        let story = KeepAwakeBatteryStoryTests(warns: true)
+        story.unplug(at: 19)
+        #expect(story.strips.shown.count == 1)
+        story.plugIn()
+        story.unplug(at: 19)
+        #expect(story.strips.shown.count == 2, "Plugging in re-arms it")
+    }
+
+    @Test func warnsOffShowsNothing() {
+        let story = KeepAwakeBatteryStoryTests(warns: false)
+        story.unplug(at: 25)
+        story.drain(to: 8)
+        #expect(story.strips.shown.isEmpty)
     }
 }
