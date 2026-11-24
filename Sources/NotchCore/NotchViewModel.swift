@@ -608,6 +608,8 @@ public final class NotchViewModel {
         public let id: String
         public let moduleID: String
         public let view: AnyView
+        /// Added to the "+n" overflow count when this ear shows it (`CompactEars.mergedCount`).
+        public var mergedCount: Int = 0
     }
 
     /// The "+n" count inside an ear: how many active modules didn't fit the two spots, and the ear
@@ -682,11 +684,12 @@ public final class NotchViewModel {
         func render(_ slot: EarAllocator.Slot?) -> EarSlot? {
             guard let slot, let ears = content[slot.moduleID] else { return nil }
             let view: AnyView?
+            let mergedCount: Int
             switch slot.content {
-            case .main: view = ears.main
-            case .extra: view = ears.extra
+            case .main: view = ears.main; mergedCount = ears.mergedCount
+            case .extra: view = ears.extra; mergedCount = 0
             }
-            return view.map { EarSlot(id: slot.id, moduleID: slot.moduleID, view: $0) }
+            return view.map { EarSlot(id: slot.id, moduleID: slot.moduleID, view: $0, mergedCount: mergedCount) }
         }
         return (render(allocation.left), render(allocation.right))
     }

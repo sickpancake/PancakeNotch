@@ -140,10 +140,15 @@ public extension NotchModule {
 public struct CompactEars {
     public var main: AnyView
     public var extra: AnyView?
+    /// What `main` counts with its own "+n" (the Timer: its other timers). When `main` shares its ear with
+    /// the overflow count (`NotchLayout.compactEarReserve` > 0), the module leaves its own "+n" out and this
+    /// is added to the overflow count instead, so the ear shows one "+n", never two side by side.
+    public var mergedCount: Int
 
-    public init(main: AnyView, extra: AnyView? = nil) {
+    public init(main: AnyView, extra: AnyView? = nil, mergedCount: Int = 0) {
         self.main = main
         self.extra = extra
+        self.mergedCount = mergedCount
     }
 }
 

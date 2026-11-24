@@ -236,7 +236,8 @@ An ear is `compactEarWidth` wide (notch height + 6) and as tall as the menu bar.
 - Lay a fixed-width ear out at `layout.compactEarContentWidth`, not `compactEarWidth`: when more than two modules
   are active, `NotchView` puts a "+n" count (7.5 semibold, white 0.6, in a `NotchLayout.earCountWidth` column, leaning toward the content) at the
   outer edge of one ear and hands that ear's module a narrower layout. Nothing in the compact notch hangs below
-  the ears or outside the outline.
+  the ears or outside the outline. A module with its own "+n" (the Timer) leaves it out when
+  `compactEarReserve` > 0 and hands the number over as `CompactEars.mergedCount`, so the ear shows one count.
 - Ears are hidden from VoiceOver; `accessibilityStatus` speaks for them.
 - Don't animate the ear in or out yourself: `NotchView` slides ear content out from under the notch as it grows,
   tucks it back as it shrinks, and scales the old content away when a spot changes hands.

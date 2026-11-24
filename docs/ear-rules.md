@@ -72,7 +72,9 @@ views; only the chosen owners build their views, and pointer targeting uses the 
 12. The Timer is one module however many timers run (up to 10): it takes one ear, by the rules above.
 13. The ear shows **one timer**: a Done one first (the one that ended earliest), else the one ending
     soonest, else the paused one with least left. A small **"+n"** after the time counts the other
-    timers. It sits inside the Timer's own ear, and is not the overflow count of rule 10.
+    timers. It sits inside the Timer's own ear, and is not the overflow count of rule 10. When the
+    Timer's ear also shows that overflow count, the other timers are added to it instead, so the ear
+    shows one "+n" (for example "+3" for two other timers and one hidden module), never two.
 14. **Each Done is its own alert.** Every timer that ends rings, opens the notch (or shows the strip) and
     is announced once. Done timers queue: the ear and the Done card show the earliest, and stopping it shows
     the next. The Timer keeps `waitsForYou` and #2 while any timer is Done.

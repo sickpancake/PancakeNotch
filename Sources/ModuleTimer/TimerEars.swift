@@ -9,6 +9,8 @@ struct TimerEar: View {
     let module: TimerModule
     let width: CGFloat
     let height: CGFloat
+    /// `false` while the ear also shows the "+n" overflow count: the other timers are added to that count.
+    var showsOwnCount = true
 
     var body: some View {
         Group {
@@ -163,8 +165,9 @@ struct TimerEar: View {
 
     static let badgeSize: CGFloat = 7.5
 
-    /// "+1", "+2": the timers besides the one shown. Nil with one timer.
+    /// "+1", "+2": the timers besides the one shown. Nil with one timer, or while the overflow count holds them.
     private var badgeText: String? {
+        guard showsOwnCount else { return nil }
         let others = module.center.timers.count - 1
         return others > 0 ? "+\(others)" : nil
     }

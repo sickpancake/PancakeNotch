@@ -254,12 +254,11 @@ private struct CompactEarsView: View {
         // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
         let tuck = state == .closed && !reduceMotion ? width + 8 : 0
         HStack(spacing: 0) {
-            // The count only joins an ear that shows a module, so it never sits alone in an empty ear.
-            ear(left, count: left != nil && overflow?.side == .left ? overflow?.count : nil, outerEdge: .leading,
+            ear(left, count: count(in: left, side: .left), outerEdge: .leading,
                 width: width, height: height)
                 .offset(x: tuck)
             Spacer(minLength: 0)
-            ear(right, count: right != nil && overflow?.side == .right ? overflow?.count : nil, outerEdge: .trailing,
+            ear(right, count: count(in: right, side: .right), outerEdge: .trailing,
                 width: width, height: height)
                 .offset(x: -tuck)
         }
@@ -271,6 +270,13 @@ private struct CompactEarsView: View {
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .easeInOut(duration: 0.25), value: overflow)
         .allowsHitTesting(false)
         .accessibilityHidden(!isShown)
+    }
+
+    /// The "+n" shown in an ear: the overflow count on its side, plus what the ear's module folded into it
+    /// (the Timer's other timers). Only in an ear that shows a module, never alone in an empty one.
+    private func count(in slot: NotchViewModel.EarSlot?, side: NotchViewModel.EarOverflow.Side) -> Int? {
+        guard let slot, let overflow, overflow.side == side else { return nil }
+        return overflow.count + slot.mergedCount
     }
 
     /// One ear: the module's content, and with `count` the "+n" overflow count at the ear's outer edge

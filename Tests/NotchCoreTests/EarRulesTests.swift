@@ -194,4 +194,20 @@ struct EarOverflowCountTests {
         #expect(reserved.bodySize(for: .compact) == layout.bodySize(for: .compact))
         #expect(reserved.compactEarContentWidth == layout.compactEarWidth - NotchLayout.earCountWidth)
     }
+
+    @Test func aModulesOwnCountJoinsTheOverflowCountInItsEar() {
+        let model = NotchViewModel(layout: layout, state: .compact,
+            pointerLocation: { .zero }, isMissionControlActive: { false })
+        let a = RankedModule("a"), b = RankedModule("b"), c = RankedModule("c")
+        a.isActive = true; b.isActive = true; c.isActive = true
+        a.ownCount = 2; b.ownCount = 3
+        model.modules = [a, b, c]
+        model.arrangement.order = ["a", "b", "c"]
+        #expect(model.earOverflow == .init(side: .left, count: 1))
+        let ears = model.ears(layout: layout)
+        // "a" shares the left ear with the count: its two join it, so the ear shows one "+3".
+        #expect(ears.left?.mergedCount == 2)
+        // "b" keeps its own "+n" in the right ear, which has no overflow count to join.
+        #expect(ears.right?.mergedCount == 0)
+    }
 }
