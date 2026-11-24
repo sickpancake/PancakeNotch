@@ -212,6 +212,43 @@ struct NotchModulesTests {
         #expect(music.opens == 2)
     }
 
+    static func key(_ digit: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
+            context: nil, characters: digit, charactersIgnoringModifiers: digit, isARepeat: false, keyCode: keyCode
+        )
+    }
+
+    /// 1–9 pick the module at that place in the ranking, 0 goes Home (#131).
+    @Test func numberKeysJumpBetweenModules() throws {
+        let (model, music, shelf) = makeModel()
+        model.open()
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(model.selectedModule === shelf)
+        #expect(model.handleKey(try #require(Self.key("1", keyCode: 18))))
+        #expect(model.selectedModule === music)
+        // Only two modules: 3 is no one's.
+        #expect(!model.handleKey(try #require(Self.key("3", keyCode: 20))))
+        #expect(model.selectedModule === music)
+        // ⌘2 isn't a switch.
+        #expect(!model.handleKey(try #require(Self.key("2", keyCode: 19, modifiers: .command))))
+        #expect(model.selectedModule === music)
+        #expect(model.handleKey(try #require(Self.key("0", keyCode: 29))))
+        #expect(model.showsHome)
+        // From Home, a digit goes straight to its module.
+        #expect(model.handleKey(try #require(Self.key("2", keyCode: 19))))
+        #expect(!model.showsHome)
+        #expect(model.selectedModule === shelf)
+    }
+
+    @Test func zeroDoesNothingWithTabsOnly() throws {
+        let (model, _, _) = makeModel()
+        model.arrangement.navigation = .tabs
+        model.open()
+        #expect(!model.handleKey(try #require(Self.key("0", keyCode: 29))))
+        #expect(!model.showsHome)
+    }
+
     /// Home doesn't go away when a module is switched off under it (ADR-0042); leaving Home then shows
     /// the module that's left.
     @Test func removingAModuleUnderHomeKeepsHome() {

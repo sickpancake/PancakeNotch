@@ -854,6 +854,21 @@ public final class NotchViewModel {
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
             return true
         }
+        // 1–9: the module at that place in the ranking, 0: Home. Not while typing in a field, or
+        // when something holds the module open (the tabs hide then too).
+        if let digit = Self.digitKeyCodes.firstIndex(of: event.keyCode),
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+           !(event.window?.firstResponder is NSTextView), isEditingHome || !isHeld {
+            if digit == 0 {
+                guard homeIsAvailable else { return false }
+                if !showsHome { toggleHome() }
+                return true
+            }
+            let ranked = rankedModules
+            guard ranked.indices.contains(digit - 1) else { return false }
+            select(ranked[digit - 1].moduleID)
+            return true
+        }
         if event.keyCode == 53 { // Escape: leave Home for the module, else close all the way
             if showsHome, selectedModule != nil {
                 toggleHome()
@@ -867,6 +882,9 @@ public final class NotchViewModel {
         }
         return false
     }
+
+    /// Key codes of the 0–9 keys on the top row, in digit order.
+    private static let digitKeyCodes: [UInt16] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25]
 
     /// True while any module needs the notch to stay open.
     var isHeld: Bool { isEditingHome || modules.contains { $0.holdsOpen } }
