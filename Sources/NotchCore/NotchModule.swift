@@ -132,7 +132,8 @@ public extension NotchModule {
     func openedFromHome(_ kind: HomeWidgetKind) {}
 }
 
-/// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.
+/// A module's content for the compact ears, each laid out at `compactEarContentWidth` × the compact height.
+/// That is `compactEarWidth`, less the room the "+n" overflow count takes in the ear that shows it.
 ///
 /// `main` goes in the ear the module's ranking gives it (#1 left, #2 right, or swapped). `extra` fills
 /// the other ear only while the module is the one active module (Now Playing: art + sound bars).

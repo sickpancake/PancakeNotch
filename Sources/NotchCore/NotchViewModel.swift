@@ -272,8 +272,6 @@ public final class NotchViewModel {
     public func activityChanged() {
         let resting: NotchState = modules.contains { $0.isActive } ? .compact : .closed
         if restingState != resting { restingState = resting }
-        // The "+n" chip may have appeared or left: refit so the window covers its strip.
-        fitWindow?(state)
     }
 
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening

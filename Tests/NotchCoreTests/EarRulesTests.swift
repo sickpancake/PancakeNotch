@@ -43,14 +43,14 @@ struct EarRulesTests {
         let timer = SecondEarModule()
         model.modules.append(timer)
         a.isActive = true; b.isActive = true
-        // "timer" claims the second spot, so "b" is displaced from the first: the chip sits under the left ear.
+        // "timer" claims the second spot, so "b" is displaced from the first: the count shows in the left ear.
         #expect(model.earOverflow == .init(side: .left, count: 1))
         // A displaced second-spot module puts it under the right ear.
         let timer2 = SecondEarModule("timer2")
         model.modules.append(timer2)
         b.isActive = false
         #expect(model.earOverflow == .init(side: .right, count: 1))
-        // Swap sides flips the chip with the ears.
+        // Swap sides flips the count with the ears.
         model.arrangement.swapsEarSides = true
         #expect(model.earOverflow == .init(side: .left, count: 1))
     }
@@ -60,7 +60,7 @@ struct EarRulesTests {
         let agents = WaitingEarModule()
         model.modules.append(agents)
         a.isActive = true; b.isActive = true
-        // The waiting module wins a spot first; the loser counts toward the chip.
+        // The waiting module wins a spot first; the loser counts toward the "+n".
         let ears = model.ears(layout: layout)
         #expect(ears.left?.id == "a.main")
         #expect(ears.right?.id == "agents.main")

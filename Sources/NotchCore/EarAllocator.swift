@@ -41,14 +41,14 @@ enum EarAllocator {
     }
 
     struct Allocation: Equatable, Sendable {
-        /// Which ear the "+n" overflow chip tucks under.
+        /// Which ear shows the "+n" overflow count.
         enum Side: String, Sendable { case left, right }
 
         var left: Slot?
         var right: Slot?
         /// Candidates that didn't fit the two spots, in the input's (rank) order.
         var displacedModuleIDs: [String] = []
-        /// The ear the chip belongs to: the side most of the displaced candidates wanted
+        /// The ear the count belongs to: the side most of the displaced candidates wanted
         /// (#1 for `first`/`byRank`, #2 for `second`/the borrowed spot). A tie goes to the left.
         var overflowSide: Side?
 

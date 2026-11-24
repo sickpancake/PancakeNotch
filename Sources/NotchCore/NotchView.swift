@@ -254,11 +254,12 @@ private struct CompactEarsView: View {
         // Closed: tucked in toward the middle, under the notch. Reduce Motion only fades.
         let tuck = state == .closed && !reduceMotion ? width + 8 : 0
         HStack(spacing: 0) {
-            ear(left, count: overflow?.side == .left ? overflow?.count : nil, outerEdge: .leading,
+            // The count only joins an ear that shows a module, so it never sits alone in an empty ear.
+            ear(left, count: left != nil && overflow?.side == .left ? overflow?.count : nil, outerEdge: .leading,
                 width: width, height: height)
                 .offset(x: tuck)
             Spacer(minLength: 0)
-            ear(right, count: overflow?.side == .right ? overflow?.count : nil, outerEdge: .trailing,
+            ear(right, count: right != nil && overflow?.side == .right ? overflow?.count : nil, outerEdge: .trailing,
                 width: width, height: height)
                 .offset(x: -tuck)
         }
