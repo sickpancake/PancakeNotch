@@ -272,8 +272,6 @@ public final class NotchViewModel {
     public func activityChanged() {
         let resting: NotchState = modules.contains { $0.isActive } ? .compact : .closed
         if restingState != resting { restingState = resting }
-        // The "+n" chip may have appeared or left: refit so the window covers its strip.
-        fitWindow?(state)
     }
 
     /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
@@ -610,40 +608,25 @@ public final class NotchViewModel {
         public let id: String
         public let moduleID: String
         public let view: AnyView
+        /// Added to the "+n" overflow count when this ear shows it (`CompactEars.mergedCount`).
+        public var mergedCount: Int = 0
     }
 
-    /// The "+n" hint under an ear: how many active modules didn't fit the two spots, and the ear
-    /// it tucks under. Pointing at it opens Home, where the displaced modules' widgets show.
+    /// The "+n" count inside an ear: how many active modules didn't fit the two spots, and the ear
+    /// that shows it. Pointing at it opens Home, where the displaced modules' widgets show.
     public struct EarOverflow: Equatable, Sendable {
         public enum Side: Sendable { case left, right }
         public let side: Side
         public let count: Int
     }
 
-    /// Height of the band at the bottom of an ear that counts as the "+n" chip.
-    static let earOverflowChipHeight: CGFloat = 12
-
-    /// Window frame for a state: the outline plus, in Compact, the strip under the ear the "+n"
-    /// chip hangs from, so the chip stays inside the window (drawn and hittable).
+    /// Window frame for a state. The "+n" count sits inside an ear, so this is just the layout's.
     func windowFrame(for state: NotchState) -> CGRect {
-        var frame = layout.windowFrame(for: state)
-        if state == .compact, let strip = earOverflowFrame() { frame = frame.union(strip) }
-        return frame
+        layout.windowFrame(for: state)
     }
 
-    /// The "+n" chip's dangling strip in screen coordinates, or `nil` while the chip is hidden.
-    func earOverflowFrame() -> CGRect? {
-        guard state == .compact, let overflow = earOverflow else { return nil }
-        let notch = layout.geometry.notchRect
-        let earBottom = notch.maxY - layout.geometry.compactHeight
-        let earWidth = layout.compactEarWidth
-        return CGRect(x: overflow.side == .left ? notch.minX - earWidth : notch.maxX,
-                      y: earBottom - Self.earOverflowChipHeight,
-                      width: earWidth, height: Self.earOverflowChipHeight)
-    }
-
-    /// The overflow hint for the current allocation, or `nil` when every candidate fits or the
-    /// chip's spot is taken by a peeking module's strip.
+    /// The overflow count for the current allocation, or `nil` when every candidate fits or a
+    /// peeking module's strip is showing (the ears keep their full width then).
     var earOverflow: EarOverflow? {
         if layout.isPeeking { return nil }
         let allocation = earAllocation()
@@ -651,19 +634,20 @@ public final class NotchViewModel {
         return EarOverflow(side: side == .left ? .left : .right, count: allocation.displacedModuleIDs.count)
     }
 
-    /// The pointer is on the "+n" chip: the part dangling below the bottom edge of the ear it
-    /// tucks under. Inside the ear itself the module keeps the click, and while a module is
-    /// peeking the strip below the ears keeps it too (the chip is hidden then).
+    /// The pointer is on the "+n" count: the strip at the outer edge of the ear that shows it
+    /// (`NotchLayout.earCountWidth` wide, the ear's full height). The rest of the ear keeps its module's
+    /// click, and while a module is peeking the count is hidden.
     func pointerOverEarOverflow() -> Bool {
         guard state == .compact, !layout.isPeeking, let overflow = earOverflow else { return false }
         let point = pointerLocation()
         let notch = layout.geometry.notchRect
         let earBottom = notch.maxY - layout.geometry.compactHeight
-        guard point.y >= earBottom - Self.earOverflowChipHeight, point.y < earBottom else { return false }
+        guard point.y >= earBottom, point.y <= notch.maxY else { return false }
         let earWidth = layout.compactEarWidth
+        let count = NotchLayout.earCountWidth
         switch overflow.side {
-        case .left: return point.x >= notch.minX - earWidth && point.x < notch.minX
-        case .right: return point.x >= notch.maxX && point.x < notch.maxX + earWidth
+        case .left: return point.x >= notch.minX - earWidth && point.x < notch.minX - earWidth + count
+        case .right: return point.x >= notch.maxX + earWidth - count && point.x < notch.maxX + earWidth
         }
     }
 
@@ -686,20 +670,26 @@ public final class NotchViewModel {
     /// one construction, and retain their existing animation IDs.
     public func ears(layout: NotchLayout) -> (left: EarSlot?, right: EarSlot?) {
         let allocation = earAllocation()
+        // The ear showing the "+n" count lays its module out in the room the count leaves.
+        let countSide = layout.isPeeking ? nil : allocation.overflowSide
+        let countOwner = countSide == .left ? allocation.left?.moduleID : countSide == .right ? allocation.right?.moduleID : nil
         var content: [String: CompactEars] = [:]
         for owner in [allocation.left?.moduleID, allocation.right?.moduleID].compactMap({ $0 }) {
             if content[owner] == nil {
-                content[owner] = modules.first { $0.moduleID == owner }?.compactEars(layout: layout)
+                var ownerLayout = layout
+                if owner == countOwner { ownerLayout.compactEarReserve = NotchLayout.earCountWidth }
+                content[owner] = modules.first { $0.moduleID == owner }?.compactEars(layout: ownerLayout)
             }
         }
         func render(_ slot: EarAllocator.Slot?) -> EarSlot? {
             guard let slot, let ears = content[slot.moduleID] else { return nil }
             let view: AnyView?
+            let mergedCount: Int
             switch slot.content {
-            case .main: view = ears.main
-            case .extra: view = ears.extra
+            case .main: view = ears.main; mergedCount = ears.mergedCount
+            case .extra: view = ears.extra; mergedCount = 0
             }
-            return view.map { EarSlot(id: slot.id, moduleID: slot.moduleID, view: $0) }
+            return view.map { EarSlot(id: slot.id, moduleID: slot.moduleID, view: $0, mergedCount: mergedCount) }
         }
         return (render(allocation.left), render(allocation.right))
     }

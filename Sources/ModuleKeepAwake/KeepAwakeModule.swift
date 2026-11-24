@@ -77,7 +77,7 @@ public final class KeepAwakeModule: NotchModule {
     public var earConfiguration: CompactEarConfiguration? { CompactEarConfiguration(placement: .first) }
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {
-        CompactEars(main: AnyView(KeepAwakeEar(module: self, width: layout.compactEarWidth, height: layout.geometry.compactHeight)))
+        CompactEars(main: AnyView(KeepAwakeEar(module: self, width: layout.compactEarContentWidth, height: layout.geometry.compactHeight)))
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {

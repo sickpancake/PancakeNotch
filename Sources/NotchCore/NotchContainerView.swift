@@ -31,16 +31,6 @@ final class NotchContainerView: NSView {
     /// Whether the host window can be seen; animated modules stop while it is hidden or covered.
     var onVisibilityChange: ((Bool) -> Void)?
 
-    /// Extra hit-test gate, in the container's superview coordinates (as `hitTest` passes them):
-    /// `false` lets clicks and hovers fall through to the desktop. Set by `NotchWindowController`
-    /// for the part of the window below the notch that isn't the "+n" chip's strip.
-    var hittable: ((NSPoint) -> Bool)?
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if let hittable, !hittable(point) { return nil }
-        return super.hitTest(point)
-    }
-
     init(content: NSView, contentSize: CGSize) {
         self.content = content
         self.contentSize = contentSize

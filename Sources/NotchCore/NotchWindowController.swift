@@ -292,15 +292,6 @@ public final class NotchWindowController {
         }
         dropRouter.model = model
         container.dropDelegate = dropRouter
-        // The compact window reaches below the outline for the "+n" chip's strip: everything
-        // else in that added band passes clicks and hovers through to the desktop.
-        container.hittable = { [weak model, weak panel, weak container] point in
-            guard let model, let panel, let container else { return true }
-            guard model.state == .compact, let strip = model.earOverflowFrame() else { return true }
-            let inWindow = container.superview?.convert(point, to: nil) ?? point
-            let screen = CGPoint(x: panel.frame.minX + inWindow.x, y: panel.frame.minY + inWindow.y)
-            return model.layout.outline(for: .compact, contains: screen) || strip.contains(screen)
-        }
         panel.contentView = container
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak self, weak panel, weak model] state in

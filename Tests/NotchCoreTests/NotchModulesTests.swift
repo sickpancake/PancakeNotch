@@ -11,6 +11,8 @@ final class RankedModule: NotchModule {
     var wantsFocus = false
     var hasExtraEar = false
     var hasEars = true
+    /// What the module's ear would count with its own "+n" (the Timer's other timers).
+    var ownCount = 0
     var canPeek = true
     var acceptsDrags = false
     var opens = 0
@@ -27,7 +29,9 @@ final class RankedModule: NotchModule {
     }
     func compactEars(layout: NotchLayout) -> CompactEars? {
         guard hasEars else { return nil }
-        return CompactEars(main: AnyView(EmptyView()), extra: hasExtraEar ? AnyView(EmptyView()) : nil)
+        // Like the Timer: its own "+n" joins the overflow count only in the ear that shows that count.
+        return CompactEars(main: AnyView(EmptyView()), extra: hasExtraEar ? AnyView(EmptyView()) : nil,
+                           mergedCount: layout.compactEarReserve > 0 ? ownCount : 0)
     }
     func peekView(layout: NotchLayout) -> AnyView? { canPeek ? AnyView(EmptyView()) : nil }
     func notchDidOpen() { opens += 1 }

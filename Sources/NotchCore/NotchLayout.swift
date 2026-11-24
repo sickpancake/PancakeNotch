@@ -67,6 +67,16 @@ public struct NotchLayout: Equatable, Sendable {
     /// Width of each side "ear" added to the notch in the compact state.
     public var compactEarWidth: CGFloat { geometry.notchRect.height + 6 }
 
+    /// Width kept at the outer edge of an ear for the "+n" overflow count (see `NotchViewModel.earOverflow`).
+    public static let earCountWidth: CGFloat = 14
+
+    /// Room taken from a module's ear by the "+n" count beside it: `earCountWidth` in the ear that shows
+    /// it, 0 otherwise. Set only on the layout handed to that ear's module; never changes the outline.
+    public var compactEarReserve: CGFloat = 0
+
+    /// Width a module's ear content is laid out at: the ear, less the "+n" count's room when it shares it.
+    public var compactEarContentWidth: CGFloat { compactEarWidth - compactEarReserve }
+
     /// Size of the notch body (the part below the ears) for a state.
     public func bodySize(for state: NotchState) -> CGSize {
         let notch = geometry.notchRect.size

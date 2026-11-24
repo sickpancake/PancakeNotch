@@ -151,9 +151,12 @@ public final class TimerModule: NotchModule {
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         let height = layout.geometry.compactHeight
-        let width = layout.compactEarWidth
+        let width = layout.compactEarContentWidth
+        // Sharing the ear with the "+n" overflow count: the other timers join that count, not a second "+n".
+        let sharesCount = layout.compactEarReserve > 0
         // One ear, also when nothing else is active: the other stays free (ADR-0040).
-        return CompactEars(main: AnyView(TimerEar(module: self, width: width, height: height)))
+        return CompactEars(main: AnyView(TimerEar(module: self, width: width, height: height, showsOwnCount: !sharesCount)),
+                           mergedCount: sharesCount ? max(0, center.timers.count - 1) : 0)
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {

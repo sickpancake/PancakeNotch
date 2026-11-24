@@ -132,17 +132,23 @@ public extension NotchModule {
     func openedFromHome(_ kind: HomeWidgetKind) {}
 }
 
-/// A module's content for the compact ears, each laid out at `compactEarWidth` × the compact height.
+/// A module's content for the compact ears, each laid out at `compactEarContentWidth` × the compact height.
+/// That is `compactEarWidth`, less the room the "+n" overflow count takes in the ear that shows it.
 ///
 /// `main` goes in the ear the module's ranking gives it (#1 left, #2 right, or swapped). `extra` fills
 /// the other ear only while the module is the one active module (Now Playing: art + sound bars).
 public struct CompactEars {
     public var main: AnyView
     public var extra: AnyView?
+    /// What `main` counts with its own "+n" (the Timer: its other timers). When `main` shares its ear with
+    /// the overflow count (`NotchLayout.compactEarReserve` > 0), the module leaves its own "+n" out and this
+    /// is added to the overflow count instead, so the ear shows one "+n", never two side by side.
+    public var mergedCount: Int
 
-    public init(main: AnyView, extra: AnyView? = nil) {
+    public init(main: AnyView, extra: AnyView? = nil, mergedCount: Int = 0) {
         self.main = main
         self.extra = extra
+        self.mergedCount = mergedCount
     }
 }
 
