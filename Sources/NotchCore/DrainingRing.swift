@@ -43,21 +43,23 @@ public enum RingSteps {
 }
 
 /// A ring that drains to empty at its plan's end. White on a faint track: monochrome like everything else
-/// (ADR-0029). It moves smoothly all the way, not once a second, and is drawn by Core Animation on the
+/// (ADR-0029), except the Timer ear's last minute, which passes an amber `tint` (issue #129). It moves smoothly all the way, not once a second, and is drawn by Core Animation on the
 /// render server, so the app does no work while it moves. A still plan holds it at the exact fraction.
 public struct DrainingRing: View {
     let plan: RingPlan
     /// Changes after a wake or a clock change: the ring starts again from the new time.
     let epoch: Int
     let lineWidth: CGFloat
+    let tint: Color
     /// Off-screen pictures: Core Animation layers don't render there, so a plain ring for those.
     let isSnapshot: Bool
     let now: () -> Date
 
-    public init(plan: RingPlan, epoch: Int, lineWidth: CGFloat = 2, isSnapshot: Bool = false, now: @escaping () -> Date) {
+    public init(plan: RingPlan, epoch: Int, lineWidth: CGFloat = 2, tint: Color = .white, isSnapshot: Bool = false, now: @escaping () -> Date) {
         self.plan = plan
         self.epoch = epoch
         self.lineWidth = lineWidth
+        self.tint = tint
         self.isSnapshot = isSnapshot
         self.now = now
     }
@@ -66,14 +68,14 @@ public struct DrainingRing: View {
         Group {
             if isSnapshot {
                 ZStack {
-                    Circle().stroke(.white.opacity(0.25), lineWidth: lineWidth)
+                    Circle().stroke(tint.opacity(0.25), lineWidth: lineWidth)
                     Circle()
                         .trim(from: 0, to: plan.fraction(at: now()))
-                        .stroke(.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
             } else {
-                DrainingRingLayers(plan: plan, epoch: epoch, lineWidth: lineWidth, now: now)
+                DrainingRingLayers(plan: plan, epoch: epoch, lineWidth: lineWidth, tint: tint, now: now)
             }
         }
         .accessibilityHidden(true)
@@ -84,12 +86,14 @@ struct DrainingRingLayers: NSViewRepresentable {
     let plan: RingPlan
     let epoch: Int
     let lineWidth: CGFloat
+    let tint: Color
     let now: () -> Date
 
     func makeNSView(context: Context) -> RingView { RingView() }
 
     func updateNSView(_ view: RingView, context: Context) {
         view.apply(plan: plan, epoch: epoch, lineWidth: lineWidth, now: now)
+        view.setTint(NSColor(tint))
     }
 }
 
@@ -120,6 +124,15 @@ final class RingView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Recolours the ring without restarting its animation.
+    func setTint(_ color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.strokeColor = color.withAlphaComponent(0.25).cgColor
+        arc.strokeColor = color.cgColor
+        CATransaction.commit()
+    }
 
     func apply(plan: RingPlan, epoch: Int, lineWidth: CGFloat, now: @escaping () -> Date) {
         self.now = now

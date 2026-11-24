@@ -75,7 +75,8 @@ Quick reference for the values you'll reach for most (the guide has the rest):
 Rules that are easy to break:
 
 - **Monochrome.** Black, white and grey only. Colour is allowed only for the user's content (album art, file
-  previews) and the small status marks in Agents and AI Usage (`StatusColors`). No accent colour, no system
+  previews), the small status marks in Agents and AI Usage (`StatusColors`), and the Timer ear's amber last
+  minute (`TimerEar.lastMinute`). No accent colour, no system
   blue, no stock `Picker`, `Slider` or tinted `Toggle` in the app window.
 - **Nothing under the camera cutout.** In the open notch, reserve the notch's width in the top band with
   `Color.clear.frame(width: notchWidth)`; the module tabs own the left half (`notchModuleBarWidth`).

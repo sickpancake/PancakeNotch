@@ -21,6 +21,7 @@ struct TimerRing: View {
     let module: TimerModule
     let size: CGFloat
     var lineWidth: CGFloat = 2
+    var tint: Color = .white
     /// One timer of several (a row in the list); the notch's own timer when nil.
     var timer: CountdownTimer?
 
@@ -29,7 +30,7 @@ struct TimerRing: View {
         let plan = RingPlan(timer ?? center.timer)
         // Read here so the ring starts again from the new time after a wake or a clock change.
         let epoch = center.clockEpoch
-        DrainingRing(plan: plan, epoch: epoch, lineWidth: lineWidth, isSnapshot: module.isSnapshot, now: { center.now })
+        DrainingRing(plan: plan, epoch: epoch, lineWidth: lineWidth, tint: tint, isSnapshot: module.isSnapshot, now: { center.now })
             .frame(width: size, height: size)
     }
 }
