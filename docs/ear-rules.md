@@ -58,20 +58,21 @@ views; only the chosen owners build their views, and pointer targeting uses the 
 8. **A module alone:** one with an extra view fills both ears (Now Playing: art in #1, sound bars in #2). A #2
    module (the Timer on "Second spot" or while Done) stays in #2 and leaves #1 empty. Any other module takes #1.
 9. **Two showing:** each shows only its main view (Now Playing drops its sound bars).
-10. **More than two:** a small **"+n"** chip tucks under the bottom edge of the ear with the displaced
-    content (the side most of the waiting candidates wanted; a tie goes to #1) and counts the modules
-    that didn't fit. Pointing at the chip opens Home — tabs-only navigation opens the best-ranked
-    displaced module instead. The chip only reports the overflow; the ranking rules above still pick
+10. **More than two:** a small **"+n"** count sits inside the ear with the displaced content, at its
+    outer edge (the side most of the waiting candidates wanted; a tie goes to #1), and counts the modules
+    that didn't fit. Nothing hangs below the notch: the module in that ear keeps the rest of the ear
+    (`NotchLayout.compactEarContentWidth`). Pointing at the count opens Home — tabs-only navigation opens the best-ranked
+    displaced module instead. The count only reports the overflow; the ranking rules above still pick
     the two spots exactly as before.
 11. **Swap sides** flips left and right for everything, including a lone module's two views and the
-    "+n" chip's ear.
+    "+n" count's ear.
 
 ## Several timers
 
 12. The Timer is one module however many timers run (up to 10): it takes one ear, by the rules above.
 13. The ear shows **one timer**: a Done one first (the one that ended earliest), else the one ending
     soonest, else the paused one with least left. A small **"+n"** after the time counts the other
-    timers. It sits inside the Timer's own ear, and is not the overflow chip of rule 10.
+    timers. It sits inside the Timer's own ear, and is not the overflow count of rule 10.
 14. **Each Done is its own alert.** Every timer that ends rings, opens the notch (or shows the strip) and
     is announced once. Done timers queue: the ear and the Done card show the earliest, and stopping it shows
     the next. The Timer keeps `waitsForYou` and #2 while any timer is Done.

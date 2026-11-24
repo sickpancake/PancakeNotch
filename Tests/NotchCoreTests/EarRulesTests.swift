@@ -29,7 +29,7 @@ struct EarRulesTests {
         var ears = model.ears(layout: layout)
         #expect(ears.left?.id == "a.main")
         #expect(ears.right?.id == "b.main")
-        // The "+n" chip counts what didn't fit.
+        // The "+n" count counts what didn't fit.
         #expect(model.earOverflow == .init(side: .left, count: 1))
         a.isActive = false
         ears = model.ears(layout: layout)
@@ -79,8 +79,8 @@ struct EarRulesTests {
         model.modules = [a, b, c]
         model.arrangement.order = ["a", "b", "c"]
         let notch = layout.geometry.notchRect
-        // The chip is the band dangling below the bottom edge of the ear it tucks under.
-        pointer.point = CGPoint(x: notch.minX - 10, y: notch.maxY - layout.geometry.compactHeight - 5)
+        // The count is the strip at the outer edge of the ear that shows it, inside the outline.
+        pointer.point = CGPoint(x: notch.minX - layout.compactEarWidth + 4, y: notch.maxY - 5)
         #expect(model.pointerOverEarOverflow())
         model.tap()
         #expect(model.showsHome)
@@ -89,7 +89,9 @@ struct EarRulesTests {
         model.arrangement.navigation = .tabs
         model.tap()
         #expect(model.selectedModule?.moduleID == "c")
-        // The rest of the ear still opens its own module.
+        // The rest of the ear still opens its own module, and nothing below the ear belongs to the notch.
+        pointer.point = CGPoint(x: notch.minX - layout.compactEarWidth + 4, y: notch.maxY - layout.geometry.compactHeight - 5)
+        #expect(!model.pointerOverEarOverflow())
         pointer.point = CGPoint(x: notch.minX - 10, y: notch.maxY - 5)
         #expect(!model.pointerOverEarOverflow())
         model.reset()
@@ -169,5 +171,27 @@ struct EarRulesTests {
         let ears = model.ears(layout: layout)
         #expect(ears.left?.id == "b.main")
         #expect(ears.right == nil)
+    }
+}
+
+@MainActor
+struct EarOverflowCountTests {
+    let layout = NotchLayout(geometry: .simulated(in: CGRect(x: 0, y: 0, width: 1512, height: 982)))
+
+    @Test func theCountStaysInsideTheOutline() {
+        let model = NotchViewModel(layout: layout, state: .compact,
+            pointerLocation: { .zero }, isMissionControlActive: { false })
+        let a = RankedModule("a"), b = RankedModule("b"), c = RankedModule("c")
+        a.isActive = true; b.isActive = true; c.isActive = true
+        model.modules = [a, b, c]
+        model.arrangement.order = ["a", "b", "c"]
+        #expect(model.earOverflow != nil)
+        // No strip hangs below the ears any more: the window is just the outline.
+        #expect(model.windowFrame(for: .compact) == layout.windowFrame(for: .compact))
+        // The reserve only narrows a module's content, never the outline.
+        var reserved = layout
+        reserved.compactEarReserve = NotchLayout.earCountWidth
+        #expect(reserved.bodySize(for: .compact) == layout.bodySize(for: .compact))
+        #expect(reserved.compactEarContentWidth == layout.compactEarWidth - NotchLayout.earCountWidth)
     }
 }

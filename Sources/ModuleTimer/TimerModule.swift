@@ -151,7 +151,7 @@ public final class TimerModule: NotchModule {
 
     public func compactEars(layout: NotchLayout) -> CompactEars? {
         let height = layout.geometry.compactHeight
-        let width = layout.compactEarWidth
+        let width = layout.compactEarContentWidth
         // One ear, also when nothing else is active: the other stays free (ADR-0040).
         return CompactEars(main: AnyView(TimerEar(module: self, width: width, height: height)))
     }
