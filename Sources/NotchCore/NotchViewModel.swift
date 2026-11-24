@@ -854,8 +854,9 @@ public final class NotchViewModel {
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
             return true
         }
-        // 1–9: the module at that place in the ranking, 0: Home. Not while typing in a field, or
-        // when something holds the module open (the tabs hide then too).
+        // 1–9: the module with that number on the Modules page (switched-off ones keep theirs), 0:
+        // Home. Not while typing in a field, or when something holds the module open (the tabs hide
+        // then too).
         if let digit = Self.digitKeyCodes.firstIndex(of: event.keyCode),
            event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
            !(event.window?.firstResponder is NSTextView), isEditingHome || !isHeld {
@@ -864,9 +865,10 @@ public final class NotchViewModel {
                 if !showsHome { toggleHome() }
                 return true
             }
-            let ranked = rankedModules
-            guard ranked.indices.contains(digit - 1) else { return false }
-            select(ranked[digit - 1].moduleID)
+            let order = arrangement.order
+            guard order.indices.contains(digit - 1),
+                  let module = modules.first(where: { $0.moduleID == order[digit - 1] }) else { return false }
+            select(module.moduleID)
             return true
         }
         if event.keyCode == 53 { // Escape: leave Home for the module, else close all the way
@@ -916,6 +918,8 @@ public final class NotchViewModel {
             } else {
                 open(focusing: moduleUnderPointer())
             }
+            // Opened with a click: its keys (1–9, 0, Esc) work right away, as after the shortcut.
+            if state == .expanded { requestKeyFocus?() }
             return
         }
         // Editing Home: a click in a gap, the band or the side (widgets and buttons take their own) finishes.

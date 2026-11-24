@@ -241,6 +241,28 @@ struct NotchModulesTests {
         #expect(model.selectedModule === shelf)
     }
 
+    /// The numbers match the Modules page, which numbers switched-off modules too.
+    @Test func numberKeysSkipSwitchedOffModules() throws {
+        let (model, music, shelf) = makeModel()
+        let timer = RankedModule("timer")
+        model.modules = [shelf, music, timer]
+        model.open()
+        // Timer is 5th on the Modules page; 3 and 4 are switched off.
+        #expect(model.handleKey(try #require(Self.key("5", keyCode: 23))))
+        #expect(model.selectedModule === timer)
+        #expect(!model.handleKey(try #require(Self.key("3", keyCode: 20))))
+        #expect(model.selectedModule === timer)
+    }
+
+    @Test func clickingOpenTakesTheKeys() {
+        let (model, _, _) = makeModel()
+        var requests = 0
+        model.requestKeyFocus = { requests += 1 }
+        model.tap()
+        #expect(model.state == .expanded)
+        #expect(requests == 1)
+    }
+
     @Test func zeroDoesNothingWithTabsOnly() throws {
         let (model, _, _) = makeModel()
         model.arrangement.navigation = .tabs
