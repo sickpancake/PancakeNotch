@@ -5,7 +5,13 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+## 0.5.1
+
+**This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.
+
 - **Number keys switch modules.** Open the notch with your shortcut or a click, then press 1–9 to jump to the module with that number on the Modules page, or 0 to go to Home. Typing in a note or a search box still types the number.
+- **Home and tabs stay visible.** If your favorite modules won't all fit in the open notch, Home and the current module's tab stay visible alongside the favorites that fit.
+- **The extra-module count fits inside the notch.** When more modules are active than fit beside the camera, the +n count now sits inside the notch instead of hanging below it.
 - **The timer turns amber in its last minute.** Under a minute left, the ring and time in the notch change from white to amber, so a short timer catches your eye before it ends.
 - **Undo Home edits in the notch.** While editing Home in the notch, press ⌘Z to undo a change and ⇧⌘Z to redo it, or use the small undo button beside Done.
 - **A reminder to plug in.** With Keep Awake on, a strip under the notch tells you when your battery reaches 20% and again at 10%. Turn it off with **Warn me to plug in** in Keep Awake's settings.
