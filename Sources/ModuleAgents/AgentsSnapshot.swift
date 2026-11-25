@@ -11,8 +11,15 @@ public enum AgentsSnapshot {
         AgentsSettings(defaults: UserDefaults(suiteName: "io.github.sickpancake.PancakeNotch.snapshots.agents") ?? .standard)
     }
 
-    private static func agents(_ center: AgentsCenter = .practice()) -> AgentsModule {
-        let module = AgentsModule(center: center)
+    /// Pretend Devin, found and not connected, on settings that start empty every run (Connect saves to them).
+    private static func devinReminder() -> ConnectReminder {
+        let name = "io.github.sickpancake.PancakeNotch.snapshots.reminder"
+        UserDefaults().removePersistentDomain(forName: name)
+        return .preview(.devin, settings: AgentsSettings(defaults: UserDefaults(suiteName: name) ?? .standard))
+    }
+
+    private static func agents(_ center: AgentsCenter = .practice(), reminder: ConnectReminder? = nil) -> AgentsModule {
+        let module = AgentsModule(center: center, reminder: reminder)
         module.isSnapshot = true
         return module
     }
@@ -67,6 +74,17 @@ public enum AgentsSnapshot {
             reviewing.review(thread)
         }
         row(.expanded, reviewing) { $0.setTall(true) }
+
+        // Devin on this Mac but not connected (issue #78): the strip, once; the Connect row above the list and
+        // above "No agents running"; the row after Connect.
+        let reminded = agents(reminder: devinReminder())
+        reminded.peekReminder = .devin
+        row(.compact, reminded) { $0.peekForSnapshot(reminded) }
+        row(.expanded, agents(reminder: devinReminder()))
+        row(.expanded, agents(AgentsCenter(settings: emptySettings), reminder: devinReminder()))
+        let justConnected = devinReminder()
+        justConnected.connect()
+        row(.expanded, agents(AgentsCenter(settings: emptySettings), reminder: justConnected))
 
         // AI Usage: one account, all of them, the account menu, the ear and strip for an account that
         // runs low, no accounts.

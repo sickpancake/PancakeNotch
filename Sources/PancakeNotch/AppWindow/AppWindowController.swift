@@ -309,6 +309,36 @@ extension AppWindowController {
         try render("general-unbundled", rootView: AppWindowView(context: unbundled))
         try render("onboarding-setup-unbundled", rootView: OnboardingView(context: unbundled, step: .setup).appWindowStyle())
 
+        // Devin on this Mac but not connected (issue #78): the card on Modules and Home with Agents off (the
+        // first offer dismissed, so this one shows) and on, then after Connect.
+        func reminding(_ reminder: ConnectReminder) -> AppContext {
+            AppContext(
+                preferences: preferences, shortcuts: noShortcut, stats: stats, progress: progress, arrangement: arrangement, home: home,
+                shelfSettings: shelfSettings, shelfStore: shelfStore, nowPlayingSettings: nowPlayingSettings,
+                nowPlaying: nowPlaying, statsStore: statsStore, updates: updates, agentsSettings: agentsSettings, agents: agents,
+                usage: usage, connector: connector, connectReminder: reminder, timerSettings: timerSettings, timers: timers,
+                keepAwakeSettings: keepAwakeSettings, keepAwake: keepAwake, notesSettings: notesSettings, notesStore: notesStore,
+                makeLiveModules: context.makeLiveModules, detectTools: context.detectTools
+            )
+        }
+        let devin = ConnectReminder.preview(.devin, settings: AgentsSettings(defaults: defaults))
+        agentsSettings.offerDismissed = true
+        let devinOff = reminding(devin)
+        devinOff.navigation.section = .modules
+        try render("modules-devin-off", rootView: AppWindowView(context: devinOff))
+        agentsSettings.agentsEnabled = true
+        let devinOn = reminding(devin)
+        devinOn.navigation.section = .modules
+        try render("modules-devin", rootView: AppWindowView(context: devinOn))
+        let devinHome = reminding(devin)
+        devinHome.navigation.section = .overview
+        try render("overview-devin", rootView: AppWindowView(context: devinHome))
+        let devinConnected = reminding(devin)
+        devinConnected.navigation.section = .modules
+        try render("modules-devin-connected", rootView: AppWindowView(context: devinConnected), settle: 1, then: { devin.connect() })
+        agentsSettings.agentsEnabled = false
+        agentsSettings.offerDismissed = false
+
         // General › Motion: PancakeNotch's own Reduce motion on, then locked on by the Mac's switch.
         for (name, macOn) in [("general-motion-own", false), ("general-motion-mac", true)] {
             let motion = MotionSettings(defaults: defaults, readMacSetting: { macOn }, macChanges: nil)

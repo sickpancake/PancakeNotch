@@ -56,6 +56,8 @@ final class AppContext {
     let usage: UsageCenter
     /// Connect and Disconnect for the tools' hooks.
     let connector: AgentConnector
+    /// The reminder to connect Devin (issue #78), shared with the real notch.
+    let connectReminder: ConnectReminder
     /// The Timer's options, and its timer and stopwatch shared with the real notch.
     let timerSettings: TimerSettings
     let timers: TimerCenter
@@ -87,6 +89,7 @@ final class AppContext {
         agents: AgentsCenter,
         usage: UsageCenter,
         connector: AgentConnector,
+        connectReminder: ConnectReminder? = nil,
         timerSettings: TimerSettings,
         timers: TimerCenter,
         keepAwakeSettings: KeepAwakeSettings,
@@ -114,6 +117,7 @@ final class AppContext {
         self.agents = agents
         self.usage = usage
         self.connector = connector
+        self.connectReminder = connectReminder ?? .preview(nil, settings: agentsSettings)
         self.timerSettings = timerSettings
         self.timers = timers
         self.keepAwakeSettings = keepAwakeSettings

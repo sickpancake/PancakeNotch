@@ -30,6 +30,10 @@ struct OverviewView: View {
                 AgentsOfferCard(context: context, offer: offer)
                     .padding(.top, 26)
                     .transition(.opacity)
+            } else if ConnectReminderCard.shows(context.connectReminder) {
+                ConnectReminderCard(context: context)
+                    .padding(.top, 26)
+                    .transition(.opacity)
             }
             NotchHero(context: context)
                 .padding(.top, 26)

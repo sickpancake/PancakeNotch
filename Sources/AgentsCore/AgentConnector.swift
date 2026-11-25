@@ -67,6 +67,10 @@ public final class AgentConnector {
             }
         }
         if states != next { states = next }
+        // Connected once, by any route: no more reminders to connect it, even after a Disconnect.
+        for tool in ConnectReminder.tools where next[tool] == .connected && !settings.connectRemindersDone.contains(tool) {
+            settings.connectRemindersDone.insert(tool)
+        }
     }
 
     /// Copies the helper into place and adds it to the tool's hooks. Returns whether it worked.
