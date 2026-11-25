@@ -187,7 +187,7 @@ struct EarOverflowCountTests {
         model.arrangement.order = ["a", "b", "c"]
         #expect(model.earOverflow != nil)
         // No strip hangs below the ears any more: the window is just the outline.
-        #expect(model.windowFrame(for: .compact) == layout.windowFrame(for: .compact))
+        #expect(model.layout.windowFrame(for: .compact) == layout.windowFrame(for: .compact))
         // The reserve only narrows a module's content, never the outline.
         var reserved = layout
         reserved.compactEarReserve = NotchLayout.earCountWidth

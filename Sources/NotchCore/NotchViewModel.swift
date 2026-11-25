@@ -621,11 +621,6 @@ public final class NotchViewModel {
         public let count: Int
     }
 
-    /// Window frame for a state. The "+n" count sits inside an ear, so this is just the layout's.
-    func windowFrame(for state: NotchState) -> CGRect {
-        layout.windowFrame(for: state)
-    }
-
     /// The overflow count for the current allocation, or `nil` when every candidate fits or a
     /// peeking module's strip is showing (the ears keep their full width then).
     var earOverflow: EarOverflow? {

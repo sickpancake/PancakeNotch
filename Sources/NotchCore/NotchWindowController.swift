@@ -199,7 +199,7 @@ public final class NotchWindowController {
             layout.isPeeking = model.layout.isPeeking
             model.layout = layout
             container?.contentSize = layout.largestWindowSize
-            panel.setFrame(model.windowFrame(for: model.state), display: true)
+            panel.setFrame(model.layout.windowFrame(for: model.state), display: true)
             model.updatePeekHover()
         } else {
             createPanel(layout: layout)
@@ -282,7 +282,7 @@ public final class NotchWindowController {
             self?.presentPeek(of: moduleID, for: duration, revealsInFullScreen: reveals)
         }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
-        let panel = NotchPanel(contentRect: model.windowFrame(for: model.state))
+        let panel = NotchPanel(contentRect: model.layout.windowFrame(for: model.state))
         panel.onResignKey = { [weak model] in model?.keyFocusLost() }
         let hostingView = NSHostingView(rootView: NotchView(model: model).followsMotionSettings(model.motion))
         hostingView.sizingOptions = []
@@ -296,7 +296,7 @@ public final class NotchWindowController {
         panel.keyHandler = { [weak model] event in model?.handleKey(event) ?? false }
         model.fitWindow = { [weak self, weak panel, weak model] state in
             guard let panel, let model else { return }
-            let frame = model.windowFrame(for: state)
+            let frame = model.layout.windowFrame(for: state)
             // Called before and after every transition: a frame that didn't change needs no redraw.
             if panel.frame != frame { panel.setFrame(frame, display: true) }
             // A transition's end (the size asked for is the state it settled in) after the shortcut's reveal.
