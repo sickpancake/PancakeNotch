@@ -26,14 +26,17 @@ public final class AgentConnector {
     public var cloudAgents: CloudAgents?
 
     private let home: URL
+    private let applications: String
     private let settings: AgentsSettings
     private let logger = Logger(subsystem: "io.github.sickpancake.PancakeNotch", category: "agents")
     /// Pretend tools (app-window snapshots): Connect and Disconnect only change what's shown.
     private var isPreview = false
 
-    public init(settings: AgentsSettings, home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    public init(settings: AgentsSettings, home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                applications: String = "/Applications") {
         self.settings = settings
         self.home = home
+        self.applications = applications
         refresh()
     }
 
@@ -80,6 +83,11 @@ public final class AgentConnector {
         if isPreview {
             states[tool] = .connected
             return true
+        }
+        guard !hookFiles(for: tool).isEmpty else {
+            problem = String(localized: "PancakeNotch couldn't find \(tool.name)'s settings. Check that \(tool.name) is still installed, then try again.")
+            refresh()
+            return false
         }
         guard HookHelper.install() else {
             problem = String(localized: "PancakeNotch couldn't set up its helper. Try again, or reinstall PancakeNotch.")
@@ -128,7 +136,7 @@ public final class AgentConnector {
             guard AccountFinder.hasCursor(home: home) else { return [] }
             return [Target(url: home.appending(path: ".cursor/hooks.json"), kind: .cursor)]
         case .devin:
-            guard AccountFinder.hasDevin(home: home) else { return [] }
+            guard AccountFinder.hasDevin(home: home, applications: applications) else { return [] }
             return [Target(url: AccountFinder.devinConfigFile(home: home), kind: .devin)]
         case .github:
             return []
@@ -136,15 +144,8 @@ public final class AgentConnector {
     }
 
     private func write(_ tool: AgentTool, connect: Bool) -> Bool {
-        let targets = hookFiles(for: tool)
-        if targets.isEmpty {
-            if connect {
-                problem = String(localized: "PancakeNotch couldn't find \(tool.name)'s settings. Check that \(tool.name) is still installed, then try again.")
-            }
-            return !connect
-        }
         var allDone = true
-        for target in targets {
+        for target in hookFiles(for: tool) {
             do {
                 try HookFile.update(target.url, kind: target.kind, connect: connect)
             } catch {

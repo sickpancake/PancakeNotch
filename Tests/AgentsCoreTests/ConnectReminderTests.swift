@@ -14,10 +14,10 @@ struct ConnectReminderTests {
 
     /// A fake home with `~/.config` (as most Macs have), and a reminder over it.
     private func reminder(home: URL, settings: AgentsSettings) -> ConnectReminder {
-        let connector = AgentConnector(settings: settings, home: home)
         // An Applications folder of its own, so a Devin app installed on this Mac doesn't count.
         let applications = home.appending(path: "Applications-test").path
         try? FileManager.default.createDirectory(atPath: applications, withIntermediateDirectories: true)
+        let connector = AgentConnector(settings: settings, home: home, applications: applications)
         return ConnectReminder(settings: settings, home: home, applications: applications) { connector }
     }
 
@@ -160,9 +160,9 @@ struct ConnectReminderTests {
         defer { try? FileManager.default.removeItem(at: home) }
         try addDevin(home)
         let settings = settings()
-        let connector = AgentConnector(settings: settings, home: home)
         let applications = home.appending(path: "Applications-test").path
         try FileManager.default.createDirectory(atPath: applications, withIntermediateDirectories: true)
+        let connector = AgentConnector(settings: settings, home: home, applications: applications)
         let reminder = ConnectReminder(settings: settings, home: home, applications: applications) { connector }
         reminder.check()
         #expect(reminder.tool == .devin)
