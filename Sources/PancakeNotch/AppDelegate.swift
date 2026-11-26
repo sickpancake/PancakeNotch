@@ -82,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         connector.cloudAgents = cloudAgents
         return connector
     }()
+    /// Reminds the user to connect Devin when it's on this Mac but not connected (issue #78): a strip under
+    /// the notch once, a row in Agents and a card on Home and Modules. Reads the hook files only once
+    /// Devin is found.
+    private lazy var connectReminder = ConnectReminder(settings: agentsSettings) { [unowned self] in self.connector }
     /// Devin's cloud sessions, after the user connects a token. Asks Devin only while Agents or AI Usage is on.
     private let devinCloud = DevinCloud()
     /// Codex cloud and GitHub's coding agent, once turned on. Asks only while Agents is on.
@@ -150,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             agents: agents,
             usage: usage,
             connector: connector,
+            connectReminder: connectReminder,
             timerSettings: timerSettings,
             timers: timers,
             keepAwakeSettings: keepAwakeSettings,
@@ -159,7 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] },
             screenshots: screenshots
         ))
-        controller.onShow = { [weak self] in self?.sampleHealth() }
+        controller.onShow = { [weak self] in
+            self?.sampleHealth()
+            self?.connectReminder.check()
+        }
         return controller
     }()
     private lazy var menuBar = MenuBarController(
@@ -172,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var appObserver: NSObjectProtocol?
+    private var activeObserver: NSObjectProtocol?
     /// Hides the notch in full screen as the user chose.
     private lazy var fullScreen = FullScreenWatch(preferences: preferences, nowPlaying: nowPlaying, notch: notchController)
 
@@ -243,6 +252,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.fullScreen.update() }
         }
         updateGeometry()
+        // Devin installed since last time, or never connected: looked for once the notch has settled, then
+        // whenever PancakeNotch comes forward. In between, only its folders are watched (ConnectReminder).
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.connectReminder.check() }
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            self?.connectReminder.check()
+        }
         updates.onPendingChange = { [weak self] in self?.menuBar.updateIcon() }
         updates.start()
         showWelcomeIfNeeded()
@@ -349,7 +371,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         liveShelf = shelfSettings.isEnabled ? ShelfModule(store: shelfStore, settings: shelfSettings, clipboard: shelfClipboard) : nil
         liveShelf?.takesNotes = { [weak self] inputs in self?.takeNotes(inputs) ?? inputs }
         if let liveShelf { modules.append(liveShelf) }
-        if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false)) }
+        if agentsSettings.agentsEnabled { modules.append(AgentsModule(center: agents, peeks: false, reminder: connectReminder)) }
         if agentsSettings.usageEnabled { modules.append(AIUsageModule(center: usage, peeks: false)) }
         if timerSettings.isEnabled { modules.append(TimerModule(center: timers, settings: timerSettings, presents: false)) }
         if keepAwakeSettings.isEnabled { modules.append(KeepAwakeModule(center: keepAwake, presents: false)) }
@@ -394,7 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenshots.follow(shelf)
         if agentsOn {
             if agentsModule == nil {
-                agentsModule = AgentsModule(center: agents)
+                agentsModule = AgentsModule(center: agents, reminder: connectReminder)
                 agents.start()
                 connector.updateHelperIfConnected()
             } else if accountsChanged {

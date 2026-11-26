@@ -90,12 +90,14 @@ enum AccountFinder {
     }
 
     /// Devin is on this Mac: the CLI's settings or data folder, or the Devin app (Devin Desktop).
-    static func hasDevin(home: URL) -> Bool {
-        let fm = FileManager.default
-        return fm.fileExists(atPath: home.appending(path: ".config/devin").path)
-            || fm.fileExists(atPath: home.appending(path: ".local/share/devin").path)
-            || fm.fileExists(atPath: "/Applications/Devin.app")
-            || fm.fileExists(atPath: home.appending(path: "Applications/Devin.app").path)
+    static func hasDevin(home: URL, applications: String = "/Applications") -> Bool {
+        devinPaths(home: home, applications: applications).contains { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    /// Where Devin shows that it's on this Mac: its CLI's settings and data folders, and the Devin app.
+    static func devinPaths(home: URL, applications: String = "/Applications") -> [String] {
+        [home.appending(path: ".config/devin").path, home.appending(path: ".local/share/devin").path,
+         (applications as NSString).appendingPathComponent("Devin.app"), home.appending(path: "Applications/Devin.app").path]
     }
 
     /// Devin's user settings, where its hooks go. Devin CLI and Devin Desktop share it.

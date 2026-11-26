@@ -118,3 +118,46 @@ public final class FileChangeWatcher: @unchecked Sendable {
         }
     }
 }
+
+/// Calls back when something is added to, removed from or renamed in the folder each path would sit in:
+/// the nearest folder above it that exists. For noticing a tool installed later (`/Applications/Devin.app`,
+/// `~/.config/devin`) without polling and without watching everything below the home folder. Only the
+/// folders themselves are watched, not what's inside them. Make a new one after a callback to follow
+/// folders created meanwhile.
+public final class FolderEntryWatcher: @unchecked Sendable {
+    private let queue: DispatchQueue
+    private var sources: [DispatchSourceFileSystemObject] = []
+
+    public init(paths: [String], queue: DispatchQueue, onChange: @escaping @Sendable () -> Void) {
+        self.queue = queue
+        let folders = Set(paths.map { path in
+            var folder = URL(fileURLWithPath: path).deletingLastPathComponent()
+            while !FileManager.default.fileExists(atPath: folder.path), folder.path != "/" {
+                folder.deleteLastPathComponent()
+            }
+            return folder.path
+        }.filter { $0 != "/" })
+        queue.async {
+            for folder in folders.sorted() {
+                // Non-blocking, as above.
+                let fd = open(folder, O_EVTONLY | O_NONBLOCK | O_CLOEXEC)
+                guard fd >= 0 else { continue }
+                let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: queue)
+                source.setEventHandler(handler: onChange)
+                source.setCancelHandler { close(fd) }
+                self.sources.append(source)
+                source.resume()
+            }
+        }
+    }
+
+    /// The folders being watched, for tests. Read on the watcher's queue.
+    public var watchedCount: Int { queue.sync { sources.count } }
+
+    public func stop() {
+        queue.async {
+            for source in self.sources { source.cancel() }
+            self.sources = []
+        }
+    }
+}

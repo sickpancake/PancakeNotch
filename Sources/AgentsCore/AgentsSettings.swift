@@ -54,6 +54,16 @@ public final class AgentsSettings {
     }
     /// The user dismissed the "We found Claude Code…" offer on Home and Modules.
     public var offerDismissed: Bool { didSet { defaults.set(offerDismissed, forKey: Keys.offerDismissed) } }
+    /// Tools PancakeNotch no longer reminds you to connect (issue #78): you chose Not Now, or the tool was
+    /// connected once. Per tool, so a tool found later still gets its reminder. Disconnecting on purpose
+    /// doesn't bring it back.
+    public var connectRemindersDone: Set<AgentTool> {
+        didSet { defaults.set(connectRemindersDone.map(\.rawValue).sorted(), forKey: Keys.connectRemindersDone) }
+    }
+    /// Tools the notch's strip already told about (once per tool, ever).
+    public var notchRemindedTools: Set<AgentTool> {
+        didSet { defaults.set(notchRemindedTools.map(\.rawValue).sorted(), forKey: Keys.notchRemindedTools) }
+    }
 
     /// The account AI Usage shows.
     public var selection: AccountSelection {
@@ -110,6 +120,8 @@ public final class AgentsSettings {
         warnsNearLimit = defaults.object(forKey: Keys.warnsNearLimit) as? Bool ?? true
         peeksOnReset = defaults.object(forKey: Keys.peeksOnReset) as? Bool ?? true
         offerDismissed = defaults.bool(forKey: Keys.offerDismissed)
+        connectRemindersDone = Set((defaults.stringArray(forKey: Keys.connectRemindersDone) ?? []).compactMap(AgentTool.init(rawValue:)))
+        notchRemindedTools = Set((defaults.stringArray(forKey: Keys.notchRemindedTools) ?? []).compactMap(AgentTool.init(rawValue:)))
         let stored = defaults.string(forKey: Keys.selection)
         selection = stored == nil || stored == Keys.allAccounts ? .all : .account(stored!)
         range = defaults.string(forKey: Keys.range).flatMap(UsageRange.init(rawValue:)) ?? .today
@@ -160,6 +172,8 @@ public final class AgentsSettings {
         static let resetWindows = "aiUsage.resetWindows"
         static let resetNoticesEnabledAfter = "aiUsage.resetNoticesEnabledAfter"
         static let offerDismissed = "agents.offerDismissed"
+        static let connectRemindersDone = "agents.connectRemindersDone"
+        static let notchRemindedTools = "agents.notchRemindedTools"
         static let selection = "aiUsage.selection"
         static let range = "aiUsage.range"
         static let nicknames = "aiUsage.nicknames"

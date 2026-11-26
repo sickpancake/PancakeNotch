@@ -10,11 +10,15 @@ import SwiftUI
 @Observable
 public final class AgentsModule: NotchModule {
     public let center: AgentsCenter
+    /// Reminds you to connect Devin when it's on this Mac but not connected (issue #78). Nil in practice copies.
+    public let reminder: ConnectReminder?
 
     @ObservationIgnored public private(set) weak var notch: NotchViewModel?
 
     /// What the peek strip is about (the latest alert).
-    var peekAlert: AgentAlert?
+    var peekAlert: AgentAlert? { didSet { if peekAlert != nil { peekReminder = nil } } }
+    /// The tool the strip reminds you to connect, instead of an alert.
+    var peekReminder: AgentTool? { didSet { if peekReminder != nil { peekAlert = nil } } }
     /// Threads whose subagents are shown under them.
     private(set) var openSubagents: Set<String> = []
     /// The request whose change is on the review screen (the notch is taller meanwhile). Only the very
@@ -35,9 +39,10 @@ public final class AgentsModule: NotchModule {
     @ObservationIgnored public var isSnapshot = false
     @ObservationIgnored private var isShowingList = false
 
-    public init(center: AgentsCenter, peeks: Bool = true) {
+    public init(center: AgentsCenter, peeks: Bool = true, reminder: ConnectReminder? = nil) {
         self.center = center
         self.peeks = peeks
+        self.reminder = reminder
     }
 
     // MARK: NotchModule
@@ -67,10 +72,16 @@ public final class AgentsModule: NotchModule {
         self.notch = notch
         guard notch != nil else {
             hideList()
-            if peeks { center.onAlert = nil }
+            if peeks {
+                center.onAlert = nil
+                reminder?.onRemind = nil
+            }
             return
         }
-        if peeks { center.onAlert = { [weak self] alert in self?.alerted(alert) } }
+        if peeks {
+            center.onAlert = { [weak self] alert in self?.alerted(alert) }
+            reminder?.onRemind = { [weak self] tool in self?.remind(tool) ?? false }
+        }
         observeCenter()
         notch?.activityChanged()
     }
@@ -86,7 +97,8 @@ public final class AgentsModule: NotchModule {
     }
 
     public func peekView(layout: NotchLayout) -> AnyView? {
-        peekAlert.map { AnyView(AgentsPeek(alert: $0)) }
+        if let peekReminder { return AnyView(ConnectReminderPeek(tool: peekReminder)) }
+        return peekAlert.map { AnyView(AgentsPeek(alert: $0)) }
     }
 
     public func notchDidOpen() {
@@ -106,6 +118,8 @@ public final class AgentsModule: NotchModule {
     }
 
     private func hideList() {
+        // The "connected" note was seen while the list showed; it doesn't wait for the next opening.
+        if isShowingList { reminder?.finish() }
         openSubagents = []
         reviewing = nil
         endPreview()
@@ -134,6 +148,16 @@ public final class AgentsModule: NotchModule {
         guard let notch, notch.state != .expanded else { return }
         peekAlert = alert
         notch.peek(self, for: .seconds(4))
+    }
+
+    /// A tool to connect was found: a strip under the notch, once. Clicking it opens Agents, where the
+    /// Connect row waits.
+    private func remind(_ tool: AgentTool) -> Bool {
+        guard let notch, notch.state != .expanded else { return false }
+        peekReminder = tool
+        if notch.peek(self, for: .seconds(6)) { return true }
+        peekReminder = nil
+        return false
     }
 
     // MARK: Actions (from the views)

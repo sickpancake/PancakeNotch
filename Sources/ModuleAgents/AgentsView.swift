@@ -15,6 +15,13 @@ struct AgentsView: View {
             band(threads, hasFinished: center.hasFinished)
                 .frame(height: layout.bandHeight)
                 .padding(.horizontal, AgentsLayout.sidePadding)
+            if reviewed(threads) == nil, let reminder = module.reminder, reminder.tool != nil || reminder.justConnected != nil {
+                // Devin is on this Mac but not connected (issue #78): Connect right here.
+                ConnectReminderRow(reminder: reminder)
+                    .padding(.horizontal, AgentsLayout.sidePadding - 10)
+                    .padding(.bottom, 4)
+                    .transition(.opacity)
+            }
             if let (thread, change) = reviewed(threads) {
                 AgentsReviewScreen(module: module, thread: thread, change: change)
                     .padding(.horizontal, AgentsLayout.sidePadding)

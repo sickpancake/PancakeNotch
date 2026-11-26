@@ -34,6 +34,9 @@ struct ModulesView: View {
                 if let offer = AgentsOffer(found: foundTools, settings: context.agentsSettings) {
                     AgentsOfferCard(context: context, offer: offer)
                         .transition(.opacity)
+                } else if ConnectReminderCard.shows(context.connectReminder) {
+                    ConnectReminderCard(context: context)
+                        .transition(.opacity)
                 }
                 YourModulesCard(context: context) { moduleID in showSettings(moduleID, proxy: proxy) }
                 NowPlayingModuleCard(context: context, showsSettings: settingsBinding("nowPlaying")) { openLesson(.nowPlaying) }
