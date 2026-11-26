@@ -99,6 +99,8 @@ public final class ConnectReminder {
         if done {
             settings.connectRemindersDone.insert(tool)
             justConnected = tool
+        } else {
+            check()
         }
         return done
     }

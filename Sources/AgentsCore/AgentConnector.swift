@@ -136,8 +136,15 @@ public final class AgentConnector {
     }
 
     private func write(_ tool: AgentTool, connect: Bool) -> Bool {
+        let targets = hookFiles(for: tool)
+        if targets.isEmpty {
+            if connect {
+                problem = String(localized: "PancakeNotch couldn't find \(tool.name)'s settings. Check that \(tool.name) is still installed, then try again.")
+            }
+            return !connect
+        }
         var allDone = true
-        for target in hookFiles(for: tool) {
+        for target in targets {
             do {
                 try HookFile.update(target.url, kind: target.kind, connect: connect)
             } catch {

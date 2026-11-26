@@ -155,6 +155,27 @@ struct ConnectReminderTests {
         #expect(reminder.tool == nil)
     }
 
+    @Test func connectFailsWithoutMarkingDoneIfDevinGoesAway() throws {
+        let home = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try addDevin(home)
+        let settings = settings()
+        let connector = AgentConnector(settings: settings, home: home)
+        let applications = home.appending(path: "Applications-test").path
+        try FileManager.default.createDirectory(atPath: applications, withIntermediateDirectories: true)
+        let reminder = ConnectReminder(settings: settings, home: home, applications: applications) { connector }
+        reminder.check()
+        #expect(reminder.tool == .devin)
+
+        try FileManager.default.removeItem(at: home.appending(path: ".config/devin"))
+        #expect(!reminder.connect())
+        #expect(reminder.tool == nil)
+        #expect(reminder.justConnected == nil)
+        #expect(!settings.connectRemindersDone.contains(.devin))
+        #expect(connector.state(.devin) == .notFound)
+        #expect(reminder.isWatching)
+    }
+
     @Test func previewConnectsAndThenSaysWhatToDoNext() {
         let settings = settings()
         let reminder = ConnectReminder.preview(.devin, settings: settings)
