@@ -65,7 +65,7 @@ public final class AgentConnector {
             if connected.isEmpty {
                 next[tool] = .notConnected
             } else {
-                if connected.count < files.count { _ = write(tool, connect: true) }
+                if connected.count < files.count { _ = write(files, connect: true) }
                 next[tool] = .connected
             }
         }
@@ -84,7 +84,8 @@ public final class AgentConnector {
             states[tool] = .connected
             return true
         }
-        guard !hookFiles(for: tool).isEmpty else {
+        let targets = hookFiles(for: tool)
+        guard !targets.isEmpty else {
             problem = String(localized: "PancakeNotch couldn't find \(tool.name)'s settings. Check that \(tool.name) is still installed, then try again.")
             refresh()
             return false
@@ -93,7 +94,7 @@ public final class AgentConnector {
             problem = String(localized: "PancakeNotch couldn't set up its helper. Try again, or reinstall PancakeNotch.")
             return false
         }
-        let done = write(tool, connect: true)
+        let done = write(targets, connect: true)
         refresh()
         return done
     }
@@ -105,7 +106,7 @@ public final class AgentConnector {
             states[tool] = .notConnected
             return true
         }
-        let done = write(tool, connect: false)
+        let done = write(hookFiles(for: tool), connect: false)
         refresh()
         return done
     }
@@ -143,9 +144,9 @@ public final class AgentConnector {
         }
     }
 
-    private func write(_ tool: AgentTool, connect: Bool) -> Bool {
+    private func write(_ targets: [Target], connect: Bool) -> Bool {
         var allDone = true
-        for target in hookFiles(for: tool) {
+        for target in targets {
             do {
                 try HookFile.update(target.url, kind: target.kind, connect: connect)
             } catch {
