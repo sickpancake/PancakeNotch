@@ -83,10 +83,13 @@ struct ConnectReminderTests {
         try await Task.sleep(for: .milliseconds(100))
 
         try FileManager.default.createDirectory(at: home.appending(path: "Applications-test/Devin.app/Contents"), withIntermediateDirectories: true)
-        for _ in 0..<50 where reminder.tool == nil {
+        // `found`, not `tool`: the connector looks in the real /Applications, where this stand-in app isn't
+        // (it is on a Mac with Devin installed, which hid this on such Macs).
+        for _ in 0..<50 where !reminder.found.contains(.devin) {
             try await Task.sleep(for: .milliseconds(50))
         }
-        #expect(reminder.tool == .devin)
+        #expect(reminder.found.contains(.devin))
+        #expect(!reminder.isWatching)
     }
 
     @Test func aStripThatCouldNotShowIsTriedAgainNextTime() throws {
