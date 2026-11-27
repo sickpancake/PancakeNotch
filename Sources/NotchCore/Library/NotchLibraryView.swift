@@ -39,7 +39,7 @@ struct NotchLibraryView: View {
     let layout: NotchLayout
 
     /// The panel's own coordinates, so a tile can say where it sits for the module growing out of it.
-    static let space = "NotchLibrary"
+    nonisolated static let space = "NotchLibrary"
 
     var body: some View {
         let size = layout.bodySize(for: .expanded)
