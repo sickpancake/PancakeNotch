@@ -51,7 +51,7 @@ struct NowPlayingView: View {
                     }
                 }
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
         }
     }
 }

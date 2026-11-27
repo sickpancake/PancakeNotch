@@ -90,7 +90,7 @@ enum HomeSnapshot {
 
     /// Every module with something to show: a song, a running timer and stopwatch with laps, agents at
     /// work, limits, files on the Shelf, Keep Awake on.
-    private static func live() -> [any NotchModule] {
+    static func live() -> [any NotchModule] {
         let agents = AgentsModule(center: .practice())
         agents.isSnapshot = true
         let usage = AIUsageModule(center: .practice())
@@ -111,7 +111,7 @@ enum HomeSnapshot {
     }
 
     /// Every module with nothing to show yet.
-    private static func empty() -> [any NotchModule] {
+    static func empty() -> [any NotchModule] {
         let nowPlaying = NowPlayingModule(center: .snapshotNothingPlaying(lastPlayer: nil, seen: []))
         nowPlaying.isSnapshot = true
         let agents = AgentsModule(center: .practiceEmpty())

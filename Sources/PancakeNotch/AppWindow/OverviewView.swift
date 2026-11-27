@@ -475,7 +475,7 @@ private struct TipsCard: View {
             ("music.note", String(localized: "Your music, in the notch"),
              String(localized: "Album art and sound bars show while something plays. Open the notch to pause, skip or jump around.")),
             ("rectangle.2.swap", String(localized: "Switch modules"),
-             String(localized: "Pick one at the top left of the open notch, or swipe sideways there with two fingers.")),
+             String(localized: "Pick one at the top left of the open notch, or swipe sideways there with two fingers. The grid button opens the Library, with every module.")),
         ] : []
         return [
             preferences.openOnClickOnly

@@ -13,7 +13,7 @@ public enum LessonSignal: Hashable, Sendable {
          shelfItemAdded, shelfItemOpened, shelfItemClosed, shelfMenuOpened,
          shelfDraggedOut, shelfSeveralSelected, shelfCleared, shelfClipboardOpened,
          musicPaused, musicPlayed, musicSkipped, musicSeeked, musicModeChanged, musicArtworkClicked,
-         moduleSwitched, homeOpened, homeWidgetOpened,
+         moduleSwitched, homeOpened, homeWidgetOpened, libraryModuleOpened,
          agentAllowed, agentOpened, agentsCleared,
          usageAccountsOpened, usageAccountChosen, usageRangeChosen,
          timerStarted, timerPausedAndResumed, timerStopped, timerCustomStarted, stopwatchLapped,
@@ -117,7 +117,8 @@ public struct Lesson: Identifiable, Sendable {
         ]
     )
 
-    /// Home's widgets: bringing Home up, using a widget's own button, and opening a module from its widget.
+    /// Home's widgets: bringing Home up, using a widget's own button, opening a module from its widget, and
+    /// finding one in the Library beside it.
     public static let home = Lesson(
         id: .home,
         title: String(localized: "Home", comment: "Lesson title"),
@@ -144,6 +145,13 @@ public struct Lesson: Identifiable, Sendable {
                 detail: String(localized: "Go back to Home and click a widget away from its buttons: the notch shows that module. To move, add or resize widgets, pick Home in the sidebar.", comment: "Lesson step detail"),
                 symbol: "hand.tap",
                 signal: .homeWidgetOpened
+            ),
+            LessonStep(
+                id: "home.library",
+                title: String(localized: "Find a module in the Library", comment: "Lesson step title"),
+                detail: String(localized: "Click the grid beside the house (or swipe sideways on Home), type a module's name and press Return. Every module is there, even ones without a tab.", comment: "Lesson step detail"),
+                symbol: "square.grid.2x2",
+                signal: .libraryModuleOpened
             ),
         ]
     )

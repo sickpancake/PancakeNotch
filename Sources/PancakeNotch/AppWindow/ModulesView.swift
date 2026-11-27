@@ -40,6 +40,7 @@ struct ModulesView: View {
                 }
                 YourModulesCard(context: context) { moduleID in showSettings(moduleID, proxy: proxy) }
                 NowPlayingModuleCard(context: context, showsSettings: settingsBinding("nowPlaying")) { openLesson(.nowPlaying) }
+                    .id(Self.cardAnchor("nowPlaying"))
                 ShelfModuleCard(
                     preferences: context.preferences,
                     arrangement: context.arrangement,
@@ -48,18 +49,44 @@ struct ModulesView: View {
                     screenshots: context.screenshots,
                     showsSettings: settingsBinding("shelf")
                 ) { openLesson(.shelf) }
+                    .id(Self.cardAnchor("shelf"))
                 AgentsModuleCard(context: context, showsSettings: settingsBinding("agents")) { openLesson(.agents) }
+                    .id(Self.cardAnchor("agents"))
                 AIUsageModuleCard(context: context, showsSettings: settingsBinding("aiUsage")) { openLesson(.aiUsage) }
+                    .id(Self.cardAnchor("aiUsage"))
                 TimerModuleCard(context: context, showsSettings: settingsBinding("timer")) { openLesson(.timer) }
+                    .id(Self.cardAnchor("timer"))
                 KeepAwakeModuleCard(context: context, showsSettings: settingsBinding("keepAwake")) { openLesson(.keepAwake) }
+                    .id(Self.cardAnchor("keepAwake"))
                 NotesModuleCard(context: context, showsSettings: settingsBinding("notes")) { openLesson(.notes) }
+                    .id(Self.cardAnchor("notes"))
             }
-            .onAppear { foundTools = context.detectTools() }
+            .onAppear {
+                foundTools = context.detectTools()
+                showFocusedModule(proxy: proxy)
+            }
+            .onChange(of: context.navigation.moduleFocusRequest) { _, _ in showFocusedModule(proxy: proxy) }
         }
     }
 
     /// The scroll target for a module's "Settings" dropdown.
     static func settingsAnchor(_ moduleID: String) -> String { "settings-\(moduleID)" }
+    /// The scroll target for a module's card.
+    static func cardAnchor(_ moduleID: String) -> String { "card-\(moduleID)" }
+
+    /// The notch asked for a module's card (its Settings… or Turn On… item): its settings when it's on, the
+    /// card with its switch when it's off.
+    private func showFocusedModule(proxy: ScrollViewProxy) {
+        guard let moduleID = context.navigation.focusedModule else { return }
+        context.navigation.focusedModule = nil
+        if context.isEnabled(moduleID) {
+            showSettings(moduleID, proxy: proxy)
+        } else {
+            Task { @MainActor in
+                withAnimation(animation) { proxy.scrollTo(Self.cardAnchor(moduleID), anchor: .top) }
+            }
+        }
+    }
 
     private var animation: Animation {
         .easeInOut(duration: reduceMotion ? 0.15 : 0.25)
@@ -139,11 +166,11 @@ private struct YourModulesCard: View {
         let order = String(localized: "Drag a module or use its arrows to reorder. Usually the first two that are active get the spots beside the notch; some modules have a set spot.")
         let favorites = switch navigation {
         case .tabsAndMenu:
-            String(localized: "Favorites (★) get a tab beside the Home button in the open notch.")
+            String(localized: "Favorites (★) get a tab in the open notch's bar, as many as fit. Every module is in the Library.")
         case .menu:
-            String(localized: "Favorites (★) get a tab when the open notch shows Home and tabs (Notch settings).")
+            String(localized: "Favorites (★) get a tab when the open notch shows Home and tabs (Notch settings). Every module is in the Library.")
         case .tabs:
-            String(localized: "Every module has a tab right now, so favorites only matter with Home and tabs (Notch settings).")
+            String(localized: "Every module that fits has a tab right now, so favorites only matter with Home and tabs (Notch settings). The rest are in the Library.")
         }
         return "\(order) \(favorites)"
     }
@@ -166,6 +193,9 @@ private struct ModuleListRow: View {
         let isOn = context.isEnabled(moduleID)
         // Stars pick the tabs beside Home; with tabs only (all modules) or Home only (no tabs) they change nothing.
         let favoritesMatter = arrangement.navigation == .tabsAndMenu
+        let isFavorite = arrangement.isFavorite(moduleID)
+        // A full bar refuses another favorite (ADR-0045): the star dims and says why.
+        let barIsFull = favoritesMatter && !isFavorite && context.canAddFavorite?() == false
         HStack(spacing: 12) {
             // Up and down arrows, so the order can change without dragging (keyboard, Full Keyboard Access).
             VStack(spacing: 0) {
@@ -213,20 +243,22 @@ private struct ModuleListRow: View {
             Button {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { arrangement.toggleFavorite(moduleID) }
             } label: {
-                Image(systemName: arrangement.isFavorite(moduleID) ? "star.fill" : "star")
+                Image(systemName: isFavorite ? "star.fill" : "star")
                     .font(.app(size: 13, weight: .semibold))
-                    .foregroundStyle(arrangement.isFavorite(moduleID) ? AppPalette.primaryText : AppPalette.tertiaryText)
+                    .foregroundStyle(isFavorite ? AppPalette.primaryText : AppPalette.tertiaryText)
                     .motionContentTransition(.symbolEffect(.replace))
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!favoritesMatter)
-            .opacity(favoritesMatter ? 1 : 0.35)
-            .help(Text(arrangement.isFavorite(moduleID) ? String(localized: "Remove from favorites") : String(localized: "Add to favorites")))
-            .accessibilityLabel(Text(arrangement.isFavorite(moduleID)
+            .disabled(!favoritesMatter || barIsFull)
+            .opacity(favoritesMatter && !barIsFull ? 1 : 0.35)
+            .help(Text(barIsFull ? String(localized: "The bar is full. Remove a favorite first.")
+                       : isFavorite ? String(localized: "Remove from favorites") : String(localized: "Add to favorites")))
+            .accessibilityLabel(Text(isFavorite
                 ? String(localized: "Remove \(info.title) from favorites")
                 : String(localized: "Add \(info.title) to favorites")))
+            .accessibilityHint(barIsFull ? Text("The bar is full. Remove a favorite first.") : Text(""))
             Toggle(info.title, isOn: Binding(
                 get: { context.isEnabled(moduleID) },
                 set: { enabled in withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .easeInOut(duration: 0.25)) { context.setEnabled(moduleID, enabled) } }

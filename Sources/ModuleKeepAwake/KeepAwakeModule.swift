@@ -124,7 +124,7 @@ public final class KeepAwakeModule: NotchModule {
         )
         if notch.state == .expanded {
             // The page shows a stop, but not a plug-in warning.
-            var pageShows = notch.selectedModule === self && !notch.showsHome
+            var pageShows = notch.selectedModule === self && notch.showsModule
             if case .plugInSoon = reason { pageShows = false }
             endPending = !pageShows
         } else {

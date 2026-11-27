@@ -51,6 +51,27 @@ public final class NotchViewModel {
             onHomeEvent?(.opened)
         }
     }
+    /// The open notch shows the Library (every module, searchable) instead of Home or a module (ADR-0045).
+    public private(set) var showsLibrary = false {
+        didSet { if !showsLibrary, oldValue { library.reset() } }
+    }
+    /// A module's page shows: neither Home nor the Library.
+    public var showsModule: Bool { !showsHome && !showsLibrary }
+    /// The Library's search, highlight and notes.
+    public let library = NotchLibrary()
+    /// Where Esc and the Library button go back to from the Library: where the person came from.
+    @ObservationIgnored private var libraryReturn: NotchPlace = .home
+    /// How the page that's arriving comes in (a slide from its side, grown from the bar or from a tile).
+    public private(set) var entrance: NotchEntrance = .slide(forward: true)
+    /// Home and the Library while the pager moves between them: the position in `hubPages` (0 = the first),
+    /// following the fingers or settling. `nil` at rest, when only the current one is drawn.
+    private(set) var hubPosition: CGFloat?
+    /// Where the pager's last move started, so the page it brings in starts beside it.
+    private(set) var hubOrigin: Int?
+    @ObservationIgnored private var hubMotion = HomeScrollMotion()
+    @ObservationIgnored private var hubGeneration = 0
+    /// A menu from the bar or the Library is up: the notch stays open under it.
+    public private(set) var isShowingMenu = false
     /// Counts the times Home has come up, so what's read once per opening (Statistics) knows a new one.
     public private(set) var homeVisit = 0
     /// Told when Home comes up and when a widget click opens something (Learn's Home lesson).
@@ -99,8 +120,6 @@ public final class NotchViewModel {
     @ObservationIgnored public var homeExtras: HomeExtraWidgets?
     /// Set for off-screen snapshots: Home's widgets show this time and never tick.
     @ObservationIgnored public var snapshotClock: Date?
-    /// Which way the last module switch went, for the slide (forward = towards later modules).
-    public private(set) var switchedForward = true
     /// The module whose strip shows under the compact notch right now (see `peek`).
     public private(set) var peekModuleID: String?
     @ObservationIgnored private var peekGeneration = 0
@@ -122,6 +141,8 @@ public final class NotchViewModel {
     @ObservationIgnored public var requestKeyFocus: (() -> Void)?
     /// Hands keyboard focus back to the previous app. Called when the notch leaves the expanded state.
     @ObservationIgnored public var releaseKeyFocus: (() -> Void)?
+    /// Whether the notch's window has the keyboard now. Set by the window controller (and the preview).
+    @ObservationIgnored public var hasKeyFocus: (() -> Bool)?
     /// Posted when a drag this app took part in ended (a drop on a notch, a drag out of a module), by
     /// the real notch or a preview: the drag watcher doesn't see those releases.
     static let dragSettled = Notification.Name("NotchViewModel.dragSettled")
@@ -241,9 +262,9 @@ public final class NotchViewModel {
         let removed = oldModules.filter { old in !modules.contains { $0 === old } }
         let added = modules.filter { new in !oldModules.contains { $0 === new } }
         let selectedBefore = oldModules.first { $0.moduleID == selectedID } ?? arrangement.sorted(oldModules) { $0.moduleID }.first
-        let wasMenu = showsHome
+        let wasMenu = !showsModule
         for module in removed {
-            if state == .expanded, module === selectedBefore, !showsHome { module.notchDidClose() }
+            if state == .expanded, module === selectedBefore, showsModule { module.notchDidClose() }
             module.attach(to: nil)
         }
         if selectedID == nil || !modules.contains(where: { $0.moduleID == selectedID }) {
@@ -251,14 +272,14 @@ public final class NotchViewModel {
         }
         if !homeIsAvailable { showsHome = false }
         // The last module went away while it showed: Home takes its place.
-        if modules.isEmpty, state == .expanded, homeIsAvailable, !showsHome {
+        if modules.isEmpty, state == .expanded, homeIsAvailable, !showsHome, !showsLibrary {
             chosenHomePage = 0 // Home always comes up on its first page.
             showsHome = true
         }
         for module in added { module.attach(to: self) }
         // Attached while already open (e.g. pinned with PANCAKENOTCH_DEBUG_STATE=expanded), or Home
         // went away with the module before last.
-        if state == .expanded, !showsHome, let selected = selectedModule,
+        if state == .expanded, showsModule, let selected = selectedModule,
            wasMenu || selected !== selectedBefore || added.contains(where: { $0 === selected }) {
             selected.notchDidOpen()
         }
@@ -274,46 +295,388 @@ public final class NotchViewModel {
         if restingState != resting { restingState = resting }
     }
 
-    /// Shows a module in the open notch (a tab, Home, a swipe). Only the user switches; opening
+    /// Shows a module in the open notch (a tab, Home, the Library, a swipe). Only the user switches; opening
     /// picks the module itself (`open`).
     public func select(_ moduleID: String) {
+        select(moduleID, entrance: nil)
+    }
+
+    /// `entrance` says how the page comes in; `nil` slides it in from its side of the bar.
+    func select(_ moduleID: String, entrance: NotchEntrance?) {
         endHomeEditing()
         guard let target = modules.first(where: { $0.moduleID == moduleID }) else { return }
         cancelAttentionClose()
         let previous = selectedModule
-        let wasMenu = showsHome
-        if let previous, previous !== target {
-            switchedForward = arrangement.rank(of: moduleID) >= arrangement.rank(of: previous.moduleID)
-        }
+        let wasPlace = !showsModule
+        let arriving = entrance ?? .slide(forward: isForward(from: currentPlace, to: .module(moduleID)))
         withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
+            self.entrance = arriving
             showsHome = false
+            showsLibrary = false
             selectedID = moduleID
         }
-        guard previous !== target || wasMenu else { return }
+        resetHub()
+        guard previous !== target || wasPlace else { return }
         if state == .expanded {
-            if !wasMenu { previous?.notchDidClose() }
+            if !wasPlace { previous?.notchDidClose() }
             target.notchDidOpen()
-            onModuleShown?(moduleID)
+            moduleShown(moduleID)
         }
         if previous !== target { previous?.userSwitchedAway() }
     }
 
-    /// Opens or closes Home in the open notch. With no module to go back to, Home stays.
+    /// A module's page came up in the open notch: statistics, and the Library's Recently used.
+    private func moduleShown(_ moduleID: String) {
+        onModuleShown?(moduleID)
+        arrangement.noteOpened(moduleID)
+    }
+
+    /// Opens or closes Home in the open notch. With no module to go back to, Home stays. From the Library,
+    /// Home slides in beside it.
     public func toggleHome() {
         // While editing, the Home button finishes editing and stays on Home.
         if isEditingHome {
             endHomeEditing()
             return
         }
-        guard state == .expanded, homeIsAvailable, !isHeld else { return }
-        let opening = !showsHome
-        guard opening || selectedModule != nil else { return }
+        guard state == .expanded, homeIsAvailable, !isModuleHeld else { return }
+        if showsHome {
+            leaveHub()
+        } else {
+            showHub(.home, entrance: .reveal)
+        }
+    }
+
+    /// Opens or closes the Library (its button): from a module it grows from the bar, from Home it slides in
+    /// beside it. On the Library it goes back to where the person came from. The search takes typing right
+    /// away (a click means the person is here to use it).
+    public func toggleLibrary() {
+        guard state == .expanded, !isModuleHeld else { return }
+        if showsLibrary {
+            goBackFromLibrary()
+        } else {
+            showHub(.library, entrance: .reveal, typing: .yes)
+        }
+    }
+
+    // MARK: Places (ADR-0045)
+
+    /// Where the open notch is now.
+    public var currentPlace: NotchPlace {
+        if showsLibrary { return .library }
+        if showsHome { return .home }
+        return selectedModule.map { .module($0.moduleID) } ?? .home
+    }
+
+    /// The Library, Home and every module, in the bar's order: the Library on its side of Home (or of the
+    /// tabs, with tabs only), then the modules by ranking. Swipes and ←/→ walk it one step at a time.
+    public var strip: [NotchPlace] {
+        let modules = rankedModules.map { NotchPlace.module($0.moduleID) }
+        guard homeIsAvailable else {
+            return arrangement.librarySide == .left ? [.library] + modules : modules + [.library]
+        }
+        return (arrangement.librarySide == .left ? [.library, .home] : [.home, .library]) + modules
+    }
+
+    /// Home and the Library in the bar's order: the pages the pager slides between.
+    var hubPages: [NotchPlace] { strip.filter(\.isHub) }
+
+    private func isForward(from: NotchPlace, to: NotchPlace) -> Bool {
+        let places = strip
+        return (places.firstIndex(of: to) ?? 0) >= (places.firstIndex(of: from) ?? 0)
+    }
+
+    /// Moves one step along the bar's order: a two-finger swipe, or ←/→ (`byKey`) on Home or past the
+    /// Library's first or last tile.
+    public func showAdjacentPlace(forward: Bool, byKey: Bool = false) {
+        guard !isModuleHeld, !isEditingHome, let next = adjacentPlace(forward: forward) else { return }
+        go(to: next, entrance: .slide(forward: forward), typing: byKey ? .yes : .ifNotchHasKeyboard)
+    }
+
+    /// Shows `place`. `typing` says whether the Library's search takes the keyboard on arriving.
+    func go(to place: NotchPlace, entrance: NotchEntrance, typing: LibraryTyping = .no) {
+        switch place {
+        case .module(let id): select(id, entrance: entrance)
+        case .home, .library: showHub(place, entrance: entrance, typing: typing)
+        }
+    }
+
+    /// Brings up Home or the Library. From a module the pair comes in with `entrance`; between the two the
+    /// pager slides.
+    private func showHub(_ place: NotchPlace, entrance: NotchEntrance, typing: LibraryTyping = .no) {
+        let toLibrary = place == .library
+        guard state == .expanded, toLibrary || homeIsAvailable, toLibrary ? !showsLibrary : !showsHome else { return }
+        endHomeEditing()
+        cancelAttentionClose()
+        let wasModule = showsModule
+        if toLibrary {
+            libraryReturn = currentPlace
+            startLibraryTyping(typing)
+        }
+        if wasModule {
+            withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
+                self.entrance = entrance
+                showsHome = !toLibrary
+                showsLibrary = toLibrary
+                if !toLibrary { chosenHomePage = 0 }
+            }
+            selectedModule?.notchDidClose()
+        } else {
+            slideHub(to: place)
+        }
+    }
+
+    /// From Home back to the module it covers.
+    private func leaveHub() {
+        guard let module = selectedModule else { return }
         cancelAttentionClose()
         withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
-            showsHome = opening
-            if opening { chosenHomePage = 0 }
+            entrance = .slide(forward: isForward(from: currentPlace, to: .module(module.moduleID)))
+            showsHome = false
+            showsLibrary = false
         }
-        if opening { selectedModule?.notchDidClose() } else { selectedModule?.notchDidOpen() }
+        resetHub()
+        if state == .expanded { module.notchDidOpen() }
+    }
+
+    /// Esc on an empty search, or the Library button again: back where the person came from (Home when
+    /// that module is gone, or the current module when there's no Home).
+    func goBackFromLibrary() {
+        guard showsLibrary else { return }
+        if let id = libraryReturn.moduleID, modules.contains(where: { $0.moduleID == id }) {
+            select(id, entrance: .slide(forward: isForward(from: .library, to: libraryReturn)))
+        } else if homeIsAvailable {
+            slideHub(to: .home)
+        } else if let module = selectedModule {
+            select(module.moduleID)
+        }
+    }
+
+    /// Home ↔ Library: the pager glides there, or cross-fades with Reduce Motion.
+    private func slideHub(to place: NotchPlace) {
+        let pages = hubPages
+        guard let to = pages.firstIndex(of: place) else { return }
+        let from = pages.firstIndex(of: currentPlace)
+        let toLibrary = place == .library
+        if motion.reducesMotion || snapshotClock != nil || from == nil {
+            resetHub()
+            withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
+                showsHome = !toLibrary
+                showsLibrary = toLibrary
+                if !toLibrary { chosenHomePage = 0 }
+            }
+            return
+        }
+        if hubPosition == nil { hubOrigin = from }
+        settleHub(at: to) {
+            self.showsHome = !toLibrary
+            self.showsLibrary = toLibrary
+            if !toLibrary { self.chosenHomePage = 0 }
+        }
+    }
+
+    /// The pager's settling glide, the same as Home's pages; `change` flips the place with it. Once it has
+    /// arrived only the current page stays drawn.
+    private func settleHub(at index: Int, _ change: () -> Void = {}) {
+        hubMotion.end()
+        hubGeneration &+= 1
+        let generation = hubGeneration
+        withAnimation(.smooth(duration: 0.28, extraBounce: 0), completionCriteria: .removed) {
+            change()
+            hubPosition = CGFloat(index)
+        } completion: { [weak self] in
+            guard let self, self.hubGeneration == generation else { return }
+            self.resetHub()
+        }
+    }
+
+    private func resetHub() {
+        hubGeneration &+= 1
+        hubMotion = HomeScrollMotion()
+        hubPosition = nil
+        hubOrigin = nil
+    }
+
+    // MARK: Library (ADR-0045)
+
+    /// Whether the Library's search takes the keyboard when the Library comes up.
+    enum LibraryTyping {
+        /// Not now: a click in the field starts typing.
+        case no
+        /// Only if the notch has the keyboard already (a swipe: hovering never takes typing from another app).
+        case ifNotchHasKeyboard
+        /// Yes: the person clicked or pressed a key here.
+        case yes
+    }
+
+    private func startLibraryTyping(_ request: LibraryTyping) {
+        switch request {
+        case .no: return
+        case .ifNotchHasKeyboard: guard hasKeyFocus?() == true else { return }
+        case .yes: requestKeyFocus?()
+        }
+        library.isTyping = true
+        library.focusRequest &+= 1
+    }
+
+    /// A click in the Library's search field: type there.
+    public func libraryFieldClicked() {
+        guard showsLibrary else { return }
+        cancelAttentionClose()
+        startLibraryTyping(.yes)
+    }
+
+    /// The words in the Library's search changed. The highlight goes to the best match, so Return opens it.
+    public func setLibraryQuery(_ text: String) {
+        guard showsLibrary, text != library.query else { return }
+        let held = libraryHoldsOpen
+        library.query = text
+        let results = libraryResults
+        library.highlight = SearchWords.words(in: text).isEmpty ? nil : (results.first(where: \.isOn) ?? results.first)?.id
+        if held, !libraryHoldsOpen { holdReleased() }
+    }
+
+    /// Every module for the Library in ranking order: switched-on ones with their status, and the switched-off
+    /// ones the app knows (practice notches list only their own modules).
+    public var libraryEntries: [LibraryEntry] {
+        let tabbed = arrangement.navigation == .tabsAndMenu ? Set(barTabIDs) : []
+        let on: [LibraryEntry] = rankedModules.map { module in
+            let id = module.moduleID
+            let favorite = arrangement.navigation == .tabsAndMenu && arrangement.isFavorite(id)
+            return LibraryEntry(id: id, title: module.title, symbol: module.symbol, status: module.menuStatus,
+                                isOn: true, isFavorite: favorite, isFavoriteWithoutRoom: favorite && !tabbed.contains(id),
+                                waitsForYou: module.waitsForYou)
+        }
+        guard !homeLeavesOutMissing else { return on }
+        let off = ModuleArrangement.knownModules.filter { id in !modules.contains { $0.moduleID == id } }.map { id in
+            let info = ModuleCatalog.info(id)
+            return LibraryEntry(id: id, title: info.title, symbol: info.symbol,
+                                status: String(localized: "Off", comment: "Library: a switched-off module's tile"),
+                                isOn: false, isFavorite: false, isFavoriteWithoutRoom: false, waitsForYou: false)
+        }
+        return arrangement.sorted(on + off) { $0.id }
+    }
+
+    /// The Library's tiles for the words typed: matching names first, then other words, in ranking order.
+    public var libraryResults: [LibraryEntry] { NotchLibrary.results(libraryEntries, for: library.query) }
+
+    /// Up to three switched-on modules opened lately, newest first, for "Recently used". None while a search
+    /// is typed: the tiles show what it found.
+    public var libraryRecents: [LibraryEntry] {
+        guard SearchWords.words(in: library.query).isEmpty else { return [] }
+        let entries = libraryEntries
+        return Array(arrangement.recent.compactMap { id in entries.first { $0.id == id && $0.isOn } }.prefix(3))
+    }
+
+    /// Where each tile sits in the open panel (unit point), so a module opened from it grows out of it.
+    /// Kept up to date by the Library's view.
+    @ObservationIgnored var libraryTileAnchors: [String: UnitPoint] = [:]
+    /// How many tiles fit across, for ↑ and ↓.
+    var libraryColumns: Int { LibraryMetrics.columns(in: layout) }
+
+    /// Opens a module from the Library (a tile, a recent row, Return): it grows out of its tile. A switched-off
+    /// module opens its card on the app window's Modules page, where it's turned on.
+    public func openFromLibrary(_ moduleID: String) {
+        guard showsLibrary else { return }
+        guard modules.contains(where: { $0.moduleID == moduleID }) else {
+            openAppPage?(.module(moduleID))
+            return
+        }
+        select(moduleID, entrance: libraryTileAnchors[moduleID].map { .grow(from: $0) })
+        onHomeEvent?(.openedFromLibrary(moduleID))
+    }
+
+    /// Esc clears the search, then goes back; Return opens the highlighted tile; the arrows walk the tiles,
+    /// and ←/→ past the first or last one go on along the bar.
+    private func handleLibraryKey(_ event: NSEvent) -> Bool {
+        switch event.keyCode {
+        case 53:
+            if !library.query.isEmpty { setLibraryQuery("") } else { goBackFromLibrary() }
+            return true
+        case 36, 76:
+            guard let id = library.highlight else { return false }
+            openFromLibrary(id)
+            return true
+        case 123, 124:
+            // An arrow key means the person is at the keyboard: typing goes to the search from now on.
+            if !library.isTyping { startLibraryTyping(.yes) }
+            moveLibraryHighlight(by: event.keyCode == 124 ? 1 : -1, leavesAtEnds: true)
+            return true
+        case 125, 126:
+            if !library.isTyping { startLibraryTyping(.yes) }
+            moveLibraryHighlight(by: event.keyCode == 125 ? libraryColumns : -libraryColumns, leavesAtEnds: false)
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func moveLibraryHighlight(by step: Int, leavesAtEnds: Bool) {
+        let ids = libraryResults.map(\.id)
+        guard let current = library.highlight, let index = ids.firstIndex(of: current) else {
+            if ids.isEmpty, leavesAtEnds { showAdjacentPlace(forward: step > 0, byKey: true); return }
+            library.highlight = step > 0 ? ids.first : ids.last
+            return
+        }
+        let next = index + step
+        if ids.indices.contains(next) {
+            library.highlight = ids[next]
+        } else if leavesAtEnds {
+            showAdjacentPlace(forward: step > 0, byKey: true)
+        }
+    }
+
+    // MARK: Favorites (ADR-0045)
+
+    /// How many favorites the bar has room for beside Home and the Library, on this screen.
+    public var favoriteCapacity: Int { NotchModuleBar.fit(for: self).capacity }
+
+    /// Switched-on favorites: each takes a tab.
+    private var favoriteCount: Int { rankedModules.filter { arrangement.isFavorite($0.moduleID) }.count }
+
+    /// Whether another favorite fits in the bar. Favorites only make tabs with "Home and tabs".
+    public var canAddFavorite: Bool {
+        arrangement.navigation == .tabsAndMenu && favoriteCount < favoriteCapacity
+    }
+
+    /// Adds or removes a favorite. Adding is refused while the bar is full, and the Library says why.
+    /// Returns whether it changed.
+    @discardableResult
+    public func toggleFavorite(_ moduleID: String) -> Bool {
+        let removing = arrangement.isFavorite(moduleID)
+        guard removing || canAddFavorite else {
+            showLibraryNote(.barFull)
+            return false
+        }
+        withAnimation(motion.reducesMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85)) {
+            arrangement.toggleFavorite(moduleID)
+        }
+        return true
+    }
+
+    /// Shows a short note under the Library's tiles for a few seconds (longer for VoiceOver, which also
+    /// reads it out).
+    private func showLibraryNote(_ note: LibraryNote) {
+        library.noteTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) { library.note = note }
+        AccessibilityNotification.Announcement(LibraryText.note(note)).post()
+        let seconds = NSWorkspace.shared.isVoiceOverEnabled ? 8 : 3
+        library.noteTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { self.library.note = nil }
+        }
+    }
+
+    /// A right-click menu from the bar or the Library opened or closed: the notch stays open under it.
+    func menuShowingChanged(_ showing: Bool) {
+        isShowingMenu = showing
+        if !showing { holdReleased() }
+    }
+
+    /// Opens the app window on a module's card (its settings open when it's switched on).
+    public func openSettings(for moduleID: String) {
+        openAppPage?(.module(moduleID))
     }
 
     /// Home is there unless the person chose tabs only (Notch settings).
@@ -453,56 +816,164 @@ public final class NotchViewModel {
         onHomeEvent?(.widgetOpened(kind))
     }
 
-    /// The modules the tabs show: favorites (or all, with tabs only), plus the current one.
+    /// The modules that may have a tab, by ranking: the favorites, or every module with tabs only. The bar
+    /// shows as many as fit (`barTabIDs`); the rest live in the Library (ADR-0045).
     public var tabModules: [any NotchModule] {
         let ranked = rankedModules
         guard arrangement.navigation == .tabsAndMenu else { return ranked }
-        return ranked.filter { arrangement.isFavorite($0.moduleID) || $0.moduleID == selectedModule?.moduleID }
+        return ranked.filter { arrangement.isFavorite($0.moduleID) }
     }
 
-    /// Whether the tabs and Home button show: several modules or Home to go to, and nothing holding the
-    /// current module open.
+    /// The modules that have a tab in the bar right now, in order.
+    public var barTabIDs: [String] { NotchModuleBar.fit(for: self).tabModuleIDs }
+
+    /// Switched-on favorites the bar has no room for, by ranking: they live in the Library (ADR-0045).
+    public var favoritesWithoutTab: [String] {
+        guard arrangement.navigation == .tabsAndMenu else { return [] }
+        let tabbed = Set(barTabIDs)
+        return tabModules.map(\.moduleID).filter { !tabbed.contains($0) }
+    }
+
+    /// The module showing that has no tab (not a favorite, or no room): its icon sits just right of the
+    /// camera, lit like a selected tab. Not with the name button, which names it already.
+    public var visitingModule: (any NotchModule)? {
+        guard showsModuleBar, showsModule, arrangement.navigation != .menu, let module = selectedModule,
+              !barTabIDs.contains(module.moduleID) else { return nil }
+        return module
+    }
+
+    /// Whether the bar shows: always, unless a module needs the notch to itself (a prompt, a drag out).
     public var showsModuleBar: Bool {
-        (modules.count > 1 || homeIsAvailable) && (isEditingHome || !isHeld)
+        isEditingHome || !isModuleHeld
     }
 
-    /// Moves to the next or previous module by ranking (two-finger swipe).
-    public func showAdjacentModule(forward: Bool) {
-        let ranked = rankedModules
-        guard ranked.count > 1, !isHeld,
-              let index = ranked.firstIndex(where: { $0.moduleID == selectedModule?.moduleID }) else { return }
-        let next = index + (forward ? 1 : -1)
-        guard ranked.indices.contains(next) else { return }
-        select(ranked[next].moduleID)
-    }
-
-    /// A scroll in the open notch: a sideways two-finger swipe switches modules, unless it scrolls
-    /// something inside the module. `point` is in notch-body coordinates. Returns whether it was used.
+    /// A scroll in the open notch: a sideways two-finger swipe moves along the bar (Library, Home, modules),
+    /// unless it scrolls something inside the module. `point` is in notch-body coordinates. Returns whether
+    /// it was used.
     @discardableResult
     public func handleScroll(_ event: NSEvent, at point: CGPoint) -> Bool {
-        if state == .expanded, showsHome {
-            swipe.ignoreCurrentGesture()
-            return scrollHome(event)
-        }
-        guard state == .expanded, modules.count > 1 else {
+        // Follow the fingers whatever the "natural scrolling" setting: positive = fingers moving right.
+        let fingersX = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
+        guard state == .expanded else {
             // A gesture that started before the notch opened scrolls something else, not the modules.
             swipe.ignoreCurrentGesture()
             return false
         }
-        if event.phase == .began, selectedModule?.scrollsHorizontally(at: point) == true || showsHome {
+        if !showsModule { return scrollHub(event, fingersX: fingersX) }
+        if event.phase == .began, selectedModule?.scrollsHorizontally(at: point) == true {
             swipe.ignoreCurrentGesture()
             return false
         }
-        // Follow the fingers whatever the "natural scrolling" setting: positive = fingers moving right.
-        let fingersX = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
         guard let forward = swipe.handle(
             phase: NotchSwipeTracker.Phase(event),
             deltaX: fingersX,
             deltaY: event.scrollingDeltaY,
             isPrecise: event.hasPreciseScrollingDeltas
         ) else { return false }
-        showAdjacentModule(forward: forward)
+        showAdjacentPlace(forward: forward)
         return true
+    }
+
+    /// Scrolling on Home or the Library: up and down turn Home's pages (the Library's tiles scroll by
+    /// themselves); sideways moves along the bar, the pager following the fingers between Home and the
+    /// Library. While editing, with Reduce Motion or a mouse wheel it moves one step per gesture instead.
+    private func scrollHub(_ event: NSEvent, fingersX: CGFloat) -> Bool {
+        let phase = NotchSwipeTracker.Phase(event)
+        let precise = event.hasPreciseScrollingDeltas
+        guard isEditingHome || motion.reducesMotion || !precise else {
+            return handleHubPreciseScroll(phase: phase, deltaY: event.scrollingDeltaY, fingersX: fingersX,
+                                          time: event.timestamp, momentum: !event.momentumPhase.isEmpty)
+        }
+        if showsHome, let step = homeScroll.handle(phase: phase, deltaY: event.scrollingDeltaY,
+            deltaX: event.scrollingDeltaX, isPrecise: precise, time: event.timestamp) {
+            showHomePage(homePage + step)
+            return true
+        }
+        guard !isEditingHome, let forward = swipe.handle(phase: phase, deltaX: fingersX,
+            deltaY: event.scrollingDeltaY, isPrecise: precise) else { return false }
+        showAdjacentPlace(forward: forward)
+        return true
+    }
+
+    /// A trackpad gesture on Home or the Library (`fingersX` positive while the fingers move right).
+    @discardableResult
+    func handleHubPreciseScroll(phase: NotchSwipeTracker.Phase, deltaY: CGFloat, fingersX: CGFloat,
+                                time: TimeInterval, momentum: Bool = false) -> Bool {
+        // On the Library an up-or-down gesture belongs to its tiles' scroll view, end and glide included; only
+        // a sideways one is the pager's. Home takes every gesture (its pages scroll up and down).
+        let onHome = showsHome
+        let sideways = hubMotion.horizontal
+        if momentum {
+            if hubMotion.active { finishHubScroll(time: time) }
+            if onHome { handleHomePreciseScroll(phase: phase, deltaY: deltaY, deltaX: -fingersX, time: time, momentum: true) }
+            return onHome || sideways
+        }
+        if phase == .ended {
+            finishHubScroll(time: time)
+            _ = swipe.handle(phase: .ended, deltaX: 0, deltaY: 0, isPrecise: true)
+            if onHome { handleHomePreciseScroll(phase: .ended, deltaY: 0, deltaX: 0, time: time) }
+            return onHome || sideways
+        }
+        if phase == .began {
+            cancelAttentionClose()
+            resetHub()
+            hubMotion.begin(page: hubPages.firstIndex(of: currentPlace) ?? 0, time: time)
+        }
+        // Home's pages take a gesture that goes up or down.
+        if showsHome, handleHomePreciseScroll(phase: phase, deltaY: deltaY, deltaX: -fingersX, time: time) {
+            return true
+        }
+        guard phase == .began || phase == .changed, hubMotion.active else { return false }
+        hubMotion.move(y: deltaY, x: -fingersX, time: time)
+        guard hubMotion.horizontal, !isEditingHome else { return false }
+        // Towards a module (Home → the first module): one flick switches, as between modules.
+        if let forward = swipe.handle(phase: phase, deltaX: fingersX, deltaY: deltaY, isPrecise: true),
+           let next = adjacentPlace(forward: forward), !next.isHub {
+            go(to: next, entrance: .slide(forward: forward))
+            return true
+        }
+        // Between Home and the Library the pages follow the fingers (resisting at the ends).
+        let width = layout.bodySize(for: .expanded).width
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            if hubOrigin == nil { hubOrigin = hubMotion.origin }
+            hubPosition = hubMotion.sidewaysPosition(width: width, count: hubPages.count)
+        }
+        return true
+    }
+
+    /// The fingers lifted during a sideways gesture between Home and the Library: settle on the nearest
+    /// page, or the next one for a flick. Arriving on the Library this way doesn't take the keyboard.
+    private func finishHubScroll(time: TimeInterval) {
+        guard hubMotion.active else { return }
+        let pages = hubPages
+        guard hubMotion.horizontal, hubPosition != nil else { hubMotion.end(); return }
+        let target = hubMotion.sidewaysTarget(width: layout.bodySize(for: .expanded).width, count: pages.count, time: time)
+        guard pages.indices.contains(target), pages[target] != currentPlace else {
+            settleHub(at: hubMotion.origin)
+            return
+        }
+        let place = pages[target]
+        let toLibrary = place == .library
+        if toLibrary {
+            libraryReturn = currentPlace
+            startLibraryTyping(.ifNotchHasKeyboard)
+        }
+        endHomeEditing()
+        settleHub(at: target) {
+            self.showsHome = !toLibrary
+            self.showsLibrary = toLibrary
+            if !toLibrary { self.chosenHomePage = 0 }
+        }
+    }
+
+    /// The place one step along the bar, if there is one.
+    private func adjacentPlace(forward: Bool) -> NotchPlace? {
+        let places = strip
+        guard let index = places.firstIndex(of: currentPlace) else { return nil }
+        let next = index + (forward ? 1 : -1)
+        return places.indices.contains(next) ? places[next] : nil
     }
 
     /// Picks what to open on: the module asked for (its ear or strip was pointed at, a drag), else the
@@ -513,6 +984,8 @@ public final class NotchViewModel {
     private func chooseModuleForOpening(_ moduleID: String?, preferringHome: Bool = false) {
         resetHomeMotion()
         showsHome = false
+        showsLibrary = false
+        entrance = .slide(forward: true)
         chosenHomePage = 0
         let ranked = rankedModules
         if let moduleID, modules.contains(where: { $0.moduleID == moduleID }) {
@@ -534,20 +1007,6 @@ public final class NotchViewModel {
         } else if homeIsAvailable, selectedModule?.isIdleForOpening == true {
             showsHome = true
         }
-    }
-
-    /// Scrolling up or down on Home moves one whole page per gesture (or per wheel step).
-    private func scrollHome(_ event: NSEvent) -> Bool {
-        let phase = NotchSwipeTracker.Phase(event)
-        if isEditingHome || motion.reducesMotion || !event.hasPreciseScrollingDeltas {
-            guard let step = homeScroll.handle(phase: phase, deltaY: event.scrollingDeltaY,
-                deltaX: event.scrollingDeltaX, isPrecise: event.hasPreciseScrollingDeltas,
-                time: event.timestamp) else { return false }
-            showHomePage(homePage + step)
-            return true
-        }
-        return handleHomePreciseScroll(phase: phase, deltaY: event.scrollingDeltaY,
-            deltaX: event.scrollingDeltaX, time: event.timestamp, momentum: !event.momentumPhase.isEmpty)
     }
 
     @discardableResult
@@ -749,7 +1208,7 @@ public final class NotchViewModel {
         hoverTask?.cancel()
         if state != .expanded {
             open(focusing: moduleID)
-        } else if let moduleID, moduleID != selectedModule?.moduleID || showsHome, !isHeld {
+        } else if let moduleID, moduleID != selectedModule?.moduleID || !showsModule, !isModuleHeld {
             select(moduleID)
         }
     }
@@ -817,6 +1276,11 @@ public final class NotchViewModel {
     public func keyFocusLost() {
         endHomeEditing()
         modules.forEach { $0.keyFocusLost() }
+        // Another app took the keyboard: the typed search stays, but no longer holds the notch open.
+        if library.isTyping {
+            library.isTyping = false
+            holdReleased()
+        }
     }
 
     /// The module stopped holding the notch open (menu dismissed, drag-out ended, prompt answered).
@@ -845,9 +1309,14 @@ public final class NotchViewModel {
             if event.modifierFlags.contains(.shift) { redoHomeEdit() } else { undoHomeEdit() }
             return true
         }
-        if !showsHome, selectedModule?.handleKey(event) == true { return true }
+        if showsModule, selectedModule?.handleKey(event) == true { return true }
+        if showsLibrary, handleLibraryKey(event) { return true }
         if showsHome, event.keyCode == 125 || event.keyCode == 126 { // Down and Up arrows: Home's pages
             showHomePage(homePage + (event.keyCode == 125 ? 1 : -1))
+            return true
+        }
+        if showsHome, event.keyCode == 123 || event.keyCode == 124 { // Left and Right: along the bar
+            showAdjacentPlace(forward: event.keyCode == 124, byKey: true)
             return true
         }
         // 1–9: the module with that number on the Modules page (switched-off ones keep theirs), 0:
@@ -887,8 +1356,15 @@ public final class NotchViewModel {
     /// Key codes of the 0–9 keys on the top row, in digit order.
     private static let digitKeyCodes: [UInt16] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25]
 
-    /// True while any module needs the notch to stay open.
-    var isHeld: Bool { isEditingHome || modules.contains { $0.holdsOpen } }
+    /// True while anything needs the notch to stay open: editing Home, a module (a prompt, a drag out), a
+    /// menu, or a search being typed in the Library.
+    var isHeld: Bool { isEditingHome || isModuleHeld || isShowingMenu || libraryHoldsOpen }
+
+    /// A module needs the notch to itself: the bar hides and moving to another place is off.
+    var isModuleHeld: Bool { modules.contains { $0.holdsOpen } }
+
+    /// A search typed in the Library holds the notch open, like any field being typed in.
+    var libraryHoldsOpen: Bool { showsLibrary && library.isTyping && !library.query.isEmpty }
 
     private func closeIfPointerOutside() {
         guard !layout.outline(for: state, contains: pointerLocation()) else { return }
@@ -1236,9 +1712,9 @@ public final class NotchViewModel {
         }
         if opening {
             onOpen?()
-            if !showsHome, let selected = selectedModule {
+            if showsModule, let selected = selectedModule {
                 selected.notchDidOpen()
-                onModuleShown?(selected.moduleID)
+                moduleShown(selected.moduleID)
             }
         }
         if closing { leftExpanded() }
@@ -1247,8 +1723,10 @@ public final class NotchViewModel {
     private func leftExpanded() {
         endHomeEditing()
         releaseKeyFocus?()
-        if !showsHome { selectedModule?.notchDidClose() }
+        if showsModule { selectedModule?.notchDidClose() }
         showsHome = false
+        showsLibrary = false
+        resetHub()
         swipe.reset()
     }
 

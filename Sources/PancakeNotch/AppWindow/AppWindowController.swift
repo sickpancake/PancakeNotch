@@ -26,6 +26,12 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         self.context = context
     }
 
+    /// Opens the window on Modules, at one module's card (its settings open when it's on).
+    func show(module moduleID: String) {
+        context.navigation.openModule(moduleID)
+        show()
+    }
+
     /// Opens the window, on `section` when given (otherwise the page it was on).
     func show(section: AppSection? = nil) {
         if let section { context.navigation.section = section }

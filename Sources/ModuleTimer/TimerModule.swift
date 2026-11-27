@@ -256,7 +256,7 @@ public final class TimerModule: NotchModule {
         guard let notch else { return }
         notch.activityChanged()
         if notch.state == .expanded {
-            if notch.selectedModule === self, !notch.showsHome {
+            if notch.selectedModule === self, notch.showsModule {
                 endEditing()
                 addingTimer = false
                 mode = .timer

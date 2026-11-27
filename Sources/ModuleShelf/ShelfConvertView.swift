@@ -54,7 +54,7 @@ struct ShelfConvertView: View {
                 .foregroundStyle(.white.opacity(0.55))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(width: layout.headerSideWidth, alignment: .trailing)
+                .notchBandRightSide(width: layout.headerSideWidth, alignment: .trailing)
         }
     }
 

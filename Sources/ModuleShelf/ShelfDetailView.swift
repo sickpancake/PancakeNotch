@@ -68,7 +68,7 @@ struct ShelfDetailView: View {
                 .help(String(localized: "Remove from the Shelf"))
                 .accessibilityLabel(Text("Remove from the Shelf"))
             }
-            .frame(width: layout.headerSideWidth, alignment: .trailing)
+            .notchBandRightSide(width: layout.headerSideWidth, alignment: .trailing)
         }
     }
 

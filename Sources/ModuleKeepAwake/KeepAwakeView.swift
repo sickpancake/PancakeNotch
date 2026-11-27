@@ -54,7 +54,7 @@ struct KeepAwakeView: View {
                 Spacer(minLength: 0)
                 ScreenSwitch(module: module)
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
         }
     }
 }

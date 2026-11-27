@@ -48,7 +48,7 @@ struct AIUsageView: View {
                 Spacer(minLength: 0)
                 if !center.accounts.isEmpty { AccountPill(module: module) }
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
         }
     }
 
