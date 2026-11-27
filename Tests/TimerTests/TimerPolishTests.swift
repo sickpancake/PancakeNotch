@@ -197,17 +197,20 @@ struct TimerPolishTests {
         #expect(!tight.showsLead)
     }
 
-    @Test func theEarTurnsAmberInTheLastMinute() {
+    @Test func theTimerTintTurnsAmberInTheLastMinute() {
         var timer = CountdownTimer()
-        timer.start(300, now: start)
-        #expect(TimerEar.tint(timer, at: start + 48) == .white) // 4:12
-        // 1:00 is still white; 0:59 flips, on the same tick the digits change.
-        #expect(TimerEar.tint(timer, at: start + 240) == .white)
-        #expect(TimerEar.tint(timer, at: start + 240.5) == .white)
-        #expect(TimerEar.tint(timer, at: start + 241) == TimerEar.lastMinute)
-        #expect(TimerEar.tint(timer, at: start + 252) == TimerEar.lastMinute) // 0:48
-        // Paused at 0:30 keeps the colour its time left implies.
-        timer.pause(now: start + 270)
-        #expect(TimerEar.tint(timer, at: start + 1000) == TimerEar.lastMinute)
+        timer.start(61, now: start)
+        #expect(TimerTint.color(for: timer, at: start) == .white) // 1:01
+        // The tint flips with the shown seconds: while they still round up to 1:00, it stays white.
+        #expect(TimerTint.color(for: timer, at: start + 0.6) == .white) // 60.4
+        #expect(TimerTint.color(for: timer, at: start + 1) == .white) // 60
+        #expect(TimerTint.color(for: timer, at: start + 1.1) == .white) // 59.9, shown as 1:00
+        #expect(TimerTint.color(for: timer, at: start + 2) == TimerTint.lastMinute) // 0:59
+        #expect(TimerTint.color(for: timer, at: start + 13) == TimerTint.lastMinute) // 0:48
+        // Ended is its own state, not "less than a minute".
+        #expect(TimerTint.color(for: timer, at: start + 61) == .white)
+        // A paused timer keeps its paused styling rather than looking urgent.
+        timer.pause(now: start + 31)
+        #expect(TimerTint.color(for: timer, at: start + 1_000) == .white)
     }
 }

@@ -101,18 +101,19 @@ struct TimerWidget: View {
     @ViewBuilder private func active(at date: Date) -> some View {
         let remaining = timer.isDone ? 0 : timer.remaining(at: date)
         let time = TimerText.countdown(remaining)
+        let tint = TimerTint.color(for: timer, at: date)
         switch size {
         case .small:
             HomeSmallFace(caption: statusText) {
-                ring(size: 13, lineWidth: 2)
+                ring(size: 13, lineWidth: 2, tint: tint)
             } value: {
-                digits(time, size: 17)
+                digits(time, size: 17, tint: tint)
             }
         case .medium:
             HStack(spacing: 10) {
-                ring(size: 30, lineWidth: 3)
+                ring(size: 30, lineWidth: 3, tint: tint)
                 VStack(alignment: .leading, spacing: 1) {
-                    digits(time, size: 19)
+                    digits(time, size: 19, tint: tint)
                     status
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,8 +123,8 @@ struct TimerWidget: View {
         case .large:
             VStack(spacing: 8) {
                 ZStack {
-                    ring(size: 64, lineWidth: 4)
-                    digits(time, size: 15)
+                    ring(size: 64, lineWidth: 4, tint: tint)
+                    digits(time, size: 15, tint: tint)
                         .frame(width: 54)
                 }
                 .frame(maxHeight: .infinity)
@@ -133,23 +134,24 @@ struct TimerWidget: View {
         }
     }
 
-    private func ring(size: CGFloat, lineWidth: CGFloat) -> some View {
+    private func ring(size: CGFloat, lineWidth: CGFloat, tint: Color) -> some View {
         Group {
             if context.isLive || context.isSnapshot {
-                DrainingRing(plan: RingPlan(timer), epoch: module.center.clockEpoch, lineWidth: lineWidth,
+                DrainingRing(plan: RingPlan(timer), epoch: module.center.clockEpoch, lineWidth: lineWidth, tint: tint,
                              isSnapshot: context.isSnapshot || module.isSnapshot, now: { module.center.now })
             } else {
                 // Not on screen: a still ring, so nothing animates out of sight.
                 DrainingRing(plan: .still(timer.isDone ? 0 : timer.fractionLeft(at: now)), epoch: 0,
-                             lineWidth: lineWidth, isSnapshot: true, now: { now })
+                             lineWidth: lineWidth, tint: tint, isSnapshot: true, now: { now })
             }
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 
-    private func digits(_ text: String, size: CGFloat) -> some View {
+    private func digits(_ text: String, size: CGFloat, tint: Color) -> some View {
         DrumText(text: text, size: size, style: module.settings.digitAnimation)
+            .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .accessibilityLabel(Text(timer.isDone ? String(localized: "Done") : TimerText.spoken(timer.remaining(at: now))))

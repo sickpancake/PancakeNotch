@@ -2,6 +2,19 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
+/// The last-minute warning tint everywhere a countdown shows. Amber once the countdown's shown seconds are
+/// under a minute (0:59 and below), white before; paused and ended timers keep their ordinary styling. A
+/// static colour, so nothing animates and the layout doesn't change.
+enum TimerTint {
+    static let lastMinute = Color(red: 1, green: 159 / 255, blue: 10 / 255)
+
+    static func color(for timer: CountdownTimer, at now: Date) -> Color {
+        guard timer.isRunning else { return .white }
+        let remaining = timer.remaining(at: now)
+        return remaining > 0 && remaining.rounded(.up) < 60 ? lastMinute : .white
+    }
+}
+
 /// The Timer's compact ear: one ear, also when nothing else is active. Shows the timer ending soonest (or a
 /// Done one, first), with "+1" for each other timer (issue #70), else the stopwatch. Ticks once a second
 /// only while it's on screen and counting (`TimerModule.earTicks`, AGENTS.md rule 2).
@@ -81,7 +94,7 @@ struct TimerEar: View {
         // The widest the countdown will be: the layout is chosen for that, so it doesn't change size
         // when 10:00 becomes 9:59.
         let widest = TimerText.countdown(timer.total)
-        let tint = Self.tint(timer, at: now)
+        let tint = TimerTint.color(for: timer, at: now)
         if paused {
             fitting(lead: .pause, text: text, widest: widest, tint: tint)
         } else {
@@ -93,15 +106,6 @@ struct TimerEar: View {
             }
         }
     }
-
-    /// Amber once the countdown shows under a minute (0:59 and below), white before: the one accent in the
-    /// otherwise monochrome ear, for the last minute when it matters most (issue #129). A static colour, so
-    /// nothing animates and the layout doesn't change.
-    static func tint(_ timer: CountdownTimer, at now: Date) -> Color {
-        timer.remaining(at: now).rounded(.up) < 60 ? lastMinute : .white
-    }
-
-    static let lastMinute = Color(red: 1, green: 159 / 255, blue: 10 / 255)
 
     /// The stopwatch has no ring (nothing to fill up): a stopwatch sign where the timer has its ring, a pause
     /// sign while it's stopped. "Ring only" has nothing to show for it, so it shows the sign and the time.
