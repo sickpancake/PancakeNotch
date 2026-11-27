@@ -304,7 +304,7 @@ struct NotesSearchTests {
     // MARK: The field
 
     @Test func theFieldHasAVoiceOverLabelAndTakesNoDrops() {
-        let field = NotesSearchField.makeField(text: "groc")
+        let field = NotesSearchWording.makeField(text: "groc")
         #expect(field.accessibilityLabel() == "Search notes")
         #expect(field.accessibilityHelp()?.isEmpty == false)
         #expect(field.registeredDraggedTypes.isEmpty)

@@ -36,7 +36,7 @@ enum ModuleMenu {
         let isOn = model.modules.contains { $0.moduleID == moduleID }
         let canOpenSettings = model.openAppPage != nil
         guard isOn else {
-            if canOpenSettings { menu.addItem(ActionItem(LibraryText.turnOn) { model.openSettings(for: moduleID) }) }
+            if canOpenSettings { menu.addItem(ActionItem(LibraryText.turnOn) { model.openModuleCard(moduleID) }) }
             return menu.items.isEmpty ? nil : menu
         }
         if model.currentPlace != .module(moduleID) {
@@ -64,7 +64,7 @@ enum ModuleMenu {
         }
         if canOpenSettings {
             if !menu.items.isEmpty { menu.addItem(.separator()) }
-            menu.addItem(ActionItem(LibraryText.settings) { model.openSettings(for: moduleID) })
+            menu.addItem(ActionItem(LibraryText.settings) { model.openModuleCard(moduleID) })
         }
         return menu.items.isEmpty ? nil : menu
     }
@@ -88,13 +88,13 @@ enum ModuleMenu {
 extension View {
     /// Right-click or Control-click shows the module's menu, holding the notch open while it's up. With
     /// `onClick` a plain click shows it too, under the view (the tab beside the camera, which is already
-    /// showing its module).
+    /// showing its module). `anchor` lets the view show the menu from code, under it.
     func moduleMenu(model: NotchViewModel, moduleID: String, onClick: Bool = false,
-                    open: (@MainActor () -> Void)? = nil) -> some View {
+                    anchor: ModuleMenuAnchor? = nil, open: (@MainActor () -> Void)? = nil) -> some View {
         overlay {
             // Off-screen pictures don't draw AppKit views (and nobody right-clicks them).
             if model.snapshotClock == nil {
-                ModuleMenuCatcher(model: model, moduleID: moduleID, onClick: onClick,
+                ModuleMenuCatcher(model: model, moduleID: moduleID, onClick: onClick, anchor: anchor,
                                   open: open ?? { model.select(moduleID) })
             }
         }
@@ -119,7 +119,7 @@ private struct ModuleMenuActions: ViewModifier {
                     Button(isFavorite ? LibraryText.removeFavorite : LibraryText.addFavorite) { model.toggleFavorite(moduleID) }
                 }
                 if model.openAppPage != nil {
-                    Button(isOn ? LibraryText.settings : LibraryText.turnOn) { model.openSettings(for: moduleID) }
+                    Button(isOn ? LibraryText.settings : LibraryText.turnOn) { model.openModuleCard(moduleID) }
                 }
             }
     }
@@ -131,6 +131,7 @@ private struct ModuleMenuCatcher: NSViewRepresentable {
     let model: NotchViewModel
     let moduleID: String
     let onClick: Bool
+    let anchor: ModuleMenuAnchor?
     let open: @MainActor () -> Void
 
     func makeNSView(context: Context) -> ModuleMenuCatcherView {
@@ -144,7 +145,16 @@ private struct ModuleMenuCatcher: NSViewRepresentable {
         view.moduleID = moduleID
         view.onClick = onClick
         view.open = open
+        anchor?.view = view
     }
+}
+
+/// Shows a module's menu from code, under the view it belongs to (for a press that isn't a click).
+@MainActor
+final class ModuleMenuAnchor {
+    weak var view: ModuleMenuCatcherView?
+
+    func showMenu() { view?.showMenuBelow() }
 }
 
 final class ModuleMenuCatcherView: NSView, NSMenuDelegate {
@@ -177,9 +187,20 @@ final class ModuleMenuCatcherView: NSView, NSMenuDelegate {
         if event.modifierFlags.contains(.control) {
             NSMenu.popUpContextMenu(menu, with: event, for: self)
         } else {
-            // A plain click: the menu hangs under the icon, like a pop-up button's.
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.maxY + 4 : -4), in: self)
+            popUpBelow(menu)
         }
+    }
+
+    /// The menu under the view, as for a plain click.
+    func showMenuBelow() {
+        guard let model, let open, let menu = ModuleMenu.make(model: model, moduleID: moduleID, open: open) else { return }
+        menu.delegate = self
+        popUpBelow(menu)
+    }
+
+    /// A plain click: the menu hangs under the icon, like a pop-up button's.
+    private func popUpBelow(_ menu: NSMenu) {
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.maxY + 4 : -4), in: self)
     }
 
     func menuWillOpen(_ menu: NSMenu) { model?.menuShowingChanged(true) }

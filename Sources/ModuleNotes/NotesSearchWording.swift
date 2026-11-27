@@ -4,7 +4,7 @@ import NotesCore
 
 /// Notes' words for the shared search box (`NotchSearchBox`): the field's placeholder, its VoiceOver label,
 /// and help that follows what the search looks through.
-enum NotesSearchField {
+enum NotesSearchWording {
     static var placeholder: String { String(localized: "Search", comment: "Notes: placeholder in the search field") }
     static var label: String { String(localized: "Search notes") }
 

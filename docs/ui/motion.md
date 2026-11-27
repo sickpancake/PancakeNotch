@@ -107,8 +107,9 @@ Rules behind them:
 
 - **Leaving things don't travel.** A page that's going away blurs and fades where it is; only the arriving page
   slides. That way a quick change of direction never sends the old page the wrong way.
-- **Pick the direction from order.** `NotchViewModel.switchedForward` says whether the new module is to the right
-  of the old one; do the same for pages within a module.
+- **Pick the direction from order.** `NotchViewModel.entrance` (a `NotchEntrance`) says how the new page comes in:
+  `.slide(forward:)` from its side of the bar, `.reveal` from the bar's corner, or `.grow(from:)` out of a Library
+  tile. Arriving pages use `.entrance(_:)`; do the same for pages within a module.
 - **Anchor scales where the thing came from** (`anchor: .topLeading` for something opened from the top-left).
 - **Small things just fade.** Slides and blurs are for whole pages and menus. A row, a badge or a hint uses
   `.opacity`.

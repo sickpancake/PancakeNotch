@@ -53,7 +53,13 @@ public final class NotchViewModel {
     }
     /// The open notch shows the Library (every module, searchable) instead of Home or a module (ADR-0045).
     public private(set) var showsLibrary = false {
-        didSet { if !showsLibrary, oldValue { library.reset() } }
+        didSet {
+            guard !showsLibrary, oldValue else { return }
+            // A typed search held the notch open; leaving the Library lets it close again if the pointer's gone.
+            let held = library.isTyping && !library.query.isEmpty
+            library.reset()
+            if held, state == .expanded { holdReleased() }
+        }
     }
     /// A module's page shows: neither Home nor the Library.
     public var showsModule: Bool { !showsHome && !showsLibrary }
@@ -416,9 +422,7 @@ public final class NotchViewModel {
         if wasModule {
             withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
                 self.entrance = entrance
-                showsHome = !toLibrary
-                showsLibrary = toLibrary
-                if !toLibrary { chosenHomePage = 0 }
+                placeHub(place)
             }
             selectedModule?.notchDidClose()
         } else {
@@ -440,16 +444,21 @@ public final class NotchViewModel {
     }
 
     /// Esc on an empty search, or the Library button again: back where the person came from (Home when
-    /// that module is gone, or the current module when there's no Home).
-    func goBackFromLibrary() {
-        guard showsLibrary else { return }
+    /// that module is gone, or the current module when there's no Home). Returns false when there is nowhere
+    /// else (tabs only, every module off), so Esc closes the notch instead.
+    @discardableResult
+    func goBackFromLibrary() -> Bool {
+        guard showsLibrary else { return false }
         if let id = libraryReturn.moduleID, modules.contains(where: { $0.moduleID == id }) {
             select(id, entrance: .slide(forward: isForward(from: .library, to: libraryReturn)))
         } else if homeIsAvailable {
             slideHub(to: .home)
         } else if let module = selectedModule {
             select(module.moduleID)
+        } else {
+            return false
         }
+        return true
     }
 
     /// Home ↔ Library: the pager glides there, or cross-fades with Reduce Motion.
@@ -457,22 +466,21 @@ public final class NotchViewModel {
         let pages = hubPages
         guard let to = pages.firstIndex(of: place) else { return }
         let from = pages.firstIndex(of: currentPlace)
-        let toLibrary = place == .library
         if motion.reducesMotion || snapshotClock != nil || from == nil {
             resetHub()
-            withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) {
-                showsHome = !toLibrary
-                showsLibrary = toLibrary
-                if !toLibrary { chosenHomePage = 0 }
-            }
+            withAnimation(Self.switchAnimation(reducesMotion: motion.reducesMotion)) { placeHub(place) }
             return
         }
         if hubPosition == nil { hubOrigin = from }
-        settleHub(at: to) {
-            self.showsHome = !toLibrary
-            self.showsLibrary = toLibrary
-            if !toLibrary { self.chosenHomePage = 0 }
-        }
+        settleHub(at: to) { self.placeHub(place) }
+    }
+
+    /// Shows Home or the Library (Home from its first page).
+    private func placeHub(_ place: NotchPlace) {
+        let toLibrary = place == .library
+        showsHome = !toLibrary
+        showsLibrary = toLibrary
+        if !toLibrary { chosenHomePage = 0 }
     }
 
     /// The pager's settling glide, the same as Home's pages; `change` flips the place with it. Once it has
@@ -587,12 +595,13 @@ public final class NotchViewModel {
     }
 
     /// Esc clears the search, then goes back; Return opens the highlighted tile; the arrows walk the tiles,
-    /// and ←/→ past the first or last one go on along the bar.
+    /// and with no search typed ←/→ past the first or last one go on along the bar (with one, they stop
+    /// there, so a search is never lost to one key too many).
     private func handleLibraryKey(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 53:
-            if !library.query.isEmpty { setLibraryQuery("") } else { goBackFromLibrary() }
-            return true
+            if !library.query.isEmpty { setLibraryQuery(""); return true }
+            return goBackFromLibrary()
         case 36, 76:
             guard let id = library.highlight else { return false }
             openFromLibrary(id)
@@ -600,7 +609,8 @@ public final class NotchViewModel {
         case 123, 124:
             // An arrow key means the person is at the keyboard: typing goes to the search from now on.
             if !library.isTyping { startLibraryTyping(.yes) }
-            moveLibraryHighlight(by: event.keyCode == 124 ? 1 : -1, leavesAtEnds: true)
+            let searching = !SearchWords.words(in: library.query).isEmpty
+            moveLibraryHighlight(by: event.keyCode == 124 ? 1 : -1, leavesAtEnds: !searching)
             return true
         case 125, 126:
             if !library.isTyping { startLibraryTyping(.yes) }
@@ -675,7 +685,7 @@ public final class NotchViewModel {
     }
 
     /// Opens the app window on a module's card (its settings open when it's switched on).
-    public func openSettings(for moduleID: String) {
+    public func openModuleCard(_ moduleID: String) {
         openAppPage?(.module(moduleID))
     }
 
@@ -961,11 +971,7 @@ public final class NotchViewModel {
             startLibraryTyping(.ifNotchHasKeyboard)
         }
         endHomeEditing()
-        settleHub(at: target) {
-            self.showsHome = !toLibrary
-            self.showsLibrary = toLibrary
-            if !toLibrary { self.chosenHomePage = 0 }
-        }
+        settleHub(at: target) { self.placeHub(place) }
     }
 
     /// The place one step along the bar, if there is one.

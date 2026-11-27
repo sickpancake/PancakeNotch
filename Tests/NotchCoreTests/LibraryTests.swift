@@ -114,6 +114,43 @@ struct LibraryTests {
         #expect(model.currentPlace == .module("shelf"))
     }
 
+    @Test func escWithNowhereToGoBackClosesTheNotch() {
+        let model = makeModel(["nowPlaying"])
+        model.arrangement.navigation = .tabs
+        model.open()
+        model.toggleLibrary()
+        model.modules = []
+        #expect(model.showsLibrary)
+        #expect(model.handleKey(Self.escape))
+        #expect(model.state != .expanded)
+    }
+
+    @Test func leavingTheLibraryWithASearchTypedLetsTheNotchClose() async throws {
+        let model = makeModel(["nowPlaying", "shelf", "timer"])
+        model.open()
+        model.toggleLibrary()
+        model.setLibraryQuery("tim")
+        #expect(model.isHeld)
+        // A bar tab, not Esc: the search goes with the Library, and with it the hold.
+        model.select("shelf")
+        #expect(!model.isHeld)
+        try await Task.sleep(for: .milliseconds(120))
+        #expect(model.state != .expanded)
+    }
+
+    @Test func theNameButtonNamesTheLibraryWhileItShows() {
+        let model = makeModel(["nowPlaying", "shelf"])
+        model.arrangement.navigation = .menu
+        model.open()
+        model.select("shelf")
+        #expect(NotchModuleBar.menuTitle(for: model) == ModuleCatalog.info("shelf").title)
+        model.toggleLibrary()
+        #expect(NotchModuleBar.menuTitle(for: model) == "Library")
+        #expect(NotchModuleBar.menuSymbol(for: model) == LibrarySymbol.name)
+        model.toggleHome()
+        #expect(NotchModuleBar.menuSymbol(for: model) == HomeSymbol.name)
+    }
+
     @Test func aSwipeArrivesWithoutTakingTheKeyboardFromAnotherApp() {
         let model = makeModel(["nowPlaying", "shelf"], keyFocus: false)
         model.open()
@@ -243,6 +280,28 @@ struct LibraryTests {
         #expect(model.showsHome)
     }
 
+    @Test func whileSearchingTheArrowsStayAmongTheMatches() {
+        let model = makeModel()
+        model.open()
+        model.toggleLibrary()
+        model.setLibraryQuery("tim")
+        let matches = model.libraryResults.map(\.id)
+        #expect(!matches.isEmpty)
+        for _ in 0...matches.count { #expect(model.handleKey(Self.right)) }
+        #expect(model.showsLibrary)
+        #expect(model.library.query == "tim")
+        #expect(model.library.highlight == matches.last)
+        for _ in 0...matches.count { #expect(model.handleKey(Self.left)) }
+        #expect(model.showsLibrary)
+        #expect(model.library.highlight == matches.first)
+        // Nothing found: the arrows still don't leave.
+        model.setLibraryQuery("zebra")
+        #expect(model.handleKey(Self.right))
+        #expect(model.handleKey(Self.left))
+        #expect(model.showsLibrary)
+        #expect(model.library.query == "zebra")
+    }
+
     // MARK: Favorites
 
     @Test func newInstallsStartWithTheEverydayFour() {
@@ -297,7 +356,7 @@ struct LibraryTests {
         model.openFromLibrary("notes")
         #expect(asked == ["notes"])
         #expect(model.showsLibrary)
-        model.openSettings(for: "shelf")
+        model.openModuleCard("shelf")
         #expect(asked == ["notes", "shelf"])
     }
 

@@ -85,7 +85,16 @@ struct NotchModuleBar: View {
     }
 
     static func menuTitle(for model: NotchViewModel) -> String {
-        model.showsHome ? String(localized: "Home", comment: "The notch's Home, its title in the bar") : model.selectedModule?.title ?? ""
+        if model.showsHome { return String(localized: "Home", comment: "The notch's Home, its title in the bar") }
+        if model.showsLibrary { return String(localized: "Library") }
+        return model.selectedModule?.title ?? ""
+    }
+
+    /// The name button's icon: where the person is.
+    static func menuSymbol(for model: NotchViewModel) -> String {
+        if model.showsHome { return HomeSymbol.name }
+        if model.showsLibrary { return LibrarySymbol.name }
+        return model.selectedModule?.symbol ?? "square"
     }
 
     var body: some View {
@@ -172,13 +181,13 @@ struct NotchModuleBar: View {
         .accessibilityHint(Text("Shows every module, with a search."))
     }
 
-    /// "Home" navigation: the current module's icon and name; click for Home.
+    /// "Home" navigation: the current module's (or the Library's) icon and name; click for Home.
     private var menuNameButton: some View {
         Button {
             model.toggleHome()
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: model.showsHome ? HomeSymbol.name : model.selectedModule?.symbol ?? "square")
+                Image(systemName: Self.menuSymbol(for: model))
                     .font(.system(size: 11, weight: .semibold))
                     .frame(width: 14)
                 Text(Self.menuTitle(for: model))

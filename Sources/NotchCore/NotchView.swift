@@ -171,10 +171,14 @@ private struct NotchVisitingTab: View {
     let module: any NotchModule
     let highlight: Namespace.ID
     let width: CGFloat
+    /// Lets the button's press (VoiceOver's, as clicks go straight to the menu) show the menu too.
+    @State private var menuAnchor = ModuleMenuAnchor()
 
     var body: some View {
-        NotchBarButton(symbol: module.symbol, isSelected: true, highlight: highlight, width: width, glides: false) {}
-            .moduleMenu(model: model, moduleID: module.moduleID, onClick: true)
+        NotchBarButton(symbol: module.symbol, isSelected: true, highlight: highlight, width: width, glides: false) {
+            menuAnchor.showMenu()
+        }
+            .moduleMenu(model: model, moduleID: module.moduleID, onClick: true, anchor: menuAnchor)
             .help(Text(help))
             .accessibilityLabel(Text(module.title))
             .accessibilityAddTraits(.isSelected)
