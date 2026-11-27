@@ -2,6 +2,45 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
+/// The countdown urgency tint everywhere a timer shows: white at the start, yellow halfway, orange at 30%
+/// left and red at 10%. The colour is chosen for the current tick, so nothing animates and the layout
+/// doesn't change; paused and ended timers keep their ordinary styling.
+enum TimerTint {
+    struct RGB: Equatable {
+        let red: Double
+        let green: Double
+        let blue: Double
+    }
+
+    static let white = RGB(red: 1, green: 1, blue: 1)
+    static let yellow = RGB(red: 1, green: 214 / 255, blue: 10 / 255)
+    static let orange = RGB(red: 1, green: 159 / 255, blue: 10 / 255)
+    static let red = RGB(red: 1, green: 69 / 255, blue: 58 / 255)
+
+    static func color(for timer: CountdownTimer, at now: Date) -> Color {
+        let rgb = self.rgb(for: timer, at: now)
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    static func rgb(for timer: CountdownTimer, at now: Date) -> RGB {
+        guard timer.isRunning else { return white }
+        let fraction = timer.fractionLeft(at: now)
+        guard fraction > 0 else { return white }
+        if fraction <= 0.1 { return red }
+        if fraction <= 0.3 { return blend(orange, red, (0.3 - fraction) / 0.2) }
+        if fraction <= 0.5 { return blend(yellow, orange, (0.5 - fraction) / 0.2) }
+        return blend(white, yellow, (1 - fraction) / 0.5)
+    }
+
+    private static func blend(_ from: RGB, _ to: RGB, _ progress: Double) -> RGB {
+        RGB(
+            red: from.red + (to.red - from.red) * progress,
+            green: from.green + (to.green - from.green) * progress,
+            blue: from.blue + (to.blue - from.blue) * progress
+        )
+    }
+}
+
 /// The Timer's compact ear: one ear, also when nothing else is active. Shows the timer ending soonest (or a
 /// Done one, first), with "+1" for each other timer (issue #70), else the stopwatch. Ticks once a second
 /// only while it's on screen and counting (`TimerModule.earTicks`, AGENTS.md rule 2).
@@ -81,7 +120,7 @@ struct TimerEar: View {
         // The widest the countdown will be: the layout is chosen for that, so it doesn't change size
         // when 10:00 becomes 9:59.
         let widest = TimerText.countdown(timer.total)
-        let tint = Self.tint(timer, at: now)
+        let tint = TimerTint.color(for: timer, at: now)
         if paused {
             fitting(lead: .pause, text: text, widest: widest, tint: tint)
         } else {
@@ -93,15 +132,6 @@ struct TimerEar: View {
             }
         }
     }
-
-    /// Amber once the countdown shows under a minute (0:59 and below), white before: the one accent in the
-    /// otherwise monochrome ear, for the last minute when it matters most (issue #129). A static colour, so
-    /// nothing animates and the layout doesn't change.
-    static func tint(_ timer: CountdownTimer, at now: Date) -> Color {
-        timer.remaining(at: now).rounded(.up) < 60 ? lastMinute : .white
-    }
-
-    static let lastMinute = Color(red: 1, green: 159 / 255, blue: 10 / 255)
 
     /// The stopwatch has no ring (nothing to fill up): a stopwatch sign where the timer has its ring, a pause
     /// sign while it's stopped. "Ring only" has nothing to show for it, so it shows the sign and the time.

@@ -374,12 +374,13 @@ private struct TimerRunning: View {
     private func face(now: Date) -> some View {
         let timer = module.center.timer
         let remaining = timer.remaining(at: now)
+        let tint = TimerTint.color(for: timer, at: now)
         let ringSize: CGFloat = isCompact ? 38 : 64
         let layout = isCompact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10)) : AnyLayout(HStackLayout(spacing: 18))
         return layout {
             HStack(spacing: isCompact ? 10 : 18) {
                 ZStack {
-                    TimerRing(module: module, size: ringSize, lineWidth: isCompact ? 3 : 4)
+                    TimerRing(module: module, size: ringSize, lineWidth: isCompact ? 3 : 4, tint: tint)
                     Image(systemName: timer.isPaused ? "pause.fill" : module.symbol)
                         .font(.system(size: ringSize * 0.3, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.7))
@@ -393,6 +394,7 @@ private struct TimerRunning: View {
                         weight: .medium,
                         style: module.settings.digitAnimation
                     )
+                    .foregroundStyle(tint)
                     Text(timer.name.isEmpty ? statusLine(timer) : timer.name + " · " + statusLine(timer))
                         .font(.system(size: isCompact ? 10.5 : 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
@@ -583,13 +585,14 @@ private struct TimerRow: View {
     @ViewBuilder
     private func row(now: Date) -> some View {
         let remaining = timer.remaining(at: now)
+        let tint = TimerTint.color(for: timer, at: now)
         let label = TimerText.label(timer)
         let status = timer.end.map { String(localized: "Ends \(TimerText.time($0))", comment: "Timer: when it will end") }
             ?? String(localized: "Paused", comment: "Timer: paused")
         let buttonSize: CGFloat = isCompact ? 20 : 22
         HStack(spacing: isCompact ? 8 : 12) {
             ZStack {
-                TimerRing(module: module, size: isCompact ? 16 : 18, lineWidth: 2, timer: timer)
+                TimerRing(module: module, size: isCompact ? 16 : 18, lineWidth: 2, tint: tint, timer: timer)
                 if timer.isPaused {
                     Image(systemName: "pause.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(.white.opacity(0.7))
                 }
@@ -609,6 +612,7 @@ private struct TimerRow: View {
             Spacer(minLength: 4)
             Text(TimerText.countdown(remaining))
                 .font(.system(size: isCompact ? 14 : 17, weight: .medium).monospacedDigit())
+                .foregroundStyle(tint)
                 .motionContentTransition(.numericText(countsDown: true))
             .accessibilityElement(children: .ignore)
             HStack(spacing: 6) {

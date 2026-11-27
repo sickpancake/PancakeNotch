@@ -5,6 +5,8 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
+- **Timers shift colour as time runs out.** The ring and time beside the notch, in Home and on the Timer page now shade from white to yellow halfway through, orange at 30% left and red at 10% left.
+
 ## 0.5.1
 
 **This is a beta.** PancakeNotch is still being tested, so expect bugs: some things may not work as they should yet. If something goes wrong, please report it on GitHub.

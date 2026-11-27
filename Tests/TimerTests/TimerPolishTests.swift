@@ -197,17 +197,29 @@ struct TimerPolishTests {
         #expect(!tight.showsLead)
     }
 
-    @Test func theEarTurnsAmberInTheLastMinute() {
+    @Test func theTimerTintGradientsFromWhiteThroughYellowAndOrangeToRed() {
         var timer = CountdownTimer()
-        timer.start(300, now: start)
-        #expect(TimerEar.tint(timer, at: start + 48) == .white) // 4:12
-        // 1:00 is still white; 0:59 flips, on the same tick the digits change.
-        #expect(TimerEar.tint(timer, at: start + 240) == .white)
-        #expect(TimerEar.tint(timer, at: start + 240.5) == .white)
-        #expect(TimerEar.tint(timer, at: start + 241) == TimerEar.lastMinute)
-        #expect(TimerEar.tint(timer, at: start + 252) == TimerEar.lastMinute) // 0:48
-        // Paused at 0:30 keeps the colour its time left implies.
-        timer.pause(now: start + 270)
-        #expect(TimerEar.tint(timer, at: start + 1000) == TimerEar.lastMinute)
+        timer.start(100, now: start)
+        #expect(TimerTint.rgb(for: timer, at: start) == TimerTint.white)
+        #expect(TimerTint.rgb(for: timer, at: start + 50) == TimerTint.yellow) // 50% left
+        #expect(TimerTint.rgb(for: timer, at: start + 70) == TimerTint.orange) // 30% left
+        #expect(TimerTint.rgb(for: timer, at: start + 90) == TimerTint.red) // 10% left
+        #expect(TimerTint.rgb(for: timer, at: start + 95) == TimerTint.red)
+
+        // Halfway between the named colours as the fraction falls.
+        let pale = TimerTint.rgb(for: timer, at: start + 25) // 75% left
+        #expect(abs(pale.green - (TimerTint.white.green + TimerTint.yellow.green) / 2) < 1e-9)
+        #expect(abs(pale.blue - (TimerTint.white.blue + TimerTint.yellow.blue) / 2) < 1e-9)
+        let yellowOrange = TimerTint.rgb(for: timer, at: start + 60) // 40% left
+        #expect(abs(yellowOrange.green - (TimerTint.yellow.green + TimerTint.orange.green) / 2) < 1e-9)
+        let orangeRed = TimerTint.rgb(for: timer, at: start + 80) // 20% left
+        #expect(abs(orangeRed.green - (TimerTint.orange.green + TimerTint.red.green) / 2) < 1e-9)
+        #expect(abs(orangeRed.blue - (TimerTint.orange.blue + TimerTint.red.blue) / 2) < 1e-9)
+
+        // Ended is its own state, not urgency.
+        #expect(TimerTint.rgb(for: timer, at: start + 100) == TimerTint.white)
+        // A paused timer keeps its paused styling rather than looking urgent.
+        timer.pause(now: start + 90)
+        #expect(TimerTint.rgb(for: timer, at: start + 1_000) == TimerTint.white)
     }
 }

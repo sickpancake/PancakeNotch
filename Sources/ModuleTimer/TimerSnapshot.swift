@@ -42,6 +42,16 @@ public enum TimerSnapshot {
         clock.advance(3 * 60 + 12)
     }
 
+    /// Five timers across the gradient's named colours and halfway points: red in the ear, the range in the list.
+    static func gradientTimers(_ center: TimerCenter, _ clock: Clock) {
+        center.startTimer(seconds: 200, name: "Pale")
+        center.startTimer(seconds: 100, name: "Yellow")
+        center.startTimer(seconds: 70, name: "Orange")
+        center.startTimer(seconds: 55, name: "Red")
+        clock.advance(50)
+        center.startTimer(seconds: 120, name: "White")
+    }
+
     public static func models(layout: NotchLayout, others: () -> any NotchModule) -> [NotchViewModel] {
         func model(_ state: NotchState, _ modules: [any NotchModule], setUp: (NotchViewModel) -> Void = { _ in }) -> NotchViewModel {
             let model = NotchViewModel(layout: layout, state: state, arrangement: ModuleArrangement())
@@ -52,7 +62,7 @@ public enum TimerSnapshot {
         let running = module(setUp: runningTimer)
         let paused = module { center, clock in
             center.startTimer(seconds: 90)
-            clock.advance(23)
+            clock.advance(48)
             center.pauseTimer()
         }
         let done = module { center, clock in
@@ -74,10 +84,12 @@ public enum TimerSnapshot {
         }
         return [
             model(.compact, [running]),
+            model(.compact, [module(setUp: gradientTimers)]),
+            model(.expanded, [module(setUp: gradientTimers)]),
             model(.compact, [others(), module(setUp: runningTimer)]),
             model(.compact, [others(), module { center, clock in
                 center.startTimer(seconds: 90)
-                clock.advance(23)
+                clock.advance(48)
                 center.pauseTimer()
             }]),
             model(.compact, [module(setUp: runningTimer, settings: { $0.earContent = .endTime })]),
