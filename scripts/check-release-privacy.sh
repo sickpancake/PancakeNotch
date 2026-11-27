@@ -26,11 +26,12 @@ while IFS= read -r -d '' file; do
   fi
   # Third-party licences name their authors; that's theirs to publish, not ours. The practice notches'
   # pretend accounts use the reserved example.com / example.org addresses. Domains match whole, so
-  # someone@apple.com.example.net still counts; name@2x.png is an image, not an address.
+  # someone@apple.com.example.net still counts; name@2x.png is an image, not an address. Neither is
+  # x@square.grid: the SF Symbol square.grid.2x2 packed after a byte, with ".grid" being no real domain.
   [[ "$(basename "$file")" == *LICENSE* ]] && continue
   emails="$(strings -a "$file" 2>/dev/null | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
     | grep -viE '@(apple\.com|sparkle-project\.org|github\.com|users\.noreply\.github\.com|noreply\.github\.com|example\.(com|org))$' \
-    | grep -viE '@[0-9]x\.[a-z]+$' | sort -u || true)"
+    | grep -viE '@[0-9]x\.[a-z]+$' | grep -vE '@square\.grid$' | sort -u || true)"
   if [[ -n "$emails" ]]; then
     echo "Email address in ${file#"$APP"/}: $emails" >&2
     problems=1
