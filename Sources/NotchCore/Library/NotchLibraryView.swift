@@ -310,18 +310,20 @@ private struct LibraryTile: View {
 
     var body: some View {
         Button { model.openFromLibrary(entry.id) } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 icon
                 Text(entry.title)
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(.white.opacity(entry.isOn ? 0.92 : 0.5))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                Text(statusLine)
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.white.opacity(entry.isOn ? 0.45 : 0.35))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                if let statusLine {
+                    Text(statusLine)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.white.opacity(entry.isOn ? 0.45 : 0.35))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
             }
             .padding(.horizontal, 6)
             .frame(width: size.width, height: size.height)
@@ -351,10 +353,10 @@ private struct LibraryTile: View {
 
     private var icon: some View {
         Image(systemName: entry.symbol)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.white.opacity(entry.isOn ? 1 : 0.35))
-            .frame(width: 26, height: 26)
-            .background(.white.opacity(entry.isOn ? 0.09 : 0.04), in: .rect(cornerRadius: 8, style: .continuous))
+            .frame(width: 22, height: 22)
+            .background(.white.opacity(entry.isOn ? 0.09 : 0.04), in: .rect(cornerRadius: 7, style: .continuous))
             .overlay(alignment: .topTrailing) {
                 // Something here waits for the person (an agent's question, a finished timer).
                 if entry.waitsForYou {
@@ -381,9 +383,11 @@ private struct LibraryTile: View {
         }
     }
 
-    private var statusLine: String {
+    /// `nil` when there's nothing to say: the icon and name then sit in the middle of the tile.
+    private var statusLine: String? {
         if entry.isFavoriteWithoutRoom { return LibraryText.noRoom }
-        return entry.status ?? " "
+        guard let status = entry.status, !status.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return status
     }
 
     /// The star: on every favorite, and on the others under the pointer or the arrow keys. With the bar

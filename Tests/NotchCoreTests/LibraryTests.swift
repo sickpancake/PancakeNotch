@@ -372,6 +372,25 @@ struct LibraryTests {
         #expect(model.libraryRecents.isEmpty)
     }
 
+    @Test func everyWayIntoAModuleCountsAsRecentlyUsed() {
+        let model = makeModel(["nowPlaying", "shelf", "timer"])
+        model.open()
+        model.select("shelf")                  // a tab
+        model.toggleHome()
+        model.showAdjacentPlace(forward: true) // a swipe from Home
+        #expect(model.arrangement.recent.first == "nowPlaying")
+        model.select("timer")
+        model.toggleHome()
+        model.select("shelf")                  // a tab while Home shows
+        model.toggleHome()
+        model.toggleHome()                     // Home again: back to the module behind it
+        #expect(model.currentPlace == .module("shelf"))
+        model.select("timer")
+        model.toggleHome()
+        model.toggleHome()
+        #expect(model.arrangement.recent.prefix(3) == ["timer", "shelf", "nowPlaying"])
+    }
+
     @Test func recentlyUsedSkipsModulesThatAreOff() {
         let model = makeModel(["nowPlaying", "shelf"])
         model.arrangement.noteOpened("notes")

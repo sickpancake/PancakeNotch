@@ -153,6 +153,19 @@ private struct NotchHubPager: View {
             }
         }
         .frame(width: width, height: layout.bodySize(for: .expanded).height, alignment: .topLeading)
+        // The bar owns the top row left of the camera; a page sliding past (its Edit and gear buttons) shows
+        // only right of it, so it passes under the camera instead of over the bar's buttons.
+        .mask(alignment: .topLeading) {
+            let notch = layout.geometry.notchRect.size
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: (width + notch.width) / 2)
+                    Rectangle()
+                }
+                .frame(height: notch.height)
+                Rectangle()
+            }
+        }
     }
 
     @ViewBuilder
@@ -370,7 +383,7 @@ private struct CompactEarsView: View {
         let shown = isAsleep ? nil : count
         let reserve = shown == nil ? 0 : NotchLayout.earCountWidth
         return HStack(spacing: 0) {
-            if outerEdge == .leading { countView(shown, hugging: .trailing, height: height) }
+            if outerEdge == .leading { countView(shown, height: height) }
             ZStack {
                 if let slot, !isAsleep {
                     slot.view
@@ -379,22 +392,22 @@ private struct CompactEarsView: View {
                 }
             }
             .frame(width: width - reserve, height: height)
-            if outerEdge == .trailing { countView(shown, hugging: .leading, height: height) }
+            if outerEdge == .trailing { countView(shown, height: height) }
         }
         .frame(width: width, height: height, alignment: outerEdge == .leading ? .trailing : .leading)
     }
 
     /// "+2": the same quiet style as the Timer's count of other timers, so every "+n" in the ears reads alike.
-    /// It leans toward the module's content (`hugging`), clear of the outline's rounded outer edge.
+    /// It sits in the middle of its slot: clear of the module's content and of the outline's rounded edge.
     @ViewBuilder
-    private func countView(_ count: Int?, hugging edge: Alignment, height: CGFloat) -> some View {
+    private func countView(_ count: Int?, height: CGFloat) -> some View {
         if let count {
             Text(verbatim: "+\(count)")
                 .font(.system(size: 7.5, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
                 .fixedSize()
                 .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(count)))
-                .frame(width: NotchLayout.earCountWidth, height: height, alignment: edge)
+                .frame(width: NotchLayout.earCountWidth, height: height)
                 .transition(.opacity)
         }
     }

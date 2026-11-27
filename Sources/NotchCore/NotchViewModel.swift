@@ -440,7 +440,10 @@ public final class NotchViewModel {
             showsLibrary = false
         }
         resetHub()
-        if state == .expanded { module.notchDidOpen() }
+        if state == .expanded {
+            module.notchDidOpen()
+            arrangement.noteOpened(module.moduleID)
+        }
     }
 
     /// Esc on an empty search, or the Library button again: back where the person came from (Home when
