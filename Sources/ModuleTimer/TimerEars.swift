@@ -2,16 +2,42 @@ import NotchCore
 import SwiftUI
 import TimerCore
 
-/// The last-minute warning tint everywhere a countdown shows. Amber once the countdown's shown seconds are
-/// under a minute (0:59 and below), white before; paused and ended timers keep their ordinary styling. A
-/// static colour, so nothing animates and the layout doesn't change.
+/// The countdown urgency tint everywhere a timer shows: white at the start, yellow halfway, orange at 30%
+/// left and red at 10%. The colour is chosen for the current tick, so nothing animates and the layout
+/// doesn't change; paused and ended timers keep their ordinary styling.
 enum TimerTint {
-    static let lastMinute = Color(red: 1, green: 159 / 255, blue: 10 / 255)
+    struct RGB: Equatable {
+        let red: Double
+        let green: Double
+        let blue: Double
+    }
+
+    static let white = RGB(red: 1, green: 1, blue: 1)
+    static let yellow = RGB(red: 1, green: 214 / 255, blue: 10 / 255)
+    static let orange = RGB(red: 1, green: 159 / 255, blue: 10 / 255)
+    static let red = RGB(red: 1, green: 69 / 255, blue: 58 / 255)
 
     static func color(for timer: CountdownTimer, at now: Date) -> Color {
-        guard timer.isRunning else { return .white }
-        let remaining = timer.remaining(at: now)
-        return remaining > 0 && remaining.rounded(.up) < 60 ? lastMinute : .white
+        let rgb = self.rgb(for: timer, at: now)
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    static func rgb(for timer: CountdownTimer, at now: Date) -> RGB {
+        guard timer.isRunning else { return white }
+        let fraction = timer.fractionLeft(at: now)
+        guard fraction > 0 else { return white }
+        if fraction <= 0.1 { return red }
+        if fraction <= 0.3 { return blend(orange, red, (0.3 - fraction) / 0.2) }
+        if fraction <= 0.5 { return blend(yellow, orange, (0.5 - fraction) / 0.2) }
+        return blend(white, yellow, (1 - fraction) / 0.5)
+    }
+
+    private static func blend(_ from: RGB, _ to: RGB, _ progress: Double) -> RGB {
+        RGB(
+            red: from.red + (to.red - from.red) * progress,
+            green: from.green + (to.green - from.green) * progress,
+            blue: from.blue + (to.blue - from.blue) * progress
+        )
     }
 }
 

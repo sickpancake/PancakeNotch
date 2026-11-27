@@ -5,7 +5,7 @@ so write them for people using the app: short, plain, no code talk.
 
 ## Unreleased
 
-- **The timer's last-minute amber shows everywhere.** Under a minute left, Home and the open Timer page now use the same amber ring and time as the spot beside the notch.
+- **Timers shift colour as time runs out.** The ring and time beside the notch, in Home and on the Timer page now shade from white to yellow halfway through, orange at 30% left and red at 10% left.
 
 ## 0.5.1
 

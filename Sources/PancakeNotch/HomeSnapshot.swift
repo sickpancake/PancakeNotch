@@ -96,7 +96,7 @@ enum HomeSnapshot {
         let usage = AIUsageModule(center: .practice())
         usage.isSnapshot = true
         let timer = TimerSnapshot.module { center, clock in
-            // 42 seconds left after the stopwatch time below passes, so Home shows the last-minute amber.
+            // 42 of 436 seconds left after the stopwatch time below passes, so Home shows the red end of the gradient.
             center.startTimer(seconds: 436, name: "Pasta")
             center.startTimer(seconds: 40 * 60, name: "Laundry")
             clock.advance(4 * 60 + 18)
