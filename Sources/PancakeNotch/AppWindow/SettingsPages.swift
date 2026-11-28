@@ -224,7 +224,7 @@ struct NotchSettingsView: View {
 
             SettingsCard(
                 header: String(localized: "Moving between modules"),
-                footer: String(localized: "A two-finger swipe sideways on the open notch, or ← and →, moves along the bar one button at a time, in its order.")
+                footer: String(localized: "A two-finger swipe sideways on the open notch, or ← and →, moves along the bar one button at a time, in its order, then on through the modules without a tab.")
             ) {
                 SettingsRow(
                     title: String(localized: "In the open notch, show"),

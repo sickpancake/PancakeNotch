@@ -74,6 +74,19 @@ struct LibraryTests {
         #expect(model.strip == [.library, .home, .module("nowPlaying"), .module("shelf")])
     }
 
+    @Test func swipesWalkTheFavoritesThenTheOtherModules() {
+        let model = makeModel(["nowPlaying", "shelf", "agents", "timer", "notes"])
+        model.arrangement.favorites = ["timer", "nowPlaying"]
+        #expect(model.strip == [.library, .home, .module("nowPlaying"), .module("timer"),
+                                .module("shelf"), .module("agents"), .module("notes")])
+        model.open()
+        model.select("timer")
+        model.showAdjacentPlace(forward: true)
+        #expect(model.currentPlace == .module("shelf"))
+        model.showAdjacentPlace(forward: false)
+        #expect(model.currentPlace == .module("timer"))
+    }
+
     @Test func theArrowKeysOnHomeWalkTheBar() {
         let model = makeModel(["nowPlaying", "shelf"])
         model.open()
@@ -305,9 +318,9 @@ struct LibraryTests {
 
     // MARK: Favorites
 
-    @Test func newInstallsStartWithTheEverydayFour() {
+    @Test func newInstallsStartWithFiveFavorites() {
         let defaults = UserDefaults(suiteName: "LibraryTests.defaults.\(UUID().uuidString)")!
-        #expect(ModuleArrangement(defaults: defaults).favorites == ["nowPlaying", "shelf", "timer", "notes"])
+        #expect(ModuleArrangement(defaults: defaults).favorites == ["nowPlaying", "shelf", "agents", "timer", "notes"])
     }
 
     @Test func aFullBarRefusesAnotherFavoriteAndSaysWhy() {

@@ -52,7 +52,11 @@ struct KeepAwakeView: View {
             Color.clear.frame(width: layout.notchWidth)
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                ScreenSwitch(module: module)
+                // Words when there's room; icons when the tab beside the camera needs the space.
+                ViewThatFits(in: .horizontal) {
+                    ScreenSwitch(module: module, compact: false)
+                    ScreenSwitch(module: module, compact: true)
+                }
             }
             .notchBandRightSide(width: layout.bandSideWidth)
         }
@@ -62,15 +66,19 @@ struct KeepAwakeView: View {
 /// Screen on · Can sleep, in the style of the Timer's mode switch: the Screen setting, at hand.
 private struct ScreenSwitch: View {
     let module: KeepAwakeModule
+    /// Icons instead of words, when the band is short of room.
+    let compact: Bool
 
     var body: some View {
         let settings = module.center.settings
         HStack(spacing: 2) {
             SwitchSegment(title: String(localized: "Screen on", comment: "Keep Awake: the screen stays on"),
+                          symbol: compact ? "sun.max.fill" : nil,
                           spoken: String(localized: "Screen stays on"), isSelected: settings.screen == .staysOn) {
                 module.user { settings.screen = .staysOn }
             }
             SwitchSegment(title: String(localized: "Can sleep", comment: "Keep Awake: the screen can sleep"),
+                          symbol: compact ? "moon.fill" : nil,
                           spoken: String(localized: "Screen can sleep and lock"), isSelected: settings.screen == .canTurnOff) {
                 module.user { settings.screen = .canTurnOff }
             }
@@ -85,6 +93,8 @@ private struct ScreenSwitch: View {
 
 private struct SwitchSegment: View {
     let title: String
+    /// Shown instead of `title` when set (the title becomes its tooltip).
+    var symbol: String?
     let spoken: String
     let isSelected: Bool
     let action: () -> Void
@@ -92,9 +102,10 @@ private struct SwitchSegment: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Group {
+                if let symbol { Image(systemName: symbol) } else { Text(title).lineLimit(1) }
+            }
                 .font(.system(size: 11, weight: .semibold))
-                .lineLimit(1)
                 .foregroundStyle(.white.opacity(isSelected ? 1 : isHovered ? 0.85 : 0.6))
                 .padding(.horizontal, 10)
                 .frame(height: 20)
@@ -103,6 +114,7 @@ private struct SwitchSegment: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .help(symbol == nil ? Text(verbatim: "") : Text(title))
         .accessibilityLabel(Text(spoken))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

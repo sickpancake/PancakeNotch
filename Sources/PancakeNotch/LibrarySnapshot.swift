@@ -43,14 +43,15 @@ enum LibrarySnapshot {
         models.append(library(layout) { $0.arrangement.navigation = .tabs })
         models.append(library(layout) { $0.arrangement.navigation = .menu })
         // Modules without a tab: their icon beside the camera, their own controls making room.
+        // (Favorites from before Agents joined the defaults, so each of these visits.)
         for id in ["keepAwake", "agents", "aiUsage"] {
-            models.append(module(layout, id))
+            models.append(module(layout, id) { $0.arrangement.favorites = ["nowPlaying", "shelf", "timer", "notes"] })
         }
         models.append(module(layout, "notes") { $0.arrangement.favorites = ["nowPlaying", "shelf", "timer"] })
         return models
     }
 
-    /// The Library over every module with something to show, the everyday four as favorites.
+    /// The Library over every module with something to show, the five default favorites.
     private static func library(_ layout: NotchLayout, modules: [any NotchModule] = HomeSnapshot.live(),
                                 setUp: (NotchViewModel) -> Void = { _ in }) -> NotchViewModel {
         let model = base(layout, modules: modules)

@@ -89,7 +89,6 @@ struct NotchView: View {
             EmptyView()
         case .expanded:
             let barWidth = model.showsModuleBar ? NotchModuleBar.width(for: model) : 0
-            let fit = NotchModuleBar.fit(for: model)
             let visiting = model.visitingModule
             let body = layout.bodySize(for: .expanded)
             let notch = layout.geometry.notchRect
@@ -107,7 +106,7 @@ struct NotchView: View {
                     }
                 }
                 .environment(\.notchModuleBarWidth, barWidth)
-                .environment(\.notchVisitingTabWidth, visiting == nil ? 0 : NotchModuleBar.visitingTabRoom(fit))
+                .environment(\.notchVisitingTabWidth, visiting.map { NotchModuleBar.visitingTabRoom(title: $0.title) } ?? 0)
                 if model.showsModuleBar {
                     NotchModuleBar(model: model, highlight: barHighlight)
                         .frame(height: notch.height)
@@ -115,7 +114,8 @@ struct NotchView: View {
                         .transition(.opacity)
                 }
                 if let visiting {
-                    NotchVisitingTab(model: model, module: visiting, highlight: barHighlight, width: fit.buttonWidth)
+                    NotchVisitingTab(model: model, module: visiting, highlight: barHighlight,
+                                     width: NotchModuleBar.visitingTabWidth(title: visiting.title))
                         .frame(height: notch.height)
                         .padding(.leading, (body.width + notch.width) / 2 + NotchModuleBar.visitingGap)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.8)))
@@ -188,7 +188,8 @@ private struct NotchVisitingTab: View {
     @State private var menuAnchor = ModuleMenuAnchor()
 
     var body: some View {
-        NotchBarButton(symbol: module.symbol, isSelected: true, highlight: highlight, width: width, glides: false) {
+        NotchBarButton(symbol: module.symbol, isSelected: true, highlight: highlight, width: width, glides: false,
+                       title: module.title) {
             menuAnchor.showMenu()
         }
             .moduleMenu(model: model, moduleID: module.moduleID, onClick: true, anchor: menuAnchor)

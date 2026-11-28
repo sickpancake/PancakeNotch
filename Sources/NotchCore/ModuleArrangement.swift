@@ -37,7 +37,7 @@ public final class ModuleArrangement {
     /// Every module the app knows, in the default order.
     public static let knownModules = ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake", "notes"]
     /// Favorites until the person picks their own: everyday tools, few enough to fit any bar (ADR-0045).
-    public static let defaultFavorites = ["nowPlaying", "shelf", "timer", "notes"]
+    public static let defaultFavorites = ["nowPlaying", "shelf", "agents", "timer", "notes"]
     /// How many recently opened modules are kept (the Library shows up to three switched-on ones).
     static let recentLimit = 6
 

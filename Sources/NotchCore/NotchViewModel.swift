@@ -377,7 +377,11 @@ public final class NotchViewModel {
     /// The Library, Home and every module, in the bar's order: the Library on its side of Home (or of the
     /// tabs, with tabs only), then the modules by ranking. Swipes and ←/→ walk it one step at a time.
     public var strip: [NotchPlace] {
-        let modules = rankedModules.map { NotchPlace.module($0.moduleID) }
+        // The tabs in the bar first, then the modules without one (by ranking), so a swipe past the last
+        // favorite goes on through the rest.
+        let tabs = barTabIDs
+        let others = rankedModules.map(\.moduleID).filter { !tabs.contains($0) }
+        let modules = (tabs + others).map { NotchPlace.module($0) }
         guard homeIsAvailable else {
             return arrangement.librarySide == .left ? [.library] + modules : modules + [.library]
         }

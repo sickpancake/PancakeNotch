@@ -14,7 +14,8 @@ struct NotchModuleBar: View {
 
     /// From the notch body's left edge to the first button.
     static let leadingInset: CGFloat = 16
-    static let buttonSize = CGSize(width: 28, height: 22)
+    /// The widest a button gets: with few tabs they stay close together instead of spreading out.
+    static let buttonSize = CGSize(width: 24, height: 22)
     static let spacing: CGFloat = 2
     /// The hairline between the places (Library, Home) and the tabs, with its margins.
     static let dividerWidth: CGFloat = 9
@@ -26,8 +27,14 @@ struct NotchModuleBar: View {
     static let visitingGap: CGFloat = 10
     static let visitingTrailingGap: CGFloat = 8
 
+    /// The tab beside the camera: the module's icon and name.
+    static func visitingTabWidth(title: String) -> CGFloat {
+        let text = (title as NSString).size(withAttributes: [.font: titleFont]).width
+        return 8 + 14 + 5 + ceil(text) + 9
+    }
+
     /// The room the tab beside the camera takes on the band's right side.
-    static func visitingTabRoom(_ fit: Fit) -> CGFloat { visitingGap + fit.buttonWidth + visitingTrailingGap }
+    static func visitingTabRoom(title: String) -> CGFloat { visitingGap + visitingTabWidth(title: title) + visitingTrailingGap }
 
     /// How far the bar reaches from the body's left edge, so modules can start their header after it.
     static func width(for model: NotchViewModel) -> CGFloat {
@@ -229,14 +236,25 @@ struct NotchBarButton: View {
     /// The selection capsule glides here from the button before (off for the tab beside the camera, which
     /// would carry it across under the camera).
     var glides = true
+    /// A name after the icon (the tab beside the camera); the button then takes its width from `width`.
+    var title: String?
     let action: () -> Void
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11.5, weight: .semibold))
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .frame(width: title == nil ? nil : 14)
+                if let title {
+                    Text(title)
+                        .font(Font(NotchModuleBar.titleFont))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
                 .foregroundStyle(.white.opacity(isSelected ? 1 : isHovered ? 0.85 : 0.5))
                 .frame(width: width, height: NotchModuleBar.buttonSize.height)
                 .background {
