@@ -713,9 +713,11 @@ public final class NotchViewModel {
     }
 
     /// Whether the widgets on this layout page may tick: Home shows in the open notch, on screen, and this
-    /// is the page that shows (one sliding away stops at once). Never in a snapshot.
+    /// is the page that shows (one sliding away stops at once). Never in a snapshot. While Home and the
+    /// Library slide (`hubPosition`), Home stays live: swapping a widget to its still face mid-slide would
+    /// leave the live one behind, frozen where it was, until the slide ends.
     public func homeIsLive(onPage page: Int) -> Bool {
-        guard !isEditingHome, state == .expanded, showsHome, isOnScreen, snapshotClock == nil else { return false }
+        guard !isEditingHome, state == .expanded, showsHome || hubPosition != nil, isOnScreen, snapshotClock == nil else { return false }
         return homePages.indices.contains(homePage) && homePages[homePage] == page
     }
 

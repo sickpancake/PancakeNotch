@@ -134,7 +134,8 @@ struct LibraryTests {
         // A bar tab, not Esc: the search goes with the Library, and with it the hold.
         model.select("shelf")
         #expect(!model.isHeld)
-        try await Task.sleep(for: .milliseconds(120))
+        // The close is scheduled 10 ms out; give a busy test run up to two seconds to get to it.
+        for _ in 0..<40 where model.state == .expanded { try await Task.sleep(for: .milliseconds(50)) }
         #expect(model.state != .expanded)
     }
 
