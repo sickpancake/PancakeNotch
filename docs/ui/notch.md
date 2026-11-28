@@ -82,12 +82,15 @@ Every module page has the same two parts:
 
 - **Nothing may sit under the camera cutout.** Reserve it with `Color.clear.frame(width: notchWidth)`.
   The snapshot covers that area in black, so anything placed there visibly goes missing.
-- **Left half:** the module tabs live here (`NotchModuleBar`, drawn by `NotchView`). Read
-  `@Environment(\.notchModuleBarWidth)` and start any header text after it. When it's 0 (no tabs), the module
-  may show its own name there (the Shelf shows "Shelf" then "4 items").
+- **Left half:** the bar lives here (`NotchModuleBar`, drawn by `NotchView`): the Library and Home buttons, a
+  hairline, then a tab per favorite that fits. Read `@Environment(\.notchModuleBarWidth)` and start any header
+  text after it. When it's 0 (no bar), the module may show its own name there (the Shelf shows "Shelf" then
+  "4 items").
 - **Right half:** the module's own band control, right-aligned: a mode switch (Timer · Stopwatch,
   Screen on · Can sleep), the source-app pill (Now Playing), or header buttons (the Shelf's "Clear all").
-  Keep it to one small thing.
+  Keep it to one small thing, and frame it with `.notchBandRightSide(width:)` rather than `.frame(width:)`:
+  a module shown without a tab has its icon just right of the camera, and that modifier keeps the control
+  clear of it (shortening it when it must).
 
 **The content** sits under the band with 20 pt side padding (18 in the Shelf) and fills the rest of the body.
 It's laid out at its final size; the opening outline reveals it, so don't animate its size.
@@ -149,6 +152,29 @@ struct ExampleView: View {
 ```
 
 `expandedView(layout:)` returns `AnyView(ExampleView(module: self, layout: ExampleLayout(layout)))`.
+
+## The bar and the Library
+
+The bar is a map of the open notch (ADR-0045): `[Library][Home] │ tabs`, or `[Home][Library]` with the
+Library on the right (Notch settings). Swipes and ←/→ walk it in that order (`NotchViewModel.strip`). With
+"Tabs" there's no Home, and the Library sits before or after the tabs; with "Home" the name button sits beside
+the Library button. Tabs never shrink below 22 pt: favorites past the room stay saved but have no tab, and
+adding one is refused with "The bar is full. Remove a favorite first." (`favoriteCapacity`).
+
+A module shown without a tab gets a `NotchBarButton` just right of the camera (`NotchVisitingTab`), lit like
+a selected tab; a click or right-click shows the module menu. Every tab, that icon and every Library tile share
+the same right-click menu (`ModuleMenu`): Open · Add to / Remove from Favorites · Settings… (Turn On… for a
+switched-off module), with the same choices as VoiceOver actions. Add new module entry points through
+`.moduleMenu(model:moduleID:)` so they stay alike.
+
+The Library (`Sources/NotchCore/Library/`) shares a sliding pager with Home (`NotchHubPager`). Its left column
+is the shared `NotchSearchBox` (the same box Notes uses) and "Recently used"; a hairline; then a tile per
+module (`LibraryMetrics`: 4 across on a 600 pt panel, two rows fill the page, more scroll). Tiles are white
+0.06 cards with a 26 pt icon tile, a 10.5 semibold name and a 9.5 status; switched-off ones have a dashed
+edge like `HomeGhost`; the keyboard highlight is a 1.5 pt white 0.5 edge. The star shows on favorites, and on
+other tiles under the pointer. A refused favorite shows a short black capsule note at the bottom for 3 s (8 s
+with VoiceOver, which also reads it). Searching words come from `ModuleCatalog` (names and Home widgets' search
+terms) through `SearchWords`, the same word-start matching Home's widget picker uses.
 
 ## Home
 

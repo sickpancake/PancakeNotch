@@ -6,6 +6,7 @@ enum HelpTopic: String, CaseIterable {
     case notchNotShowing = "notch-not-showing"
     case besideTheNotch = "beside-the-notch"
     case home
+    case library
     case musicNotDetected = "music-not-detected"
     case musicControls = "music-controls"
     case soundBars = "sound-bars"

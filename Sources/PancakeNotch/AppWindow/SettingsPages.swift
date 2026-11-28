@@ -224,7 +224,7 @@ struct NotchSettingsView: View {
 
             SettingsCard(
                 header: String(localized: "Moving between modules"),
-                footer: String(localized: "A two-finger swipe sideways on the open notch also moves to the next module.")
+                footer: String(localized: "A two-finger swipe sideways on the open notch, or ← and →, moves along the bar one button at a time, in its order, then on through the modules without a tab.")
             ) {
                 SettingsRow(
                     title: String(localized: "In the open notch, show"),
@@ -238,6 +238,18 @@ struct NotchSettingsView: View {
                             (.menu, String(localized: "Home", comment: "Notch settings: only the Home button, no tabs")),
                         ],
                         selection: $arrangement.navigation
+                    )
+                }
+                SettingsRow(
+                    title: String(localized: "Library"),
+                    subtitle: librarySideHint(arrangement.librarySide, navigation: arrangement.navigation)
+                ) {
+                    MonochromeSegmented(
+                        title: String(localized: "Library"),
+                        options: arrangement.navigation == .tabs
+                            ? [(.left, String(localized: "Before the tabs")), (.right, String(localized: "After the tabs"))]
+                            : [(.left, String(localized: "Left of Home")), (.right, String(localized: "Right of Home"))],
+                        selection: $arrangement.librarySide
                     )
                 }
                 SettingsRow(
@@ -391,11 +403,25 @@ private func fullScreenHint(_ hiding: FullScreenHiding) -> String {
 private func navigationHint(_ navigation: NotchNavigation) -> String {
     switch navigation {
     case .tabsAndMenu:
-        String(localized: "A Home button, then a tab for each favorite.")
+        String(localized: "The Library and Home, then a tab for each favorite that fits.")
     case .tabs:
-        String(localized: "A tab for every module, one click apart. No Home.")
+        String(localized: "A tab for every module that fits, and the Library. No Home.")
     case .menu:
-        String(localized: "Just the module's name: click it for Home. The simplest look.")
+        String(localized: "Just the module's name: click it for Home. The Library is beside it.")
+    }
+}
+
+/// Where the Library's button sits, and which way to swipe for it (ADR-0045).
+private func librarySideHint(_ side: LibrarySide, navigation: NotchNavigation) -> String {
+    switch (side, navigation) {
+    case (.left, .tabs):
+        String(localized: "Every module, with a search. Its button comes before the tabs.")
+    case (.right, .tabs):
+        String(localized: "Every module, with a search. Its button comes after the tabs.")
+    case (.left, _):
+        String(localized: "Every module, with a search. Swipe right on Home to get there, or click its button.")
+    case (.right, _):
+        String(localized: "Every module, with a search. Swipe left on Home to get there, or click its button.")
     }
 }
 

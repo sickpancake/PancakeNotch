@@ -23,7 +23,7 @@ way, using the curves and transitions on this page. Read [Foundations](foundatio
 2. **Short.** Most motion is 0.15–0.3 s. Opening the notch is the longest common move, and it's under half a
    second. Anything slower than 0.4 s needs a reason (a gauge refilling once, a recording dot pulsing).
 3. **It comes from somewhere.** Things grow from the notch, from the button that opened them, or slide in from
-   the side they live on. Home grows from the top-left where its button is, and its pages slide up or down (a cross-fade with Reduce Motion); the AI Usage menu from the
+   the side they live on. Home and the Library grow from the top-left where their buttons are, and slide sideways between each other; a module opened from a Library tile grows out of that tile. Home's pages slide up or down (a cross-fade with Reduce Motion); the AI Usage menu from the
    top-right; panel content grows down from the notch.
 4. **Direction means something.** Moving to a module further right slides the new page in from the right; a
    countdown's digits roll down, a stopwatch's roll up; Timer slides left, Stopwatch slides right.
@@ -93,8 +93,9 @@ In a module, reuse those statics instead of copying their numbers, so a later tw
 | Name | What it does | Where | Code |
 | --- | --- | --- | --- |
 | **Blur reveal** | Fades in from a 10 pt blur while stretching down from the notch (y 0.6 → 1, anchored at the top) | The open panel's content when the notch opens | `NotchView.swift` (`blurReveal`) |
-| **Module switch** | The new page slides in 34 pt from its side with a 6 pt blur; the old one blurs and shrinks to 0.97 *in place* | Changing module | `NotchView.swift` (`moduleSwitch(forward:)`) |
-| **Menu reveal** | Grows from 0.96 at the top-left corner with a 5 pt blur | Home | `NotchView.swift` (`menuReveal`) |
+| **Entrance: slide** | The new page slides in 34 pt from its side of the bar with a 6 pt blur; the old one blurs and shrinks to 0.97 *in place* | Changing module or place by tab, swipe or arrow key | `NotchView.swift` (`entrance(_:)`, `NotchEntrance.slide`) |
+| **Entrance: reveal** | Grows from 0.96 at the top-left corner with a 5 pt blur | Home or the Library from their buttons | `NotchView.swift` (`NotchEntrance.reveal`) |
+| **Entrance: grow** | Grows from 0.4 at the clicked tile's centre with a 4 pt blur | A module opened from a Library tile | `NotchView.swift` (`NotchEntrance.grow`) |
 | **Page slide** | `.opacity` + 24 pt sideways offset, direction from the page's place | Pages inside one module (Timer ↔ Stopwatch) | `TimerView.swift` (`pageTransition`) |
 | **Rise** | `.opacity` + 3 pt upward offset | New text arriving in place (song title and artist) | `NowPlayingView.swift` |
 | **Grow from anchor** | `.opacity` + `.scale(0.96, anchor: <where its button is>)` | Small menus and popovers inside a page (AI Usage's menu) | `AIUsageView.swift` |
@@ -106,8 +107,9 @@ Rules behind them:
 
 - **Leaving things don't travel.** A page that's going away blurs and fades where it is; only the arriving page
   slides. That way a quick change of direction never sends the old page the wrong way.
-- **Pick the direction from order.** `NotchViewModel.switchedForward` says whether the new module is to the right
-  of the old one; do the same for pages within a module.
+- **Pick the direction from order.** `NotchViewModel.entrance` (a `NotchEntrance`) says how the new page comes in:
+  `.slide(forward:)` from its side of the bar, `.reveal` from the bar's corner, or `.grow(from:)` out of a Library
+  tile. Arriving pages use `.entrance(_:)`; do the same for pages within a module.
 - **Anchor scales where the thing came from** (`anchor: .topLeading` for something opened from the top-left).
 - **Small things just fade.** Slides and blurs are for whole pages and menus. A row, a badge or a hint uses
   `.opacity`.
@@ -193,6 +195,14 @@ Things that move all the time (the draining ring, the sound bars) must not wake 
   is off, and it eases to 0° before pausing.
 - No `Timer`, `DispatchSource` or polling loops to drive animation. `TimelineView(.animation(paused:))` is fine
   for short bursts, paused the rest of the time (`DrumText` runs it only while a digit rolls).
+
+## Home ↔ Library
+
+Home and the Library sit side by side in one pager (`NotchHubPager`), in the bar's order. A sideways trackpad
+swipe moves them with the fingers (resisting past the ends) and settles with the same
+`.smooth(duration: 0.28, extraBounce: 0)` as Home's pages; a quick flick finishes the move. The buttons and
+←/→ glide the pager the same way. A swipe past them into the modules is one step per gesture, like between
+modules. Only the page in front is mounted at rest. Reduce Motion cross-fades instead.
 
 ## Home page scrolling
 

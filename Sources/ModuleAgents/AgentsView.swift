@@ -72,7 +72,7 @@ struct AgentsView: View {
                 Spacer(minLength: 0)
                 bandTrailing(AgentsText.summary(threads, includesFinished: false), hasFinished: hasFinished)
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
         }
     }
 

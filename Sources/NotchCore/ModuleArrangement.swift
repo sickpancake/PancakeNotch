@@ -11,8 +11,13 @@ public enum NotchNavigation: String, CaseIterable, Sendable {
     case menu
 }
 
-/// The user's module order, favorites and ear sides (ADR-0010, ADR-0011), edited on the Modules page
-/// and in the notch's Menu. Stored in `UserDefaults`, or only in memory when there are no defaults.
+/// Which side of Home the Library sits on, in the bar and for swipes (ADR-0045).
+public enum LibrarySide: String, CaseIterable, Sendable {
+    case left, right
+}
+
+/// The user's module order, favorites, ear sides and navigation (ADR-0010, ADR-0011, ADR-0045), edited on
+/// the Modules and Notch pages and in the notch's Library. Stored in `UserDefaults`, or only in memory when there are no defaults.
 @MainActor
 @Observable
 public final class ModuleArrangement {
@@ -24,9 +29,17 @@ public final class ModuleArrangement {
     /// #1 takes the right ear instead of the left.
     public var swapsEarSides: Bool { didSet { defaults?.set(swapsEarSides, forKey: Keys.swapsEarSides) } }
     public var navigation: NotchNavigation { didSet { defaults?.set(navigation.rawValue, forKey: Keys.navigation) } }
+    /// Where the Library sits beside Home: its button in the bar and the way to swipe to it.
+    public var librarySide: LibrarySide { didSet { defaults?.set(librarySide.rawValue, forKey: Keys.librarySide) } }
+    /// Modules opened most recently, newest first: the Library's "Recently used".
+    public private(set) var recent: [String] { didSet { defaults?.set(recent, forKey: Keys.recent) } }
 
     /// Every module the app knows, in the default order.
     public static let knownModules = ["nowPlaying", "shelf", "agents", "aiUsage", "timer", "keepAwake", "notes"]
+    /// Favorites until the person picks their own: everyday tools, few enough to fit any bar (ADR-0045).
+    public static let defaultFavorites = ["nowPlaying", "shelf", "agents", "timer", "notes"]
+    /// How many recently opened modules are kept (the Library shows up to three switched-on ones).
+    static let recentLimit = 6
 
     @ObservationIgnored private let defaults: UserDefaults?
 
@@ -36,9 +49,11 @@ public final class ModuleArrangement {
         let saved = defaults?.stringArray(forKey: Keys.order) ?? []
         // New modules (e.g. after an update) join at the end of a saved order.
         order = saved + Self.knownModules.filter { !saved.contains($0) }
-        favorites = Set(defaults?.stringArray(forKey: Keys.favorites) ?? Self.knownModules)
+        favorites = Set(defaults?.stringArray(forKey: Keys.favorites) ?? Self.defaultFavorites)
         swapsEarSides = defaults?.bool(forKey: Keys.swapsEarSides) ?? false
         navigation = defaults?.string(forKey: Keys.navigation).flatMap(NotchNavigation.init(rawValue:)) ?? .tabsAndMenu
+        librarySide = defaults?.string(forKey: Keys.librarySide).flatMap(LibrarySide.init(rawValue:)) ?? .left
+        recent = Array((defaults?.stringArray(forKey: Keys.recent) ?? []).prefix(Self.recentLimit))
     }
 
     /// Position in the ranking; unknown modules rank last, in the order they come.
@@ -62,6 +77,12 @@ public final class ModuleArrangement {
         if favorites.contains(moduleID) { favorites.remove(moduleID) } else { favorites.insert(moduleID) }
     }
 
+    /// A module's page came up in the open notch: it moves to the front of `recent`.
+    public func noteOpened(_ moduleID: String) {
+        guard recent.first != moduleID else { return }
+        recent = Array(([moduleID] + recent.filter { $0 != moduleID }).prefix(Self.recentLimit))
+    }
+
     /// Moves a module to `index` in the ranking (clamped).
     public func move(_ moduleID: String, to index: Int) {
         guard let from = order.firstIndex(of: moduleID) else { return }
@@ -81,5 +102,7 @@ public final class ModuleArrangement {
         static let favorites = "modules.favorites"
         static let swapsEarSides = "modules.swapsEarSides"
         static let navigation = "modules.navigation"
+        static let librarySide = "modules.librarySide"
+        static let recent = "modules.recent"
     }
 }

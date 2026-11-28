@@ -347,6 +347,7 @@ struct LessonPlayer: View {
         switch event {
         case .opened: runner.receive(.homeOpened)
         case .widgetOpened: runner.receive(.homeWidgetOpened)
+        case .openedFromLibrary: runner.receive(.libraryModuleOpened)
         }
     }
 

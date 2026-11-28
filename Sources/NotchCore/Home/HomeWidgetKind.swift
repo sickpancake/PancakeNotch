@@ -90,7 +90,7 @@ extension HomeWidgetKind {
                             comment: "Words that find the Shelf widget in the Home widget search, separated by commas")
         case .keepAwake: String(localized: "sleep, coffee, caffeine, awake, screen, lock, stay on",
                                 comment: "Words that find the Keep Awake widget in the Home widget search, separated by commas")
-        case .notes: String(localized: "notes, text, write, memo, reminder, later, list, ideas, txt",
+        case .notes: String(localized: "notes, text, write, memo, reminder, later, list, to-do, todo, ideas, txt",
                             comment: "Words that find the Notes widget in the Home widget search, separated by commas")
         case .allModules: String(localized: "modules, menu, shortcuts, launcher",
                                  comment: "Words that find the All Modules widget in the Home widget search, separated by commas")
@@ -107,15 +107,6 @@ extension HomeWidgetKind {
     /// Whether a search finds this widget: each word typed starts a word of its name or its search terms,
     /// ignoring case and accents ("apple mu" finds Now Playing, "tim" finds Timer). An empty search finds all.
     public func matches(search: String) -> Bool {
-        let typed = Self.words(in: search)
-        guard !typed.isEmpty else { return true }
-        let own = Self.words(in: ([title] + searchTerms).joined(separator: " "))
-        return typed.allSatisfy { word in own.contains { $0.hasPrefix(word) } }
-    }
-
-    private static func words(in text: String) -> [String] {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
+        SearchWords.matches(search, in: [title] + searchTerms)
     }
 }

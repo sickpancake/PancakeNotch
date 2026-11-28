@@ -21,6 +21,7 @@ struct HelpView: View {
             notchCard
             besideNotchCard
             homeCard
+            libraryCard
             musicCard
             shelfCard
             agentsCard
@@ -134,6 +135,34 @@ struct HelpView: View {
                 }
             }
             MoreOnlineRow(topic: .home)
+        }
+    }
+
+    // MARK: Library
+
+    /// Where every module is (ADR-0045): favorites the bar has no room for, or how to get to the Library.
+    @ViewBuilder
+    private var libraryCard: some View {
+        let missing = context.favoritesWithoutTab?() ?? []
+        SettingsCard(header: String(localized: "A module isn't in the bar")) {
+            if !missing.isEmpty {
+                let names = missing.map { AppContext.moduleInfo($0).title }.formatted(.list(type: .and))
+                SettingsRow(
+                    title: String(localized: "The bar is full"),
+                    subtitle: missing.count == 1
+                        ? String(localized: "\(names) has no room for a tab, so it's in the Library. Remove a favorite on the Modules page to give it one.", comment: "Help: one favorite without a tab")
+                        : String(localized: "\(names) have no room for tabs, so they're in the Library. Remove a favorite on the Modules page to make room.", comment: "Help: favorites without a tab; the names come first")
+                ) {
+                    Button(String(localized: "Open Modules")) { navigation.section = .modules }
+                }
+            }
+            SettingsRow(
+                title: String(localized: "Every module is in the Library"),
+                subtitle: String(localized: "Click the grid at the top left of the open notch, or swipe sideways on Home. Type a module's name, or a word like music or files, and press Return.")
+            ) {
+                EmptyView()
+            }
+            MoreOnlineRow(topic: .library)
         }
     }
 

@@ -211,7 +211,7 @@ private struct ShelfHeader: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: module.pinNote)
-            .frame(width: layout.headerSideWidth, alignment: .trailing)
+            .notchBandRightSide(width: layout.headerSideWidth, alignment: .trailing)
             .animation(.easeOut(duration: 0.2), value: module.pasteFeedback)
         }
     }

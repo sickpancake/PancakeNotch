@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sparkle's daily update check (released builds only).
     private let updates = Updates()
     private lazy var appWindow: AppWindowController = {
-        let controller = AppWindowController(context: AppContext(
+        let context = AppContext(
             preferences: preferences,
             shortcuts: shortcuts,
             stats: stats,
@@ -163,7 +163,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notesStore: notesStore,
             makeLiveModules: { [weak self] in self?.makeLiveModules() ?? [] },
             screenshots: screenshots
-        ))
+        )
+        // The Modules page's stars refuse a favorite the real notch's bar has no room for (ADR-0045).
+        context.canAddFavorite = { [weak self] in self?.notchController.model?.canAddFavorite ?? true }
+        context.favoritesWithoutTab = { [weak self] in self?.notchController.model?.favoritesWithoutTab ?? [] }
+        let controller = AppWindowController(context: context)
         controller.onShow = { [weak self] in
             self?.sampleHealth()
             self?.connectReminder.check()
@@ -216,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .homeEditor: self?.appWindow.show(section: .home)
             case .modules: self?.appWindow.show(section: .modules)
             case .statistics: self?.appWindow.show(section: .statistics)
+            case .module(let moduleID): self?.appWindow.show(module: moduleID)
             }
         }
         notchController.homeExtras = HomeExtras.live(statistics: statistics, home: home, readPower: Self.readPower)
@@ -567,6 +572,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try NotchSnapshot.write(geometry: geometry, to: homeURL, includesStates: false,
                                     additionalRows: { HomeSnapshot.pickerRows(layout: $0) },
                                     moduleRows: { HomeSnapshot.models(layout: $0) })
+            // The Library on its own sheet too ("notch-library.png", ADR-0045).
+            let libraryURL = URL(fileURLWithPath: url.deletingPathExtension().path + "-library.png")
+            try NotchSnapshot.write(geometry: geometry, to: libraryURL, includesStates: false,
+                                    moduleRows: { LibrarySnapshot.models(layout: $0) })
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription, privacy: .public)")
         }

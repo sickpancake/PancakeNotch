@@ -111,7 +111,7 @@ struct NotesView: View {
                 .opacity(module.store.isFull ? 0.4 : 1)
                 .help(module.store.isFull ? Text("Notes is full. Delete a note to add one.") : Text("New Note (⌘N)"))
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
             .animation(.easeInOut(duration: 0.2), value: module.showsSearchField)
         }
     }
@@ -129,63 +129,19 @@ private struct NotesSearchBar: View {
     let module: NotesModule
 
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(module.isSearching ? 0.8 : 0.45))
-                .accessibilityHidden(true)
-            Group {
-                if module.isSnapshot {
-                    Text(module.query.isEmpty ? String(localized: "Search", comment: "Notes: placeholder in the search field") : module.query)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(module.query.isEmpty ? 0.4 : 1))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    NotesSearchField(
-                        text: Binding(get: { module.query }, set: { module.setQuery($0) }),
-                        isFocused: module.isSearching,
-                        scope: module.settings.searchScope,
-                        focusRequest: module.searchFocusRequest
-                    ) { module.startSearching() }
-                }
-            }
-            .frame(maxWidth: .infinity)
-            if !module.query.isEmpty {
-                Button {
-                    module.clearSearch()
-                    module.startSearching()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle())
-                .help(Text("Clear Search (Esc)"))
-                .accessibilityLabel(Text("Clear Search"))
-                .transition(.opacity)
-            } else if !module.isSearching {
-                Text("⌘F")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.35))
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 24)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.white.opacity(0.06))
-                .strokeBorder(.white.opacity(module.isSearching ? 0.3 : 0.12), lineWidth: 1)
+        NotchSearchBox(
+            text: Binding(get: { module.query }, set: { module.setQuery($0) }),
+            isActive: module.isSearching,
+            focusRequest: module.searchFocusRequest,
+            placeholder: NotesSearchWording.placeholder,
+            label: NotesSearchWording.label,
+            help: NotesSearchWording.help(module.settings.searchScope),
+            hint: "⌘F",
+            clearHelp: String(localized: "Clear Search (Esc)"),
+            isSnapshot: module.isSnapshot,
+            start: { module.startSearching() },
+            clear: { module.clearSearch() }
         )
-        // A click on the magnifying glass or the padding starts typing too, not only on the words.
-        .contentShape(.rect(cornerRadius: 8))
-        .onTapGesture { module.startSearching() }
-        .animation(.easeOut(duration: 0.15), value: module.query.isEmpty)
-        .animation(.easeOut(duration: 0.15), value: module.isSearching)
     }
 }
 

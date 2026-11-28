@@ -115,6 +115,10 @@ final class NotchPreviewHost {
         model.fitWindow = { [weak self] state in self?.fit(state) }
         model.requestKeyFocus = { [weak self] in self?.takeKeyFocus() }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
+        model.hasKeyFocus = { [weak self] in
+            guard let self, let view = self.view, let window = view.window else { return false }
+            return window.isKeyWindow && self.isFocused(in: window, view: view)
+        }
     }
 
     /// Grows the preview with the tall panel, and shrinks it back once the panel has.

@@ -5,6 +5,9 @@ import SwiftUI
 /// Triggered by `PANCAKENOTCH_SNAPSHOT=/path/out.png`.
 @MainActor
 public enum NotchSnapshot {
+    /// The time every picture shows unless its row set its own.
+    static let clock = Date(timeIntervalSince1970: 1_794_390_060)
+
     /// - Parameters:
     ///   - includesStates: start with the bare closed, compact and open notch.
     ///   - additionalRows: custom expanded panels, drawn with the same desktop and camera mask.
@@ -18,6 +21,8 @@ public enum NotchSnapshot {
     ) throws {
         let layout = NotchLayout(geometry: geometry)
         let models = (includesStates ? NotchState.allCases.map { NotchViewModel(layout: layout, state: $0) } : []) + moduleRows(layout)
+        // Every row is a picture: a fixed time, and nothing that only works on screen (AppKit views, scrolling).
+        for model in models where model.snapshotClock == nil { model.snapshotClock = Self.clock }
         let rows = models.map { (view: AnyView(NotchView(model: $0)), size: $0.layout.windowFrame(for: .expanded).size) }
             + additionalRows(layout).map { (view: $0, size: layout.windowFrame(for: .expanded).size) }
         let view = VStack(spacing: 12) {

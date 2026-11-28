@@ -21,10 +21,23 @@ final class AppNavigation {
     /// Where the window goes when the welcome ends; Home unless the welcome asked for Learn.
     var sectionAfterWelcome: AppSection = .overview
 
+    /// A module whose card the Modules page shows next, with its settings open while it's on (the notch's
+    /// Library and right-click menus, ADR-0045). The page clears it once it's there.
+    var focusedModule: String?
+    /// Goes up on every request, so asking for the same card again scrolls to it again.
+    private(set) var moduleFocusRequest = 0
+
     /// Opens a lesson on Learn.
     func open(_ lesson: LessonID) {
         self.lesson = lesson
         section = .learn
+    }
+
+    /// Opens Modules on one module's card.
+    func openModule(_ moduleID: String) {
+        focusedModule = moduleID
+        moduleFocusRequest &+= 1
+        section = .modules
     }
 }
 
@@ -67,6 +80,11 @@ final class AppContext {
     let notesSettings: NotesSettings
     let notesStore: NotesStore
     let navigation = AppNavigation()
+    /// Whether the real notch's bar has room for another favorite (ADR-0045). `nil` (snapshots, a notch not
+    /// made yet) never refuses.
+    var canAddFavorite: (@MainActor () -> Bool)?
+    /// The real notch's favorites that have no tab for lack of room (Help says where they are).
+    var favoritesWithoutTab: (@MainActor () -> [String])?
     /// Copies of the notch's modules on the real data, for Home's live notch.
     let makeLiveModules: () -> [any NotchModule]
     /// Which AI tools are on this Mac, for the offer to switch on Agents and AI Usage.
@@ -157,15 +175,7 @@ final class AppContext {
 
     /// The modules' names and symbols for the app window, by ID.
     static func moduleInfo(_ moduleID: String) -> (title: String, symbol: String) {
-        switch moduleID {
-        case "nowPlaying": (String(localized: "Now Playing", comment: "Module name"), "music.note")
-        case "shelf": (String(localized: "Shelf", comment: "Module name"), "tray")
-        case "agents": (String(localized: "Agents", comment: "Module name"), "sparkles")
-        case "aiUsage": (String(localized: "AI Usage", comment: "Module name"), "gauge.with.dots.needle.50percent")
-        case "timer": (String(localized: "Timer", comment: "Module name"), "timer")
-        case "keepAwake": (String(localized: "Keep Awake", comment: "Module name"), "cup.and.heat.waves")
-        case "notes": (String(localized: "Notes", comment: "Module name"), "note.text")
-        default: (moduleID, "square")
-        }
+        let info = ModuleCatalog.info(moduleID)
+        return (info.title, info.symbol)
     }
 }

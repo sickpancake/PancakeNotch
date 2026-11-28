@@ -5,6 +5,8 @@ import SwiftUI
 struct NotchView: View {
     let model: NotchViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The bar's selection capsule glides between its buttons.
+    @Namespace private var barHighlight
 
     var body: some View {
         let state = model.state
@@ -87,30 +89,122 @@ struct NotchView: View {
             EmptyView()
         case .expanded:
             let barWidth = model.showsModuleBar ? NotchModuleBar.width(for: model) : 0
+            let visiting = model.visitingModule
+            let body = layout.bodySize(for: .expanded)
+            let notch = layout.geometry.notchRect
             ZStack(alignment: .topLeading) {
                 Group {
-                    if model.showsHome {
-                        NotchHomeView(model: model, layout: layout)
-                            .transition(reduceMotion ? .opacity : .menuReveal)
+                    if !model.showsModule {
+                        NotchHubPager(model: model, layout: layout)
+                            .transition(reduceMotion ? .opacity : .entrance(model.entrance))
                     } else if let module = model.selectedModule {
                         module.expandedView(layout: layout)
                             .id(module.moduleID)
-                            .transition(reduceMotion ? .opacity : .moduleSwitch(forward: model.switchedForward))
+                            .transition(reduceMotion ? .opacity : .entrance(model.entrance))
                     } else {
                         ExpandedPlaceholderView(layout: layout)
                     }
                 }
                 .environment(\.notchModuleBarWidth, barWidth)
+                .environment(\.notchVisitingTabWidth, visiting.map { NotchModuleBar.visitingTabRoom(title: $0.title) } ?? 0)
                 if model.showsModuleBar {
-                    NotchModuleBar(model: model)
-                        .frame(height: layout.geometry.notchRect.height)
+                    NotchModuleBar(model: model, highlight: barHighlight)
+                        .frame(height: notch.height)
                         .padding(.leading, NotchModuleBar.leadingInset)
                         .transition(.opacity)
+                }
+                if let visiting {
+                    NotchVisitingTab(model: model, module: visiting, highlight: barHighlight,
+                                     width: NotchModuleBar.visitingTabWidth(title: visiting.title))
+                        .frame(height: notch.height)
+                        .padding(.leading, (body.width + notch.width) / 2 + NotchModuleBar.visitingGap)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
             .frame(width: layout.bodySize(for: .expanded).width, height: layout.bodySize(for: .expanded).height, alignment: .topLeading)
             .transition(reduceMotion ? .opacity : .blurReveal)
         }
+    }
+}
+
+/// Home and the Library side by side, sliding as one: between them a swipe moves the pages with the fingers,
+/// and the buttons glide them (ADR-0045). At rest only the current one is drawn.
+private struct NotchHubPager: View {
+    let model: NotchViewModel
+    let layout: NotchLayout
+
+    var body: some View {
+        let pages = model.hubPages
+        let width = layout.bodySize(for: .expanded).width
+        let current = model.currentPlace.isHub ? model.currentPlace : .home
+        let position = model.hubPosition ?? CGFloat(pages.firstIndex(of: current) ?? 0)
+        let shown = model.hubPosition == nil ? [current] : pages
+        // A page that comes in starts beside the one the move started from.
+        let origin = CGFloat(model.hubOrigin ?? Int(position.rounded()))
+        ZStack(alignment: .topLeading) {
+            ForEach(shown, id: \.self) { place in
+                let index = CGFloat(pages.firstIndex(of: place) ?? 0)
+                page(place)
+                    .offset(x: (index - position) * width)
+                    .transition(.asymmetric(insertion: .offset(x: (position - origin) * width), removal: .identity))
+                    // Only the page in front takes clicks and VoiceOver.
+                    .allowsHitTesting(place == current)
+                    .accessibilityHidden(place != current)
+            }
+        }
+        .frame(width: width, height: layout.bodySize(for: .expanded).height, alignment: .topLeading)
+        // The bar owns the top row left of the camera; a page sliding past (its Edit and gear buttons) shows
+        // only right of it, so it passes under the camera instead of over the bar's buttons.
+        .mask(alignment: .topLeading) {
+            let notch = layout.geometry.notchRect.size
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: (width + notch.width) / 2)
+                    Rectangle()
+                }
+                .frame(height: notch.height)
+                Rectangle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func page(_ place: NotchPlace) -> some View {
+        switch place {
+        case .library: NotchLibraryView(model: model, layout: layout)
+        default: NotchHomeView(model: model, layout: layout)
+        }
+    }
+}
+
+/// The module showing has no tab in the bar: its icon sits just right of the camera, lit like a selected
+/// tab (ADR-0045). A click or right-click shows its menu, where it can be made a favorite.
+private struct NotchVisitingTab: View {
+    let model: NotchViewModel
+    let module: any NotchModule
+    let highlight: Namespace.ID
+    let width: CGFloat
+    /// Lets the button's press (VoiceOver's, as clicks go straight to the menu) show the menu too.
+    @State private var menuAnchor = ModuleMenuAnchor()
+
+    var body: some View {
+        NotchBarButton(symbol: module.symbol, isSelected: true, highlight: highlight, width: width, glides: false,
+                       title: module.title) {
+            menuAnchor.showMenu()
+        }
+            .moduleMenu(model: model, moduleID: module.moduleID, onClick: true, anchor: menuAnchor)
+            .help(Text(help))
+            .accessibilityLabel(Text(module.title))
+            .accessibilityAddTraits(.isSelected)
+            .accessibilityHint(Text("Showing now. It has no tab in the bar."))
+            .moduleMenuAccessibilityActions(model: model, moduleID: module.moduleID)
+    }
+
+    private var help: String {
+        guard model.editsFavorites else { return module.title }
+        return model.canAddFavorite
+            ? String(localized: "\(module.title) · Click to add it to Favorites", comment: "Tooltip of the icon beside the camera")
+            : String(localized: "\(module.title) · \(LibraryText.noRoom)", comment: "Tooltip of the icon beside the camera with a full bar")
     }
 }
 
@@ -191,26 +285,28 @@ private extension AnyTransition {
         )
     }
 
-    /// Switching modules: the new one slides in from the side it lives on, the old one blurs away
-    /// where it is (so a change of direction never slides it the wrong way).
-    static func moduleSwitch(forward: Bool) -> AnyTransition {
-        .asymmetric(
-            insertion: .modifier(
-                active: SlideBlurModifier(offset: forward ? 34 : -34, blur: 6, opacity: 0, scale: 1),
-                identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
-            ),
+    /// A page arriving in the open notch comes from where the person looked: from its side of the bar for a
+    /// swipe, an arrow key or a tab; grown a little from the bar's corner for Home or the Library from their
+    /// buttons; grown out of the tile clicked in the Library. The page leaving always blurs away where it is,
+    /// so a change of direction never slides it the wrong way.
+    static func entrance(_ entrance: NotchEntrance) -> AnyTransition {
+        let insertion: AnyTransition = switch entrance {
+        case .slide(let forward):
+            .modifier(active: SlideBlurModifier(offset: forward ? 34 : -34, blur: 6, opacity: 0, scale: 1),
+                      identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1))
+        case .reveal:
+            .modifier(active: SlideBlurModifier(offset: 0, blur: 5, opacity: 0, scale: 0.96),
+                      identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1))
+        case .grow(let anchor):
+            .modifier(active: SlideBlurModifier(offset: 0, blur: 4, opacity: 0, scale: 0.4, anchor: anchor),
+                      identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1, anchor: anchor))
+        }
+        return .asymmetric(
+            insertion: insertion,
             removal: .modifier(
                 active: SlideBlurModifier(offset: 0, blur: 6, opacity: 0, scale: 0.97),
                 identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
             )
-        )
-    }
-
-    /// Home grows a little from the top-left corner, where its button is.
-    static var menuReveal: AnyTransition {
-        .modifier(
-            active: SlideBlurModifier(offset: 0, blur: 5, opacity: 0, scale: 0.96),
-            identity: SlideBlurModifier(offset: 0, blur: 0, opacity: 1, scale: 1)
         )
     }
 }
@@ -220,11 +316,12 @@ private struct SlideBlurModifier: ViewModifier {
     let blur: CGFloat
     let opacity: Double
     let scale: CGFloat
+    var anchor: UnitPoint = .topLeading
 
     func body(content: Content) -> some View {
         content
             .offset(x: offset)
-            .scaleEffect(scale, anchor: .topLeading)
+            .scaleEffect(scale, anchor: anchor)
             .blur(radius: blur)
             .opacity(opacity)
     }
@@ -287,7 +384,7 @@ private struct CompactEarsView: View {
         let shown = isAsleep ? nil : count
         let reserve = shown == nil ? 0 : NotchLayout.earCountWidth
         return HStack(spacing: 0) {
-            if outerEdge == .leading { countView(shown, hugging: .trailing, height: height) }
+            if outerEdge == .leading { countView(shown, height: height) }
             ZStack {
                 if let slot, !isAsleep {
                     slot.view
@@ -296,22 +393,22 @@ private struct CompactEarsView: View {
                 }
             }
             .frame(width: width - reserve, height: height)
-            if outerEdge == .trailing { countView(shown, hugging: .leading, height: height) }
+            if outerEdge == .trailing { countView(shown, height: height) }
         }
         .frame(width: width, height: height, alignment: outerEdge == .leading ? .trailing : .leading)
     }
 
     /// "+2": the same quiet style as the Timer's count of other timers, so every "+n" in the ears reads alike.
-    /// It leans toward the module's content (`hugging`), clear of the outline's rounded outer edge.
+    /// It sits in the middle of its slot: clear of the module's content and of the outline's rounded edge.
     @ViewBuilder
-    private func countView(_ count: Int?, hugging edge: Alignment, height: CGFloat) -> some View {
+    private func countView(_ count: Int?, height: CGFloat) -> some View {
         if let count {
             Text(verbatim: "+\(count)")
                 .font(.system(size: 7.5, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
                 .fixedSize()
                 .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(count)))
-                .frame(width: NotchLayout.earCountWidth, height: height, alignment: edge)
+                .frame(width: NotchLayout.earCountWidth, height: height)
                 .transition(.opacity)
         }
     }

@@ -125,7 +125,7 @@ public final class NotesModule: NotchModule {
     }
 
     public func notchDidOpen() {
-        guard notch?.selectedModule === self, notch?.showsHome != true else { return }
+        guard notch?.selectedModule === self, notch?.showsModule == true else { return }
         if settings.opensNewNote, !isSnapshot { newNote() }
     }
 

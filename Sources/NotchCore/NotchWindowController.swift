@@ -248,7 +248,7 @@ public final class NotchWindowController {
             model?.dragApproached(pasteboard)
         }
         dragWatcher.onMove = { [weak self, weak model] pasteboard, location in
-            guard let self, let model, model.state == .expanded, !model.showsHome else { return }
+            guard let self, let model, model.state == .expanded, model.showsModule else { return }
             model.selectedModule?.dragApproaching(pasteboard, at: self.bodyPoint(screen: location, layout: model.layout))
         }
         dragWatcher.onLeave = { [weak model] in model?.approachingDragEnded() }
@@ -282,6 +282,7 @@ public final class NotchWindowController {
             self?.presentPeek(of: moduleID, for: duration, revealsInFullScreen: reveals)
         }
         model.releaseKeyFocus = { [weak self] in self?.releaseKeyFocus() }
+        model.hasKeyFocus = { [weak self] in self?.panel?.isKeyWindow == true }
         let panel = NotchPanel(contentRect: model.layout.windowFrame(for: model.state))
         panel.onResignKey = { [weak model] in model?.keyFocusLost() }
         let hostingView = NSHostingView(rootView: NotchView(model: model).followsMotionSettings(model.motion))

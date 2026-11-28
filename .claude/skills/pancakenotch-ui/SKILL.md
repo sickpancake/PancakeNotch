@@ -99,7 +99,8 @@ Go back over the states from step 2: every change between them gets motion. Read
 `if`, `switch`, `ForEach`, changing text, number, icon or size in your views, pick from its tables:
 
 - **Appearing or leaving:** a transition. Whole pages and menus slide or grow with a little blur
-  (`moduleSwitch`, `menuReveal`, the 24 pt page slide); small things (rows, notes, badges) just `.opacity`.
+  (`.entrance(_:)` with the model's `NotchEntrance`, the 24 pt page slide); small things (rows, notes, badges) just
+  `.opacity`.
 - **Replacing content:** `.id(…)` + transition + `.animation(curve, value: id)` (a new song's text rises 3 pt).
 - **In place:** `.contentTransition(.numericText(value:))` for numbers, `.symbolEffect(.replace)` for icons,
   `.opacity` for text; a moving highlight glides with `matchedGeometryEffect`; custom gauges are `Animatable`.

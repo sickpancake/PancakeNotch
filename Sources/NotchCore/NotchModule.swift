@@ -165,3 +165,36 @@ public extension EnvironmentValues {
 private struct NotchModuleBarWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
+
+public extension EnvironmentValues {
+    /// Room the tab beside the camera takes at the start of the band's right side (0 when there is none):
+    /// a module shown without a tab in the bar has its icon there (ADR-0045).
+    var notchVisitingTabWidth: CGFloat {
+        get { self[NotchVisitingTabWidthKey.self] }
+        set { self[NotchVisitingTabWidthKey.self] = newValue }
+    }
+}
+
+private struct NotchVisitingTabWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+public extension View {
+    /// The band's right side, beside the camera, `width` wide: its controls keep clear of the tab beside the
+    /// camera when there is one, shortening if they must.
+    func notchBandRightSide(width: CGFloat, alignment: Alignment = .center) -> some View {
+        modifier(NotchBandRightSide(width: width, alignment: alignment))
+    }
+}
+
+private struct NotchBandRightSide: ViewModifier {
+    let width: CGFloat
+    let alignment: Alignment
+    @Environment(\.notchVisitingTabWidth) private var reserved
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, min(reserved, width))
+            .frame(width: width, alignment: alignment)
+    }
+}

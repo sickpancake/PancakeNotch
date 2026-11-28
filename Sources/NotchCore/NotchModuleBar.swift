@@ -1,144 +1,200 @@
 import AppKit
 import SwiftUI
 
-/// The top-left corner of the open notch: how you move between modules (ADR-0010, ADR-0042). Depending on the
-/// Notch setting it shows a Home button and tabs for the favorite modules, tabs for every module, or
-/// just the current module's name, which opens Home.
+/// The top-left corner of the open notch: how you move between places (ADR-0010, ADR-0042, ADR-0045). It
+/// reads as a map: the Library and Home, then a tab per favorite module (or every module, with tabs only),
+/// and swipes and ←/→ walk it in that order. With the "Home" navigation choice it shows the current module's
+/// name, which opens Home, beside the Library button.
 struct NotchModuleBar: View {
     let model: NotchViewModel
-    @Namespace private var highlight
+    /// The selection capsule glides between the bar's buttons and the tab beside the camera.
+    let highlight: Namespace.ID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isMenuHovered = false
 
     /// From the notch body's left edge to the first button.
     static let leadingInset: CGFloat = 16
-    static let buttonSize = CGSize(width: 28, height: 22)
+    /// The widest a button gets: with few tabs they stay close together instead of spreading out.
+    static let buttonSize = CGSize(width: 24, height: 22)
     static let spacing: CGFloat = 2
-    /// The hairline between the Home button and the tabs, with its margins.
+    /// The hairline between the places (Library, Home) and the tabs, with its margins.
     static let dividerWidth: CGFloat = 9
     /// Room left after the bar before a module's own header content.
     static let trailingGap: CGFloat = 10
     static let titleFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+    static let minButtonWidth: CGFloat = 22
+    /// From the camera's right edge to the tab beside it, and after it to the module's own controls.
+    static let visitingGap: CGFloat = 10
+    static let visitingTrailingGap: CGFloat = 8
+
+    /// The tab beside the camera: the module's icon and name.
+    static func visitingTabWidth(title: String) -> CGFloat {
+        let text = (title as NSString).size(withAttributes: [.font: titleFont]).width
+        return 8 + 14 + 5 + ceil(text) + 9
+    }
+
+    /// The room the tab beside the camera takes on the band's right side.
+    static func visitingTabRoom(title: String) -> CGFloat { visitingGap + visitingTabWidth(title: title) + visitingTrailingGap }
 
     /// How far the bar reaches from the body's left edge, so modules can start their header after it.
     static func width(for model: NotchViewModel) -> CGFloat {
         leadingInset + fit(for: model).contentWidth + trailingGap
     }
 
-    /// Fit every button beside the camera cutout. Compact spacing keeps six modules visible. With Home and
-    /// tabs, favorites that still don't fit drop off from the lowest ranked (the current module always stays),
-    /// since Home reaches every module. Only Tabs falls back to the current module's name button, and only
-    /// when even that can't fit; the name button is otherwise just the "Home" choice in Notch settings.
+    /// Fits the bar beside the camera cutout. Tabs never shrink below `minButtonWidth`: favorites past the
+    /// room drop off from the lowest ranked, and adding a favorite is refused once the bar is full, so that
+    /// only happens to favorites saved before (or a smaller screen). Those, and every module without a tab,
+    /// live in the Library.
     struct Fit {
         let available: CGFloat
         let buttonWidth: CGFloat
-        let usesMenu: Bool
+        /// The "Home" navigation choice: the current module's name instead of Home and the tabs.
+        let usesNameButton: Bool
         let contentWidth: CGFloat
         /// The tab modules shown, in order.
         let tabModuleIDs: [String]
+        /// How many tabs the bar has room for beside its place buttons.
+        let capacity: Int
     }
 
     static func fit(for model: NotchViewModel) -> Fit {
         let layout = model.layout
         let sideWidth = (layout.bodySize(for: .expanded).width - layout.geometry.notchRect.width) / 2
         let available = max(0, sideWidth - leadingInset - trailingGap)
-        let navigation = model.arrangement.navigation
-        let hasMenu = navigation == .tabsAndMenu
-        var tabs = model.tabModules.map(\.moduleID)
-        if hasMenu {
-            let current = model.selectedModule?.moduleID
-            while tabs.count > 1, tabsWidth(count: tabs.count, hasMenu: true, buttonWidth: minButtonWidth) > available,
-                  let drop = tabs.lastIndex(where: { $0 != current }) {
-                tabs.remove(at: drop)
-            }
+        if model.arrangement.navigation == .menu {
+            let width = menuButtonWidth(title: menuTitle(for: model)) + spacing + buttonSize.width
+            return Fit(available: available, buttonWidth: buttonSize.width, usesNameButton: true,
+                       contentWidth: min(width, available), tabModuleIDs: [], capacity: 0)
         }
-        let count = tabs.count
-        let buttons = count + (hasMenu ? 1 : 0)
-        let gaps = CGFloat(max(0, count - 1)) * spacing + (hasMenu ? dividerWidth : 0)
-        let buttonWidth = min(buttonSize.width, max(minButtonWidth, floor((available - gaps) / CGFloat(max(1, buttons)))))
-        let width = tabsWidth(count: count, hasMenu: hasMenu, buttonWidth: buttonWidth)
-        let usesMenu = navigation == .menu || width > available
-        let content = usesMenu ? menuButtonWidth(title: menuTitle(for: model)) : width
-        return Fit(available: available, buttonWidth: buttonWidth, usesMenu: usesMenu,
-                   contentWidth: min(content, available), tabModuleIDs: usesMenu ? [] : tabs)
+        let places = model.homeIsAvailable ? 2 : 1
+        var capacity = 0
+        while barWidth(places: places, tabs: capacity + 1, buttonWidth: minButtonWidth) <= available { capacity += 1 }
+        let tabs = Array(model.tabModules.map(\.moduleID).prefix(capacity))
+        let buttons = CGFloat(places + tabs.count)
+        let gaps = barWidth(places: places, tabs: tabs.count, buttonWidth: 0)
+        let buttonWidth = min(buttonSize.width, max(minButtonWidth, floor((available - gaps) / buttons)))
+        let width = barWidth(places: places, tabs: tabs.count, buttonWidth: buttonWidth)
+        return Fit(available: available, buttonWidth: buttonWidth, usesNameButton: false,
+                   contentWidth: min(width, available), tabModuleIDs: tabs, capacity: capacity)
     }
 
-    static let minButtonWidth: CGFloat = 22
-
-    private static func tabsWidth(count: Int, hasMenu: Bool, buttonWidth: CGFloat) -> CGFloat {
-        let buttons = count + (hasMenu ? 1 : 0)
-        let gaps = CGFloat(max(0, count - 1)) * spacing + (hasMenu ? dividerWidth : 0)
-        return CGFloat(buttons) * buttonWidth + gaps
+    /// Place buttons side by side, then the divider and the tabs.
+    private static func barWidth(places: Int, tabs: Int, buttonWidth: CGFloat) -> CGFloat {
+        let placesWidth = CGFloat(places) * buttonWidth + CGFloat(max(0, places - 1)) * spacing
+        guard tabs > 0 else { return placesWidth }
+        return placesWidth + dividerWidth + CGFloat(tabs) * buttonWidth + CGFloat(tabs - 1) * spacing
     }
 
-    /// Icon, name and chevron of the "Home only" button.
+    /// Icon, name and chevron of the "Home" choice's name button.
     private static func menuButtonWidth(title: String) -> CGFloat {
         let text = (title as NSString).size(withAttributes: [.font: titleFont]).width
         return 8 + 14 + 6 + ceil(text) + 2 + 6 + 10 + 8
     }
 
     static func menuTitle(for model: NotchViewModel) -> String {
-        model.showsHome ? String(localized: "Home", comment: "The notch's Home, its title in the bar") : model.selectedModule?.title ?? ""
+        if model.showsHome { return String(localized: "Home", comment: "The notch's Home, its title in the bar") }
+        if model.showsLibrary { return String(localized: "Library") }
+        return model.selectedModule?.title ?? ""
+    }
+
+    /// The name button's icon: where the person is.
+    static func menuSymbol(for model: NotchViewModel) -> String {
+        if model.showsHome { return HomeSymbol.name }
+        if model.showsLibrary { return LibrarySymbol.name }
+        return model.selectedModule?.symbol ?? "square"
     }
 
     var body: some View {
         let fit = Self.fit(for: model)
+        let libraryFirst = model.arrangement.librarySide == .left
         HStack(spacing: Self.spacing) {
-            if fit.usesMenu {
+            if fit.usesNameButton {
+                if libraryFirst { libraryButton(fit) }
                 menuNameButton
-            } else {
-                if model.arrangement.navigation == .tabsAndMenu {
-                    menuButton(fit)
-                    Capsule()
-                        .fill(.white.opacity(0.16))
-                        .frame(width: 1, height: 12)
-                        .frame(width: Self.dividerWidth - Self.spacing * 2)
-                        .accessibilityHidden(true)
-                }
+                if !libraryFirst { libraryButton(fit) }
+            } else if model.homeIsAvailable {
+                if libraryFirst { libraryButton(fit) }
+                homeButton(fit)
+                if !libraryFirst { libraryButton(fit) }
+                if !fit.tabModuleIDs.isEmpty { divider }
                 tabs(fit)
+            } else if libraryFirst {
+                libraryButton(fit)
+                if !fit.tabModuleIDs.isEmpty { divider }
+                tabs(fit)
+            } else {
+                tabs(fit)
+                if !fit.tabModuleIDs.isEmpty { divider }
+                libraryButton(fit)
             }
         }
         .frame(width: fit.contentWidth, alignment: .leading)
         .clipped()
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: model.selectedModule?.moduleID)
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: model.showsHome)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: model.currentPlace)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.85), value: fit.tabModuleIDs)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Modules"))
     }
 
+    private var divider: some View {
+        Capsule()
+            .fill(.white.opacity(0.16))
+            .frame(width: 1, height: 12)
+            .frame(width: Self.dividerWidth - Self.spacing * 2)
+            .accessibilityHidden(true)
+    }
+
     private func tabs(_ fit: Fit) -> some View {
-        let shown = Set(fit.tabModuleIDs)
-        return ForEach(model.tabModules.filter { shown.contains($0.moduleID) }, id: \.moduleID) { module in
-            let isSelected = !model.showsHome && module.moduleID == model.selectedModule?.moduleID
-            BarButton(symbol: module.symbol, isSelected: isSelected, highlight: highlight,
-                      width: fit.buttonWidth) {
-                model.select(module.moduleID)
+        ForEach(fit.tabModuleIDs, id: \.self) { id in
+            if let module = model.modules.first(where: { $0.moduleID == id }) {
+                let isSelected = model.showsModule && id == model.selectedModule?.moduleID
+                NotchBarButton(symbol: module.symbol, isSelected: isSelected, highlight: highlight,
+                               width: fit.buttonWidth) {
+                    model.select(id)
+                }
+                .moduleMenu(model: model, moduleID: id)
+                .help(Text(module.title))
+                .accessibilityLabel(Text(module.title))
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .accessibilityHint(Text("Shows \(module.title) in the notch."))
+                .moduleMenuAccessibilityActions(model: model, moduleID: id)
+                .transition(.opacity)
             }
-            .help(Text(module.title))
-            .accessibilityLabel(Text(module.title))
-            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-            .accessibilityHint(Text("Shows \(module.title) in the notch."))
         }
     }
 
-    private func menuButton(_ fit: Fit) -> some View {
-        BarButton(symbol: HomeSymbol.name, isSelected: model.showsHome, highlight: highlight,
-                  width: fit.buttonWidth) {
+    private func homeButton(_ fit: Fit) -> some View {
+        NotchBarButton(symbol: HomeSymbol.name, isSelected: model.showsHome, highlight: highlight,
+                       width: fit.buttonWidth) {
             model.toggleHome()
         }
         .help(Text("Home"))
         .accessibilityLabel(Text("Home"))
         .accessibilityAddTraits(model.showsHome ? [.isSelected] : [])
-        .accessibilityHint(Text("Shows your widgets and every module."))
+        .accessibilityHint(Text("Shows your widgets."))
     }
 
-    /// "Home only": the current module's icon and name; click for Home.
+    private func libraryButton(_ fit: Fit) -> some View {
+        let swipe = model.arrangement.librarySide == .left
+            ? String(localized: "Library (or swipe right on Home)", comment: "Library button's tooltip: fingers move right")
+            : String(localized: "Library (or swipe left on Home)", comment: "Library button's tooltip: fingers move left")
+        return NotchBarButton(symbol: LibrarySymbol.name, isSelected: model.showsLibrary, highlight: highlight,
+                              width: fit.buttonWidth) {
+            model.toggleLibrary()
+        }
+        .help(Text(model.homeIsAvailable ? swipe : String(localized: "Library")))
+        .accessibilityLabel(Text("Library"))
+        .accessibilityAddTraits(model.showsLibrary ? [.isSelected] : [])
+        .accessibilityHint(Text("Shows every module, with a search."))
+    }
+
+    /// "Home" navigation: the current module's (or the Library's) icon and name; click for Home.
     private var menuNameButton: some View {
         Button {
             model.toggleHome()
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: model.showsHome ? HomeSymbol.name : model.selectedModule?.symbol ?? "square")
+                Image(systemName: Self.menuSymbol(for: model))
                     .font(.system(size: 11, weight: .semibold))
                     .frame(width: 14)
                 Text(Self.menuTitle(for: model))
@@ -161,32 +217,51 @@ struct NotchModuleBar: View {
         // On Home with no module to go back to, there is nowhere else to go.
         .disabled(model.showsHome && model.selectedModule == nil)
         .accessibilityLabel(Text(model.showsHome ? String(localized: "Close Home") : String(localized: "\(Self.menuTitle(for: model)), opens Home")))
-        .accessibilityHint(Text("Shows your widgets and every module."))
+        .accessibilityHint(Text("Shows your widgets."))
     }
 }
 
-/// One icon button in the bar. The selected one sits on a soft capsule that slides between buttons
-/// (with Reduce Motion it fades from one to the next instead).
-private struct BarButton: View {
+/// The Library's symbol, in the bar and the Notch settings.
+public enum LibrarySymbol {
+    public static let name = "square.grid.2x2"
+}
+
+/// One icon button in the bar (and the tab beside the camera). The selected one sits on a soft capsule that
+/// slides between buttons (with Reduce Motion it fades from one to the next instead).
+struct NotchBarButton: View {
     let symbol: String
     let isSelected: Bool
     let highlight: Namespace.ID
     let width: CGFloat
+    /// The selection capsule glides here from the button before (off for the tab beside the camera, which
+    /// would carry it across under the camera).
+    var glides = true
+    /// A name after the icon (the tab beside the camera); the button then takes its width from `width`.
+    var title: String?
     let action: () -> Void
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11.5, weight: .semibold))
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .frame(width: title == nil ? nil : 14)
+                if let title {
+                    Text(title)
+                        .font(Font(NotchModuleBar.titleFont))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
                 .foregroundStyle(.white.opacity(isSelected ? 1 : isHovered ? 0.85 : 0.5))
                 .frame(width: width, height: NotchModuleBar.buttonSize.height)
                 .background {
                     if isSelected {
                         Capsule()
                             .fill(.white.opacity(0.16))
-                            .modifier(SelectionSlide(namespace: highlight, slides: !reduceMotion))
+                            .modifier(SelectionSlide(namespace: highlight, slides: glides && !reduceMotion))
                             .transition(.opacity)
                     } else if isHovered {
                         Capsule().fill(.white.opacity(0.07))

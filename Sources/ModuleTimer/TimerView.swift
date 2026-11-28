@@ -79,7 +79,7 @@ struct TimerView: View {
                 Spacer(minLength: 0)
                 if showsSwitch { ModeSwitch(module: module) }
             }
-            .frame(width: layout.bandSideWidth)
+            .notchBandRightSide(width: layout.bandSideWidth)
         }
     }
 }

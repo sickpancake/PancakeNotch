@@ -86,6 +86,8 @@ public enum NotchAppPage: Sendable {
     case modules
     /// Statistics.
     case statistics
+    /// Modules, on one module's card, with its settings open when it's switched on (the Library's Settings…).
+    case module(String)
 }
 
 /// Turns a scroll on Home into one page step per gesture: a trackpad swipe counts once it has gone far
@@ -129,8 +131,10 @@ struct HomePageScrollTracker {
     }
 }
 
-/// What Home tells a lesson: it came up, or a widget click opened its module.
+/// What Home tells a lesson: it came up, a widget click opened its module, or a module was opened from the
+/// Library (ADR-0045).
 public enum NotchHomeEvent: Sendable, Equatable {
     case opened
     case widgetOpened(HomeWidgetKind)
+    case openedFromLibrary(String)
 }

@@ -183,9 +183,9 @@ struct NotchModulesTests {
         #expect(music.closes == 1)
         #expect(music.switchedAway == 1)
         #expect(shelf.opens == 1)
-        #expect(model.switchedForward)
+        #expect(model.entrance == .slide(forward: true))
         model.select("nowPlaying")
-        #expect(!model.switchedForward)
+        #expect(model.entrance == .slide(forward: false))
         #expect(shelf.closes == 1)
         #expect(music.opens == 2)
     }
@@ -355,25 +355,39 @@ struct NotchModulesTests {
         #expect(shelf.opens == 1)
     }
 
-    @Test func swipingStopsAtTheEnds() {
+    @Test func swipingWalksTheBarAndStopsAtTheEnds() {
         let (model, _, shelf) = makeModel()
         model.open()
-        model.showAdjacentModule(forward: false)
+        #expect(model.strip == [.library, .home, .module("nowPlaying"), .module("shelf")])
+        model.showAdjacentPlace(forward: false)
+        #expect(model.currentPlace == .home)
+        model.showAdjacentPlace(forward: false)
+        #expect(model.currentPlace == .library)
+        model.showAdjacentPlace(forward: false)
+        #expect(model.currentPlace == .library)
+        model.showAdjacentPlace(forward: true)
+        #expect(model.currentPlace == .home)
+        model.showAdjacentPlace(forward: true)
         #expect(model.selectedModule?.moduleID == "nowPlaying")
-        model.showAdjacentModule(forward: true)
+        #expect(model.showsModule)
+        model.showAdjacentPlace(forward: true)
         #expect(model.selectedModule === shelf)
-        model.showAdjacentModule(forward: true)
+        model.showAdjacentPlace(forward: true)
         #expect(model.selectedModule === shelf)
     }
 
-    @Test func tabsShowFavoritesAndTheCurrentModule() {
+    @Test func tabsShowFavoritesAndTheCurrentModuleVisitsBesideTheCamera() {
         let (model, _, _) = makeModel()
+        model.open()
         model.arrangement.favorites = ["nowPlaying"]
         #expect(model.tabModules.map(\.moduleID) == ["nowPlaying"])
         model.select("shelf")
-        #expect(model.tabModules.map(\.moduleID) == ["nowPlaying", "shelf"])
+        // The bar stays a map: Shelf gets no tab of its own, its icon shows just right of the camera.
+        #expect(model.tabModules.map(\.moduleID) == ["nowPlaying"])
+        #expect(model.visitingModule?.moduleID == "shelf")
         model.arrangement.navigation = .tabs
         #expect(model.tabModules.count == 2)
+        #expect(model.visitingModule == nil)
     }
 
     @Test func aDragGoesToTheModuleThatTakesIt() {
